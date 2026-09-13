@@ -187,6 +187,10 @@ export class GrafanaLogger {
     return getActiveEnv();
   }
 
+  isDev() {
+    return this.env === 'development';
+  }
+
   /**
    * Schedule throttled background batch flush.
    */
@@ -359,3 +363,25 @@ export class GrafanaLogger {
 }
 
 export const logger = new GrafanaLogger();
+
+/**
+ * Super verbose request logger for development environment.
+ * Logs every incoming request to both console and Grafana Cloud when env is 'development'.
+ */
+export function logDevRequest(req, endpoint = '', extra = {}) {
+  if (!logger.isDev()) return;
+  const method = req?.method || 'GET';
+  const url = req?.url || endpoint || '/';
+  const ip = req?.headers
+    ? (req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || '127.0.0.1')
+    : '127.0.0.1';
+  logger.info(`[DEV] Request: ${method} ${url}`, {
+    dev_trace: true,
+    endpoint: endpoint || url,
+    method,
+    url,
+    client_ip: ip,
+    user_agent: req?.headers ? req.headers['user-agent'] : undefined,
+    ...extra,
+  });
+}

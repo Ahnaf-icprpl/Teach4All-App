@@ -12,7 +12,7 @@ import {
   deleteConversation,
   updateConversationTitle,
 } from './db.js';
-import { logger } from './logger.js';
+import { logger, logDevRequest } from './logger.js';
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -28,11 +28,12 @@ function readBody(req) {
 
 export async function handleConversationsRequest(req, res, serverEnv = {}) {
   const method = req.method || 'GET';
+  const clientIp = getClientIp(req);
+  logDevRequest(req, '/api/conversations', { method });
   const parsedUrl = new URL(req.url || '/', 'http://localhost');
   const databaseUrl = serverEnv.DATABASE_URL || process.env.DATABASE_URL;
 
   // Rate limiting check via Redis
-  const clientIp = getClientIp(req);
   const redisUrl = serverEnv.REDIS_URL || process.env.REDIS_URL;
   const redisClient = getRedisClient(redisUrl);
 
@@ -176,6 +177,7 @@ export async function handleConversationsRequest(req, res, serverEnv = {}) {
 export async function handleMessagesRequest(req, res, serverEnv = {}) {
   const method = req.method || 'GET';
   const clientIp = getClientIp(req);
+  logDevRequest(req, '/api/messages');
 
   if (method !== 'GET') {
     logger.warn('Method Not Allowed on /api/messages', {

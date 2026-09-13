@@ -19,7 +19,7 @@ import {
   buildProviderRoutingPayload,
   extractProvider,
 } from './providerCache.js';
-import { logger } from './logger.js';
+import { logger, logDevRequest } from './logger.js';
 
 export const DEFAULT_MODEL = 'google/gemini-2.5-flash-lite';
 export const DEFAULT_TITLE_TEMPERATURE = 0.85;
@@ -35,6 +35,7 @@ function isPlaceholderKey(key) {
 
 export async function handleTitleRequest(req, res, serverEnv = {}) {
   const clientIp = getClientIp(req);
+  logDevRequest(req, '/api/title');
 
   if (req.method !== 'POST') {
     logger.warn('Method Not Allowed on /api/title', { endpoint: '/api/title', method: req.method, client_ip: clientIp });

@@ -6,6 +6,7 @@ export const MESSAGES_API_URL = './api/messages';
 export const TEST_USER_ID = '00000000-0000-0000-0000-000000000001';
 export const TIMEOUT_MS = 35000;
 import { cleanTitle, generateOfflineTitle, formatTitleMessages, TITLE_SYSTEM_PROMPT } from './prompts/titlePrompt.js';
+import { isDevEnv } from './env.js';
 export { cleanTitle, generateOfflineTitle, formatTitleMessages, TITLE_SYSTEM_PROMPT };
 
 export function getModel() {
@@ -35,6 +36,10 @@ export async function sendMessage(messages, onChunk, options = {}) {
       ...(options.userMessageId ? { userMessageId: options.userMessageId } : {}),
       ...(options.assistantMessageId ? { assistantMessageId: options.assistantMessageId } : {}),
     };
+
+    if (isDevEnv()) {
+      console.info('[DEV] Client sending chat request', { url: CHAT_API_URL, payload });
+    }
 
     const response = await fetch(CHAT_API_URL, {
       method: 'POST',
@@ -145,6 +150,10 @@ export async function generateTitle(messages, options = {}) {
       ...(options.conversationId ? { conversationId: options.conversationId } : {}),
     };
 
+    if (isDevEnv()) {
+      console.info('[DEV] Client requesting title', { url: TITLE_API_URL, payload });
+    }
+
     const response = await fetch(TITLE_API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -167,6 +176,9 @@ export async function generateTitle(messages, options = {}) {
 
 export async function fetchConversations({ userId = TEST_USER_ID, limit = 50, offset = 0 } = {}) {
   const url = `${CONVERSATIONS_API_URL}?userId=${encodeURIComponent(userId)}&limit=${limit}&offset=${offset}`;
+  if (isDevEnv()) {
+    console.info('[DEV] Client fetching conversations', { url });
+  }
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Failed to fetch conversations (${response.status})`);
@@ -176,6 +188,9 @@ export async function fetchConversations({ userId = TEST_USER_ID, limit = 50, of
 
 export async function fetchMessages(conversationId, { userId = TEST_USER_ID, limit = 100, offset = 0 } = {}) {
   const url = `${MESSAGES_API_URL}?conversationId=${encodeURIComponent(conversationId)}&userId=${encodeURIComponent(userId)}&limit=${limit}&offset=${offset}`;
+  if (isDevEnv()) {
+    console.info('[DEV] Client fetching messages', { url });
+  }
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Failed to fetch messages (${response.status})`);
@@ -185,6 +200,9 @@ export async function fetchMessages(conversationId, { userId = TEST_USER_ID, lim
 
 export async function deleteConversationApi(conversationId, { userId = TEST_USER_ID } = {}) {
   const url = `${CONVERSATIONS_API_URL}?id=${encodeURIComponent(conversationId)}&userId=${encodeURIComponent(userId)}`;
+  if (isDevEnv()) {
+    console.info('[DEV] Client deleting conversation', { url });
+  }
   const response = await fetch(url, { method: 'DELETE' });
   if (!response.ok) {
     throw new Error(`Failed to delete conversation (${response.status})`);
@@ -193,6 +211,9 @@ export async function deleteConversationApi(conversationId, { userId = TEST_USER
 }
 
 export async function renameConversationApi(conversationId, title, { userId = TEST_USER_ID } = {}) {
+  if (isDevEnv()) {
+    console.info('[DEV] Client renaming conversation', { id: conversationId, title });
+  }
   const response = await fetch(CONVERSATIONS_API_URL, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },

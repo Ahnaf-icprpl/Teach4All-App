@@ -1,5 +1,5 @@
 import { getClientIp } from './rateLimiter.js';
-import { logger, truncateText } from './logger.js';
+import { logger, truncateText, logDevRequest } from './logger.js';
 
 function readJsonBody(req, maxBytes = 50000) {
   return new Promise((resolve, reject) => {
@@ -25,6 +25,7 @@ function readJsonBody(req, maxBytes = 50000) {
 export async function handleErrorLogRequest(req, res, serverEnv = {}) {
   const method = req.method || 'GET';
   const clientIp = getClientIp(req);
+  logDevRequest(req, '/api/log-error');
 
   if (method !== 'POST') {
     logger.warn('Method not allowed on /api/log-error', {

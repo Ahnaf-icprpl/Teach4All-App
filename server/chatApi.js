@@ -17,7 +17,7 @@ import {
   extractProvider,
 } from './providerCache.js';
 import { handleErrorLogRequest } from './errorApi.js';
-import { logger } from './logger.js';
+import { logger, logDevRequest } from './logger.js';
 
 export const DEFAULT_MODEL = 'google/gemini-2.5-flash-lite';
 export const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
@@ -46,6 +46,7 @@ export function formatMessages(messages) {
 
 export async function handleChatRequest(req, res, serverEnv = {}) {
   const clientIp = getClientIp(req);
+  logDevRequest(req, '/api/chat');
 
   if (req.method !== 'POST') {
     logger.warn('Method Not Allowed on /api/chat', { endpoint: '/api/chat', method: req.method, client_ip: clientIp });
@@ -371,7 +372,34 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
 
 export function createChatMiddleware(serverEnv = {}) {
   return async (req, res, next) => {
+    const isDev = (serverEnv.ENV || serverEnv.env || process.env.ENV || process.env.env || '').toLowerCase() === 'development' || logger.isDev();
+    const clientIp = getClientIp(req);
+    const start = Date.now();
     const url = req.url ? req.url.split('?')[0] : '';
+    const fullUrl = req.url || '/';
+    const method = req.method || 'GET';
+
+    if (isDev) {
+      logger.info(`[DEV] Incoming ${method} ${fullUrl}`, {
+        dev_trace: true,
+        method,
+        url: fullUrl,
+        client_ip: clientIp,
+        user_agent: req.headers['user-agent'] || '',
+      });
+
+      res.on('finish', () => {
+        logger.info(`[DEV] Completed ${method} ${fullUrl} -> ${res.statusCode} (${Date.now() - start}ms)`, {
+          dev_trace: true,
+          method,
+          url: fullUrl,
+          status: res.statusCode,
+          duration_ms: Date.now() - start,
+          client_ip: clientIp,
+        });
+      });
+    }
+
     if (url === '/api/chat' || url === '/api/chat/') {
       try {
         await handleChatRequest(req, res, serverEnv);
