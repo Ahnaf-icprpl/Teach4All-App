@@ -30,7 +30,8 @@ export function renderSsrHtml({ htmlTemplate, texts, prompts = [] }) {
     throw new Error('No UI text or prompts available in database to populate SSR.');
   }
 
-  const initialDataScript = `<script id="__TEACH4ALL_DATA__">window.__INITIAL_UI_DATA__ = ${JSON.stringify({ texts, prompts })};</script>`;
+  const appEnv = process.env.ENV || process.env.env || 'development';
+  const initialDataScript = `<script id="__TEACH4ALL_DATA__">window.__INITIAL_UI_DATA__ = ${JSON.stringify({ texts, prompts, env: appEnv })};</script>`;
   const ssrPrompts = prompts.slice(0, 4);
 
   const promptCardsHtml = ssrPrompts.map(p => `

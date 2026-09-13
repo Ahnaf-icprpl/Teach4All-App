@@ -3,6 +3,7 @@ import { icon } from './icons.js';
 import { Sidebar } from './components/sidebar.js';
 import { Chat } from './components/chat.js';
 import { Dialogs } from './components/dialogs.js';
+import { DevNotice } from './components/devNotice.js';
 import {
   sidebarOpen, sidebarCollapsed, theme, setTheme, modal, notice,
   online, newChat, focusComposer, currentChat,
@@ -87,6 +88,7 @@ function App() {
       onclick: () => { sidebarOpen.val = false; },
     }),
     main({ class: 'main', id: 'main' },
+      DevNotice(),
       Topbar(),
       Chat(),
     ),

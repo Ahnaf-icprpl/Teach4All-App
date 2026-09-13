@@ -4,6 +4,11 @@ export const uiTexts = van.state({});
 export const allChatPrompts = van.state([]);
 export const activePrompts = van.state([]);
 export const isLoaded = van.state(false);
+export const appEnvState = van.state(
+  typeof window !== 'undefined' && window.__INITIAL_UI_DATA__?.env
+    ? window.__INITIAL_UI_DATA__.env
+    : null
+);
 
 /**
  * Access a UI string by key directly from the database texts.
@@ -63,6 +68,9 @@ export async function initUiTexts() {
       return false;
     }
     uiTexts.val = data.texts;
+    if (data?.env) {
+      appEnvState.val = data.env;
+    }
 
     // Load prompts from response or fallback to dedicated endpoint
     let prompts = Array.isArray(data.prompts) ? data.prompts : [];

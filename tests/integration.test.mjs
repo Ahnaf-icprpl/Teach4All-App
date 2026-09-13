@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, extname } from 'node:path';
+import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
+import { join, extname, resolve } from 'node:path';
 import { createReply } from '../src/replies.js';
 import { generateOfflineTitle } from '../src/prompts/titlePrompt.js';
 
@@ -181,6 +181,40 @@ test('migration 010 defines all UI suffixes, buttons, and categories with zero f
   assert.ok(sql.includes('dialogs_time_days_ago_suffix'), 'must define dialogs_time_days_ago_suffix');
   assert.ok(sql.includes('dialogs_cat_biology'), 'must define dialogs_cat_biology');
 });
+
+test('migration 015 defines development notice banner UI texts without fallback', () => {
+  const filePath = resolve(process.cwd(), 'migrations/015_add_dev_banner_ui_texts.sql');
+  assert.strictEqual(existsSync(filePath), true, 'migration file 015 must exist');
+
+  const sql = readFileSync(filePath, 'utf8');
+  assert.ok(sql.includes('dev_banner_badge'), 'must define dev_banner_badge');
+  assert.ok(sql.includes('dev_banner_notice'), 'must define dev_banner_notice');
+  assert.ok(sql.includes('dev_banner_close_aria'), 'must define dev_banner_close_aria');
+});
+
+test('DevNotice component and logic adheres to environment checks and UI texts', async () => {
+  const { isDevEnv, isProdEnv } = await import('../src/env.js');
+  const { appEnvState } = await import('../src/uiTexts.js');
+  const devNoticeSource = readFileSync(resolve(process.cwd(), 'src/components/devNotice.js'), 'utf8');
+
+  assert.ok(devNoticeSource.includes("t('dev_banner_badge')"), 'must reference dev_banner_badge via t()');
+  assert.ok(devNoticeSource.includes("t('dev_banner_notice')"), 'must reference dev_banner_notice via t()');
+  assert.ok(devNoticeSource.includes("t('dev_banner_close_aria')"), 'must reference dev_banner_close_aria via t()');
+  assert.ok(devNoticeSource.includes('isDevEnv()'), 'must check isDevEnv()');
+
+  // Verify appEnvState reactivity in env.js
+  appEnvState.val = 'development';
+  assert.strictEqual(isDevEnv(), true);
+  assert.strictEqual(isProdEnv(), false);
+
+  appEnvState.val = 'production';
+  assert.strictEqual(isDevEnv(), false);
+  assert.strictEqual(isProdEnv(), true);
+
+  // Reset back to development
+  appEnvState.val = 'development';
+});
+
 
 
 

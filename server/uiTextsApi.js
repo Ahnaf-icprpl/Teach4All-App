@@ -39,12 +39,13 @@ export async function handleUiTextsRequest(req, res, env = {}) {
     const dbUrl = env.DATABASE_URL || process.env.DATABASE_URL;
     const texts = await getUiTextsFromDb(dbUrl);
     const prompts = await getChatPromptsFromDb(dbUrl);
+    const appEnv = env.ENV || env.env || process.env.ENV || process.env.env || 'development';
 
     res.writeHead(200, {
       'Content-Type': 'application/json',
       'Cache-Control': 'no-cache',
     });
-    res.end(JSON.stringify({ texts, prompts }));
+    res.end(JSON.stringify({ texts, prompts, env: appEnv }));
   } catch (err) {
     logger.error('Failed to load UI texts and prompts from database', { error: err.message, client_ip: clientIp });
     res.writeHead(500, { 'Content-Type': 'application/json' });
