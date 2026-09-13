@@ -11,6 +11,7 @@ import { registerOffline } from './offline.js';
 import { isDevEnv } from './env.js';
 import { initClientErrorMonitoring } from './errorLogger.js';
 import { initUiTexts, t } from './uiTexts.js';
+import { initStudyModules } from './studyModules.js';
 import './styles/base.css';
 import './styles/sidebar.css';
 import './styles/chat.css';
@@ -106,6 +107,7 @@ async function initApp() {
 
   const loaded = await initUiTexts();
   if (!loaded) return;
+  initStudyModules();
 
   const mount = () => {
     const existingApp = document.getElementById('app');

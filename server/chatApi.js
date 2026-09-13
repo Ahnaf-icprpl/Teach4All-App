@@ -19,6 +19,8 @@ import {
 } from './providerCache.js';
 import { handleErrorLogRequest } from './errorApi.js';
 import { handleUiTextsRequest, handleChatPromptsRequest } from './uiTextsApi.js';
+import { handleQuizzesRequest } from './quizzesApi.js';
+import { handleMaterialsRequest } from './materialsApi.js';
 import { logger, logDevRequest } from './logger.js';
 import { metrics } from './metrics.js';
 
@@ -37,6 +39,8 @@ export {
   handleErrorLogRequest,
   handleUiTextsRequest,
   handleChatPromptsRequest,
+  handleQuizzesRequest,
+  handleMaterialsRequest,
 };
 
 export function isPlaceholderKey(key) {
@@ -449,6 +453,8 @@ export function createChatMiddleware(serverEnv = {}) {
       '/api/log-error': handleErrorLogRequest,
       '/api/ui-texts': handleUiTextsRequest,
       '/api/chat-prompts': handleChatPromptsRequest,
+      '/api/quizzes': handleQuizzesRequest,
+      '/api/materials': handleMaterialsRequest,
     };
     const normUrl = (url.split('?')[0] || '').replace(/\/+$/, '') || '/';
     if (apiRoutes[normUrl]) {
