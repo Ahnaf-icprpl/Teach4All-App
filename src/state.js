@@ -148,6 +148,11 @@ export function sendMessage() {
       const pane = document.getElementById('messages');
       if (pane) pane.scrollTop = pane.scrollHeight;
     });
+  }, {
+    conversationId: chat.id,
+    conversationTitle: chat.title,
+    userMessageId: userMessage.id,
+    assistantMessageId: assistantMessage.id,
   }).then(() => {
     loading.val = false;
     persist();

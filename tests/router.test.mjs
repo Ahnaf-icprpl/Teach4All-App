@@ -17,6 +17,7 @@ import {
   OPENROUTER_API_URL,
 } from '../server/chatApi.js';
 import { SYSTEM_PROMPT, injectSystemPrompt } from '../prompts/systemPrompt.js';
+import { ConversationStreamWriter, DEFAULT_USER_ID, runSql } from '../server/db.js';
 
 test('router uses google/gemini-2.5-flash-lite by default', () => {
   assert.strictEqual(DEFAULT_MODEL, 'google/gemini-2.5-flash-lite');
@@ -266,4 +267,52 @@ test('prompts/systemPrompt defines Teach4All agent system prompt and injects bef
   assert.strictEqual(reinjected[0].role, 'system');
   assert.strictEqual(reinjected[0].content, prompt);
 });
+
+test('ConversationStreamWriter streams conversations and messages to DB using UUID and hardcoded user_id', async () => {
+  assert.strictEqual(DEFAULT_USER_ID, '00000000-0000-0000-0000-000000000001');
+
+  const conversationId = '11111111-2222-3333-4444-555555555555';
+  const userMessageId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+  const assistantMessageId = 'ffffffff-0000-1111-2222-333333333333';
+
+  const writer = new ConversationStreamWriter({
+    conversationId,
+    title: 'Test Streaming Conversation',
+    userMessage: { id: userMessageId, role: 'user', text: 'Explain gravity simply' },
+    assistantMessageId,
+    databaseUrl: process.env.DATABASE_URL,
+    throttleMs: 10,
+  });
+
+  assert.strictEqual(writer.conversationId, conversationId);
+  assert.strictEqual(writer.userId, DEFAULT_USER_ID);
+  assert.strictEqual(writer.assistantMessageId, assistantMessageId);
+
+  if (!process.env.DATABASE_URL) return;
+
+  try {
+    // 1. Initialize (creates conversation and user message in DB)
+    await writer.init();
+
+    // 2. Stream chunks
+    writer.writeChunk('Gravity pulls ');
+    writer.writeChunk('objects down.');
+    await writer.finish('Gravity pulls objects down toward Earth.');
+
+    // 3. Query DB to verify persistence
+    const stdout = await runSql(
+      `SELECT role, content FROM messages WHERE conversation_id = '${conversationId}' ORDER BY created_at ASC;`,
+      process.env.DATABASE_URL
+    );
+
+    assert.ok(stdout.includes('Explain gravity simply'), 'user message should be saved in DB');
+    assert.ok(stdout.includes('Gravity pulls objects down toward Earth.'), 'assistant response should be streamed and saved in DB');
+  } finally {
+    // Cleanup test conversation
+    try {
+      await runSql(`DELETE FROM conversations WHERE id = '${conversationId}';`, process.env.DATABASE_URL);
+    } catch {}
+  }
+});
+
 

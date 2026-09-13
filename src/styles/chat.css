@@ -19,18 +19,12 @@
   .composer-tools, .send-tools { display: flex; align-items: center; gap: 10px; }
   .add-button { width: 28px; height: 28px; border-radius: 50%; color: var(--slate-gray); }
   .add-button .icon { width: 20px; height: 20px; }
-  .toolbar-divider { width: 1px; height: 15px; background: var(--soft-beige); }
-  .companion-button { display: flex; align-items: center; gap: 7px; font-size: 10px; color: var(--medium-gray); padding: 6px 3px; }
-  .companion-button > .icon { width: 14px; height: 14px; color: var(--terracotta); }
   .send-button { width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; border-radius: 11px; background: var(--terracotta); color: var(--off-white); transition: background .15s, transform .15s; }
   .send-button:not(:disabled):hover { background: var(--terracotta-hover); transform: translateY(-1px); }
   .send-button:disabled { background: var(--soft-beige); color: var(--muted-gray); cursor: not-allowed; }
   .send-button .icon { width: 20px; height: 20px; }
   .send-button .is-loading { animation: spin 1s linear infinite; }
   .input-count { font-size: 9px; color: var(--medium-gray); }
-  .composer-note { display: flex; justify-content: center; align-items: center; gap: 6px; margin-top: 13px; font-size: 9px; color: var(--medium-gray); flex-wrap: wrap; }
-  .composer-note > .icon { width: 11px; height: 11px; color: var(--dusty-terracotta); }
-  .note-dot { margin: 0 3px; }
   .suggestions { width: 100%; max-width: 720px; margin-top: 32px; margin-bottom: 24px; }
   .suggestions-label { display: flex; align-items: center; gap: 12px; font-size: 10px; color: var(--medium-gray); margin-bottom: 13px; }
   .little-line { height: 1px; background: var(--muted-gray); flex: 1; opacity: .75; }
@@ -124,7 +118,6 @@
     .composer { border-radius: 14px; padding: 17px 13px 10px; }
     .composer textarea { font-size: 16px; }
     .composer-toolbar { margin-top: 14px; }
-    .composer-note { font-size: 8px; gap: 4px; line-height: 1.6; }
     .suggestion-card { padding-left: 45px; }
     .suggestion-icon { width: 25px; height: 25px; left: 10px; top: 17px; }
     .suggestion-icon .icon { height: 15px; width: 15px; }
@@ -136,7 +129,6 @@
     .message-content { padding: 18px 22px; }
     .message { font-size: 13px; }
     .has-messages .workspace-footer { display: none; }
-    .has-messages .composer-note { margin-bottom: max(12px, env(safe-area-inset-bottom)); }
   }
   @media (max-width: 370px) {
     .chat-stage { padding: 0 15px; }
@@ -145,8 +137,6 @@
     .suggestion-grid { gap: 7px; }
     .suggestion-title { font-size: 9px; }
     .suggestion-detail { font-size: 7px; }
-    .composer-note > span:first-of-type { display: none; }
-    .note-dot { display: none; }
   }
   @media (max-height: 780px) and (min-width: 1001px) {
     .welcome { margin-top: 28px; }

@@ -12,7 +12,7 @@ export function isPlaceholderKey(key) {
   return !trimmed || trimmed.toLowerCase().includes('placeholder');
 }
 
-export async function sendMessage(messages, onChunk) {
+export async function sendMessage(messages, onChunk, options = {}) {
   if (!Array.isArray(messages) || messages.length === 0) {
     throw new Error('Messages are required.');
   }
@@ -21,12 +21,20 @@ export async function sendMessage(messages, onChunk) {
   const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
   try {
+    const payload = {
+      messages,
+      ...(options.conversationId ? { conversationId: options.conversationId } : {}),
+      ...(options.conversationTitle ? { conversationTitle: options.conversationTitle } : {}),
+      ...(options.userMessageId ? { userMessageId: options.userMessageId } : {}),
+      ...(options.assistantMessageId ? { assistantMessageId: options.assistantMessageId } : {}),
+    };
+
     const response = await fetch(CHAT_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ messages }),
+      body: JSON.stringify(payload),
       signal: controller.signal,
     });
 

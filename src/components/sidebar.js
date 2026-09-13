@@ -83,10 +83,9 @@ export function Sidebar() {
       conversationList,
     ),
     div({ class: 'sidebar-bottom' },
-      button({ class: 'profile-button', onclick: () => { modal.val = { type: 'settings' }; } },
+      div({ class: 'profile-button' },
         span({ class: 'avatar' }, 'Y'),
         span({ class: 'profile-copy' }, span({ class: 'profile-name' }, 'Your workspace'), span({ class: 'profile-detail' }, 'Personal · Saved locally')),
-        icon('settings'),
       ),
     ),
   );

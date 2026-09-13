@@ -6,10 +6,6 @@
   .dialog-heading .icon-button { flex-shrink: 0; }
   .app-dialog p { font-size: 12px; color: var(--muted); line-height: 1.85; }
   .app-dialog h3 { font-size: 12px; font-weight: 600; margin-bottom: 5px; color: var(--text); }
-  .setting-row { display: flex; align-items: center; gap: 16px; justify-content: space-between; padding: 18px 0; border-bottom: 1px solid var(--line); }
-  .setting-row:first-child { padding-top: 0; }
-  .setting-row p { font-size: 11px; color: var(--muted); }
-  .setting-row select { border: 1px solid var(--line-strong); background: var(--bg); color: var(--text); padding: 8px 10px; border-radius: 7px; font-size: 11px; }
   .secondary-button, .primary-button, .danger-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border-radius: 7px; padding: 9px 13px; font-size: 11px; font-weight: 500; white-space: nowrap; min-height: 36px; }
   .secondary-button { border: 1px solid var(--line-strong); background: var(--soft-beige); color: var(--text); }
   .secondary-button:hover { background: #DDD4C0; }
@@ -19,9 +15,7 @@
   .danger-button { background: var(--terracotta); color: var(--off-white); }
   .danger-button:hover { background: var(--terracotta-hover); }
   .danger-text, .app-dialog .warning-text { color: var(--terracotta); }
-  .app-dialog .settings-note { font-size: 10px; margin-top: 15px; color: var(--muted); }
-  .settings-footnote { display: flex; align-items: center; gap: 7px; font-size: 10px; color: var(--muted); margin-top: 22px; }
-  .settings-footnote .icon { width: 13px; height: 13px; color: var(--dusty-terracotta); }
+  .app-dialog .tools-note { font-size: 10px; margin-top: 15px; color: var(--muted); }
   .tool-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 13px 10px; border-radius: 8px; font-size: 12px; text-align: left; color: var(--text); }
   .tool-row:hover { background: var(--hover); }
   .tool-row > .icon { width: 17px; height: 17px; color: var(--terracotta); }
@@ -38,6 +32,6 @@
   @media (max-width: 760px) {
     .app-dialog { padding: 22px; }
     .dialog-heading h2 { font-size: 17px; }
-    .app-dialog input, .setting-row select { font-size: 16px; }
+    .app-dialog input { font-size: 16px; }
   }
 }

@@ -94,7 +94,6 @@ function Composer() {
     rows: 1,
     maxlength: MAX_INPUT,
     'aria-label': 'Message Teach4All',
-    'aria-describedby': 'composer-note',
     value: () => draft.val,
     oninput: event => setDraft(event.target.value),
     onkeydown: event => {
@@ -125,10 +124,6 @@ function Composer() {
             'aria-label': 'Chat tools', title: 'Chat tools',
             onclick: () => { modal.val = { type: 'tools' }; },
           }, icon('plus')),
-          span({ class: 'toolbar-divider' }),
-          () => online.val
-            ? span({ class: 'companion-button' }, icon('globe'), 'OpenRouter companion')
-            : span({ class: 'companion-button' }, icon('leaf'), 'Standalone companion'),
         ),
         div({ class: 'send-tools' },
           () => span({ class: `input-count ${draft.val.length > MAX_INPUT - 300 ? '' : 'is-hidden'}` }, `${draft.val.length}/${MAX_INPUT}`),
@@ -136,10 +131,6 @@ function Composer() {
             loading.val ? icon('settings', 'is-loading') : icon('arrow')),
         ),
       ),
-    ),
-    div({ class: 'composer-note', id: 'composer-note' },
-      icon('leaf'), span('Light on data. Big on possibility.'), span({ class: 'note-dot' }, '·'),
-      () => span(online.val ? `OpenRouter (${getModel()})` : 'Standalone mode (no connection needed)'),
     ),
   );
 }
@@ -162,8 +153,7 @@ export function Chat() {
   return div({ class: () => `workspace ${hasMessages() ? 'has-messages' : 'is-welcome'}` },
     () => storageError.val
       ? div({ class: 'storage-warning', role: 'alert' },
-          icon('info'), span(storageError.val),
-          button({ class: 'text-button', onclick: () => { modal.val = { type: 'settings' }; } }, 'Settings'))
+          icon('info'), span(storageError.val))
       : div(),
     () => !online.val && !offlineReady.val
       ? div({ class: 'connection-warning', role: 'status' },

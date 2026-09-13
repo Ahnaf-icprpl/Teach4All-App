@@ -54,10 +54,6 @@ function Topbar() {
         class: 'icon-button theme-toggle', 'aria-label': () => `Switch to ${isDark() ? 'light' : 'dark'} theme`,
         onclick: () => setTheme(isDark() ? 'light' : 'dark'),
       }, () => icon(isDark() ? 'sun' : 'moon')),
-      button({
-        class: 'icon-button', 'aria-label': 'Workspace options', title: 'Settings',
-        onclick: () => { modal.val = { type: 'settings' }; },
-      }, icon('settings')),
     ),
   );
 }

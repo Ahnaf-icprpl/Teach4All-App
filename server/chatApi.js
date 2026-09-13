@@ -7,6 +7,7 @@ import {
 } from './rateLimiter.js';
 import { getRedisClient } from './redis.js';
 import { getSystemPrompt, injectSystemPrompt } from '../prompts/systemPrompt.js';
+import { ConversationStreamWriter, DEFAULT_USER_ID } from './db.js';
 
 export const DEFAULT_MODEL = 'google/gemini-2.5-flash-lite';
 export const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
@@ -104,16 +105,45 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
     return;
   }
 
-  const { messages } = parsed;
+  const {
+    messages,
+    conversationId,
+    conversationTitle,
+    userMessageId,
+    assistantMessageId,
+    userId,
+  } = parsed;
+
   if (!Array.isArray(messages) || messages.length === 0) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: { message: 'messages array is required' } }));
     return;
   }
 
+  const databaseUrl = serverEnv.DATABASE_URL || process.env.DATABASE_URL;
+  const lastUserMsg = messages.slice().reverse().find(m => m && m.role === 'user');
+  const streamWriter = new ConversationStreamWriter({
+    conversationId,
+    userId: userId || DEFAULT_USER_ID,
+    title: conversationTitle || (lastUserMsg ? (lastUserMsg.text || lastUserMsg.content || '').slice(0, 60) : 'New Conversation'),
+    userMessage: lastUserMsg ? {
+      id: userMessageId || lastUserMsg.id,
+      role: 'user',
+      text: lastUserMsg.text || lastUserMsg.content,
+    } : null,
+    assistantMessageId,
+    databaseUrl,
+  });
+
+  // Non-blocking initialization of conversation and user message in DB
+  streamWriter.init().catch(() => {});
+
   const formattedMessages = formatMessages(messages);
   const controller = new AbortController();
-  req.on('close', () => controller.abort());
+  req.on('close', () => {
+    controller.abort();
+    streamWriter.abort().catch(() => {});
+  });
 
   try {
     const upstream = await fetch(OPENROUTER_API_URL, {
@@ -175,12 +205,49 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
     });
 
     const reader = upstream.body.getReader();
+    const decoder = new TextDecoder();
+    let sseBuffer = '';
+
     try {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         res.write(value);
+
+        // Stream text deltas to DB asynchronously
+        sseBuffer += decoder.decode(value, { stream: true });
+        const lines = sseBuffer.split('\n');
+        sseBuffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith('data: ')) continue;
+          const data = trimmed.slice(6);
+          if (data === '[DONE]') continue;
+          try {
+            const json = JSON.parse(data);
+            const delta = json.choices?.[0]?.delta?.content || '';
+            if (delta) {
+              streamWriter.writeChunk(delta);
+            }
+          } catch {}
+        }
       }
+
+      if (sseBuffer.trim().startsWith('data: ')) {
+        const data = sseBuffer.trim().slice(6);
+        if (data !== '[DONE]') {
+          try {
+            const json = JSON.parse(data);
+            const delta = json.choices?.[0]?.delta?.content || '';
+            if (delta) {
+              streamWriter.writeChunk(delta);
+            }
+          } catch {}
+        }
+      }
+
+      await streamWriter.finish();
     } finally {
       res.end();
     }

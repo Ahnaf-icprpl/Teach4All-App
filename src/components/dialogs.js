@@ -1,35 +1,11 @@
 import van from 'vanjs-core';
 import { icon } from '../icons.js';
 import {
-  modal, chats, theme, setTheme, newChat, exportWorkspace,
-  clearWorkspace, renameChat, deleteChat, storageError,
+  modal, chats, newChat, exportWorkspace,
+  clearWorkspace, renameChat, deleteChat,
 } from '../state.js';
-import { getModel } from '../router.js';
 
-const { dialog, div, h2, h3, p, span, button, label, select, option, form, input, kbd } = van.tags;
-
-function Settings() {
-  return div({ class: 'settings-content' },
-    div({ class: 'setting-row' },
-      div(h3('Appearance'), p('Make this space feel like yours.')),
-      select({ 'aria-label': 'Appearance', value: theme.val, onchange: event => setTheme(event.target.value) },
-        option({ value: 'system' }, 'System'), option({ value: 'light' }, 'Light'), option({ value: 'dark' }, 'Dark')),
-    ),
-    div({ class: 'setting-row' },
-      div(
-        h3('AI Model & Provider'),
-        p(`OpenRouter · ${getModel()}`),
-      ),
-    ),
-    div({ class: 'setting-row' }, div(h3('Your conversations'), p(`${chats.val.length} saved on this browser. No account needed.`)),
-      button({ class: 'secondary-button', onclick: exportWorkspace }, icon('download'), 'Export')),
-    p({ class: 'settings-note' }, 'Local browser storage isn’t a backup. Export important chats before clearing browser data or switching devices. Use one tab at a time; separate tabs do not merge changes.'),
-    storageError.val ? p({ class: 'settings-note warning-text' }, storageError.val) : null,
-    div({ class: 'setting-row' }, div(h3('Clear local data'), p('Delete all conversations and your current draft.'))),
-      button({ class: 'danger-text secondary-button', onclick: () => { modal.val = { type: 'clear' }; } }, 'Clear data'),
-    div({ class: 'settings-footnote' }, icon('leaf'), 'A lighter app. A little more room to explore.'),
-  );
-}
+const { dialog, div, h2, h3, p, span, button, label, form, input, kbd } = van.tags;
 
 function Tools() {
   const closeAnd = action => () => { modal.val = null; action(); };
@@ -41,7 +17,7 @@ function Tools() {
     p({ class: 'shortcut-row' }, span('Focus your message'), kbd('/')),
     p({ class: 'shortcut-row' }, span('Send a message'), kbd('Enter')),
     p({ class: 'shortcut-row' }, span('Add a new line'), kbd('Shift + Enter')),
-    p({ class: 'settings-note' }, 'On touch devices, Enter adds a new line. Tap the arrow to send.'),
+    p({ class: 'tools-note' }, 'On touch devices, Enter adds a new line. Tap the arrow to send.'),
   );
 }
 
@@ -72,17 +48,16 @@ function Confirm(type, id) {
 
 export function Dialogs() {
   const titles = {
-    settings: 'Your workspace', tools: 'A few useful things',
+    tools: 'A few useful things',
     conversation: 'Conversation options', clear: 'Clear your workspace?', delete: 'Delete this conversation?',
   };
   return () => {
     const current = modal.val;
     if (!current) return div({ hidden: true });
     const previousFocus = document.activeElement;
-    const content = current.type === 'settings' ? Settings()
-      : current.type === 'tools' ? Tools()
-        : current.type === 'conversation' ? Conversation(current.id)
-          : Confirm(current.type, current.id);
+    const content = current.type === 'tools' ? Tools()
+      : current.type === 'conversation' ? Conversation(current.id)
+      : Confirm(current.type, current.id);
     const element = dialog({
       class: 'app-dialog', 'aria-labelledby': 'dialog-title',
       oncancel: event => { event.preventDefault(); modal.val = null; },
