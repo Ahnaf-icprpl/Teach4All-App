@@ -158,8 +158,12 @@ function Suggestions() {
         onclick: rotatePrompts,
       }, icon('spark')),
     ),
-    div({ class: 'suggestion-grid' }, () => activePrompts.val.map(prompt =>
-      button({ class: 'suggestion-card', onclick: () => { setDraft(prompt.prompt); focusComposer(); } },
+    () => div({ class: 'suggestion-grid' }, activePrompts.val.map(prompt =>
+      button({
+        type: 'button',
+        class: 'suggestion-card',
+        onclick: () => { setDraft(prompt.prompt); focusComposer(); },
+      },
         span({ class: `suggestion-icon ${prompt.color || 'amber'}` }, icon(prompt.icon || 'bulb')),
         span({ class: 'suggestion-title' }, prompt.title),
         span({ class: 'suggestion-detail' }, prompt.detail),
