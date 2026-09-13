@@ -1,5 +1,8 @@
 import van from 'vanjs-core';
-import { loadWorkspace, saveWorkspace, emptyWorkspace, MAX_CHATS } from './storage.js';
+import {
+  loadWorkspace, saveWorkspace, emptyWorkspace, MAX_CHATS,
+  loadThemeFromLocalDb, saveTheme,
+} from './storage.js';
 import { sendMessage as sendApiMessage, generateTitle, generateOfflineTitle } from './router.js';
 import { createReply } from './replies.js';
 
@@ -247,10 +250,16 @@ export function exportWorkspace() {
 
 export function setTheme(value) {
   theme.val = value;
-  persist();
+  saveTheme(storage, value);
 }
 
 if (typeof window !== 'undefined') {
   window.addEventListener('online', () => { online.val = true; });
   window.addEventListener('offline', () => { online.val = false; });
+  loadThemeFromLocalDb().then(dbTheme => {
+    if (dbTheme && dbTheme !== theme.val) {
+      theme.val = dbTheme;
+      saveTheme(storage, dbTheme);
+    }
+  }).catch(() => {});
 }

@@ -96,7 +96,7 @@
 @layer layout {
   .app { display: flex; height: 100vh; height: 100dvh; min-height: 500px; overflow: hidden; background: var(--bg); }
   .main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg); }
-  .topbar { height: 82px; padding: 0 38px; flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; gap: 16px; background: var(--bg); border-bottom: 1px solid var(--line); }
+  .topbar { height: 82px; padding: 0 38px; flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; gap: 16px; background: var(--bg); }
   .topbar-left, .topbar-right { display: flex; align-items: center; gap: 17px; min-width: 0; }
   .workspace-title { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 500; color: var(--text); min-width: 0; padding: 8px 0; }
   .workspace-title span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 340px; }
@@ -112,13 +112,13 @@
   .icon-button:hover { background: var(--hover); color: var(--text); }
   .text-button { color: inherit; font-size: inherit; padding: 0; text-underline-offset: 3px; }
   .text-button:hover { text-decoration: underline; }
-  .connection-badge { display: flex; align-items: center; gap: 6px; background: var(--soft-beige); color: var(--slate-gray); border: 1px solid var(--muted-gray); padding: 6px 9px; border-radius: 6px; font-size: 11px; font-weight: 500; white-space: nowrap; }
+  .connection-badge { display: flex; align-items: center; gap: 6px; background: var(--soft-beige); color: var(--slate-gray); border: 0; padding: 6px 9px; border-radius: 6px; font-size: 11px; font-weight: 500; white-space: nowrap; }
   .connection-badge .icon { width: 13px; height: 13px; color: var(--terracotta); }
-  .offline-badge { background: var(--terracotta); color: var(--off-white); border-color: var(--terracotta-hover); }
+  .offline-badge { background: var(--terracotta); color: var(--off-white); }
   .offline-badge .icon { color: var(--off-white); }
-  .toast { position: fixed; bottom: 24px; left: 50%; transform: translate(-50%, 12px); opacity: 0; pointer-events: none; background: var(--deep-navy); color: var(--off-white); padding: 13px 20px; border-radius: 10px; font-size: 13px; box-shadow: var(--shadow); max-width: calc(100% - 32px); width: max-content; z-index: 50; transition: opacity .2s, transform .2s; border: 1px solid var(--slate-navy); }
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translate(-50%, 12px); opacity: 0; pointer-events: none; background: var(--deep-navy); color: var(--off-white); padding: 13px 20px; border-radius: 10px; font-size: 13px; box-shadow: var(--shadow); max-width: calc(100% - 32px); width: max-content; z-index: 50; transition: opacity .2s, transform .2s; border: 0; }
   .toast.is-visible { opacity: 1; transform: translate(-50%, 0); }
-  .update-notice { position: fixed; bottom: 18px; right: 20px; z-index: 40; background: var(--surface); border: 1px solid var(--line-strong); padding: 14px; display: flex; align-items: center; gap: 16px; font-size: 12px; border-radius: 10px; box-shadow: var(--shadow); color: var(--text); }
+  .update-notice { position: fixed; bottom: 18px; right: 20px; z-index: 40; background: var(--surface); border: 0; padding: 14px; display: flex; align-items: center; gap: 16px; font-size: 12px; border-radius: 10px; box-shadow: var(--shadow); color: var(--text); }
   .update-notice button { color: var(--terracotta); font-weight: 600; }
   .storage-warning, .connection-warning { padding: 10px 22px; color: var(--off-white); background: var(--terracotta); font-size: 12px; line-height: 1.6; display: flex; gap: 10px; align-items: center; }
   .storage-warning button { text-decoration: underline; margin-left: auto; }

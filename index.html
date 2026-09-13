@@ -8,6 +8,17 @@
     <link rel="icon" type="image/svg+xml" href="./icon.svg" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <title>Teach4All — Ruang untuk Rasa Ingin Tahu</title>
+    <script>
+      (function() {
+        try {
+          var t = localStorage.getItem('teach4all.theme.v1');
+          var dark = t === 'dark' || ((!t || t === 'system') && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+          var m = document.querySelector('meta[name="theme-color"]');
+          if (m) m.content = dark ? '#1A232E' : '#F2EEE1';
+        } catch (e) {}
+      })();
+    </script>
     <script type="module" src="/src/main.js"></script>
   </head>
   <body>
