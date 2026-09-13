@@ -1,5 +1,6 @@
 import { getClientIp, getClientLocation } from './rateLimiter.js';
 import { logger, truncateText, logDevRequest } from './logger.js';
+import { metrics } from './metrics.js';
 
 function readJsonBody(req, maxBytes = 50000) {
   return new Promise((resolve, reject) => {
@@ -83,6 +84,8 @@ export async function handleErrorLogRequest(req, res, serverEnv = {}) {
   if (lineno) meta.lineno = Number(lineno);
   if (colno) meta.colno = Number(colno);
   if (stack) meta.stack = truncateText(String(stack), 800);
+
+  metrics.recordClientError({ type, path: meta.path });
 
   if (type === 'not_found') {
     logger.warn(`Client 404: Not Found at ${meta.path || 'unknown'}`, meta);

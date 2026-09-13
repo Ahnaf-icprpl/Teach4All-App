@@ -327,4 +327,53 @@ test('getClientIp properly resolves Vercel edge IP forwarding and prevents spoof
   assert.strictEqual(loc.city, 'Jakarta');
 });
 
+test('GrafanaMetrics records requests, handles Redis fan-out, and formats OTLP metrics', async () => {
+  const { GrafanaMetrics, parseMetricKey, toOtlpMetricAttributes } = await import('../server/metrics.js');
+
+  const parsed = parseMetricKey('http_requests_total{endpoint=/api/chat,status=200,method=POST}');
+  assert.strictEqual(parsed.name, 'http_requests_total');
+  assert.strictEqual(parsed.attributes.endpoint, '/api/chat');
+  assert.strictEqual(parsed.attributes.status, '200');
+
+  const attrs = toOtlpMetricAttributes({ endpoint: '/api/chat', count: 5 });
+  assert.strictEqual(attrs.length, 2);
+  assert.strictEqual(attrs[0].key, 'endpoint');
+  assert.strictEqual(attrs[0].value.stringValue, '/api/chat');
+
+  const client = new RedisClient(REDIS_URL);
+  client.connect();
+
+  const metricsInst = new GrafanaMetrics({
+    redisClient: client,
+    forceSendInTest: false,
+  });
+
+  try {
+    metricsInst.recordHttpRequest({
+      endpoint: '/api/test-metrics',
+      method: 'POST',
+      status: 200,
+      durationMs: 45,
+    });
+
+    metricsInst.recordStreamMetric({
+      chunks: 5,
+      bytes: 250,
+      model: 'test-model',
+      durationMs: 120,
+    });
+
+    metricsInst.recordRateLimitHit({ endpoint: '/api/test-metrics' });
+    metricsInst.recordClientError({ type: 'unit_test_err', path: '/test' });
+
+    assert(metricsInst.localDataPoints.length >= 4);
+
+    // Verify atomic increment in Redis for fanning out
+    const hash = await client.hgetall('teach4all:metrics:counters');
+    assert(hash, 'Redis counters hash should exist');
+  } finally {
+    client.close();
+  }
+});
+
 

@@ -21,6 +21,7 @@ import {
   extractProvider,
 } from './providerCache.js';
 import { logger, logDevRequest } from './logger.js';
+import { metrics } from './metrics.js';
 
 export const DEFAULT_MODEL = 'google/gemini-2.5-flash-lite';
 export const DEFAULT_TITLE_TEMPERATURE = 0.85;
@@ -74,6 +75,7 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
   applyRateLimitHeaders(res, rateInfo);
 
   if (!rateInfo.allowed) {
+    metrics.recordRateLimitHit({ endpoint: '/api/title' });
     logger.warn('Title rate limit exceeded', {
       endpoint: '/api/title',
       client_ip: clientIp,
@@ -221,6 +223,12 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
   }
 
   const clientLoc = getClientLocation(req);
+  const titleDurationMs = Date.now() - startTime;
+  metrics.record('title_generation_duration_ms', titleDurationMs, {
+    unit: 'ms',
+    description: 'Title generation duration in milliseconds',
+    attributes: { model, source: usedSource },
+  });
   logger.info('Title generated successfully', {
     endpoint: '/api/title',
     conversation_id: conversationId,
@@ -231,7 +239,7 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
     prompt: firstUserText,
     model,
     source: usedSource,
-    duration_ms: Date.now() - startTime,
+    duration_ms: titleDurationMs,
   });
 
   res.writeHead(200, { 'Content-Type': 'application/json' });

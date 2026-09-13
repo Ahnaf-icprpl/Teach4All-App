@@ -13,6 +13,7 @@ import {
   updateConversationTitle,
 } from './db.js';
 import { logger, logDevRequest } from './logger.js';
+import { metrics } from './metrics.js';
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -48,6 +49,7 @@ export async function handleConversationsRequest(req, res, serverEnv = {}) {
   applyRateLimitHeaders(res, rateInfo);
 
   if (!rateInfo.allowed) {
+    metrics.recordRateLimitHit({ endpoint: '/api/conversations' });
     logger.warn('Conversations rate limit exceeded', {
       endpoint: '/api/conversations',
       client_ip: clientIp,
@@ -207,6 +209,7 @@ export async function handleMessagesRequest(req, res, serverEnv = {}) {
   applyRateLimitHeaders(res, rateInfo);
 
   if (!rateInfo.allowed) {
+    metrics.recordRateLimitHit({ endpoint: '/api/messages' });
     logger.warn('Messages rate limit exceeded', {
       endpoint: '/api/messages',
       client_ip: clientIp,

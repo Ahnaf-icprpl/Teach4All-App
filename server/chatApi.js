@@ -19,6 +19,7 @@ import {
 } from './providerCache.js';
 import { handleErrorLogRequest } from './errorApi.js';
 import { logger, logDevRequest } from './logger.js';
+import { metrics } from './metrics.js';
 
 export const DEFAULT_MODEL = 'google/gemini-2.5-flash-lite';
 export const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
@@ -74,6 +75,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
   applyRateLimitHeaders(res, rateInfo);
 
   if (!rateInfo.allowed) {
+    metrics.recordRateLimitHit({ endpoint: '/api/chat' });
     logger.warn('Chat rate limit exceeded', {
       endpoint: '/api/chat',
       client_ip: clientIp,
@@ -340,13 +342,20 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
       }
 
       await streamWriter.finish();
+      const streamDurationMs = Date.now() - startTime;
+      metrics.recordStreamMetric({
+        chunks: chunkCount,
+        bytes: bytesStreamed,
+        model,
+        durationMs: streamDurationMs,
+      });
       logger.info('Chat completion stream finished', {
         endpoint: '/api/chat',
         conversation_id: conversationId,
         client_ip: clientIp,
         provider: detectedProvider,
         model,
-        duration_ms: Date.now() - startTime,
+        duration_ms: streamDurationMs,
         chunks_count: chunkCount,
         bytes_streamed: bytesStreamed,
       });
@@ -377,6 +386,18 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
   }
 }
 
+async function dispatchApi(handler, req, res, serverEnv, routeName) {
+  try {
+    await handler(req, res, serverEnv);
+  } catch (err) {
+    logger.error(`Unhandled error in ${routeName} middleware`, { error: err.message, stack: err.stack });
+    if (!res.headersSent) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: 'Internal server error.' } }));
+    }
+  }
+}
+
 export function createChatMiddleware(serverEnv = {}) {
   return async (req, res, next) => {
     const isDev = (serverEnv.ENV || serverEnv.env || process.env.ENV || process.env.env || '').toLowerCase() === 'development' || logger.isDev();
@@ -394,86 +415,41 @@ export function createChatMiddleware(serverEnv = {}) {
         client_ip: clientIp,
         user_agent: req.headers['user-agent'] || '',
       });
+    }
 
-      res.on('finish', () => {
-        logger.info(`[DEV] Completed ${method} ${fullUrl} -> ${res.statusCode} (${Date.now() - start}ms)`, {
+    res.on('finish', () => {
+      const durationMs = Date.now() - start;
+      metrics.recordHttpRequest({ endpoint: url || fullUrl, method, status: res.statusCode, durationMs });
+      metrics.flush().catch(() => {});
+      if (isDev) {
+        logger.info(`[DEV] Completed ${method} ${fullUrl} -> ${res.statusCode} (${durationMs}ms)`, {
           dev_trace: true,
           method,
           url: fullUrl,
           status: res.statusCode,
-          duration_ms: Date.now() - start,
+          duration_ms: durationMs,
           client_ip: clientIp,
         });
-      });
-    }
+      }
+    });
 
     if (url === '/api/chat' || url === '/api/chat/') {
-      try {
-        await handleChatRequest(req, res, serverEnv);
-      } catch (err) {
-        logger.error('Unhandled error in /api/chat middleware', { error: err.message, stack: err.stack });
-        if (!res.headersSent) {
-          res.writeHead(500, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: { message: 'Internal server error.' } }));
-        }
-      }
-      return;
+      return dispatchApi(handleChatRequest, req, res, serverEnv, '/api/chat');
     }
     if (url === '/api/title' || url === '/api/title/') {
-      try {
-        await handleTitleRequest(req, res, serverEnv);
-      } catch (err) {
-        logger.error('Unhandled error in /api/title middleware', { error: err.message, stack: err.stack });
-        if (!res.headersSent) {
-          res.writeHead(500, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: { message: 'Internal server error.' } }));
-        }
-      }
-      return;
+      return dispatchApi(handleTitleRequest, req, res, serverEnv, '/api/title');
     }
     if (url === '/api/conversations' || url === '/api/conversations/') {
-      try {
-        await handleConversationsRequest(req, res, serverEnv);
-      } catch (err) {
-        logger.error('Unhandled error in /api/conversations middleware', { error: err.message, stack: err.stack });
-        if (!res.headersSent) {
-          res.writeHead(500, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: { message: 'Internal server error.' } }));
-        }
-      }
-      return;
+      return dispatchApi(handleConversationsRequest, req, res, serverEnv, '/api/conversations');
     }
     if (url === '/api/messages' || url === '/api/messages/') {
-      try {
-        await handleMessagesRequest(req, res, serverEnv);
-      } catch (err) {
-        logger.error('Unhandled error in /api/messages middleware', { error: err.message, stack: err.stack });
-        if (!res.headersSent) {
-          res.writeHead(500, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: { message: 'Internal server error.' } }));
-        }
-      }
-      return;
+      return dispatchApi(handleMessagesRequest, req, res, serverEnv, '/api/messages');
     }
     if (url === '/api/log-error' || url === '/api/log-error/') {
-      try {
-        await handleErrorLogRequest(req, res, serverEnv);
-      } catch (err) {
-        logger.error('Unhandled error in /api/log-error middleware', { error: err.message, stack: err.stack });
-        if (!res.headersSent) {
-          res.writeHead(500, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: { message: 'Internal server error.' } }));
-        }
-      }
-      return;
+      return dispatchApi(handleErrorLogRequest, req, res, serverEnv, '/api/log-error');
     }
     if (url.startsWith('/api/')) {
-      const clientIp = getClientIp(req);
-      logger.warn('API endpoint not found (404)', {
-        endpoint: url,
-        method: req.method,
-        client_ip: clientIp,
-      });
+      logger.warn('API endpoint not found (404)', { endpoint: url, method, client_ip: clientIp });
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: { message: `Route ${url} not found` } }));
       return;

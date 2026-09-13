@@ -1,7 +1,18 @@
 import { handleChatRequest } from '../server/chatApi.js';
 import { logger } from '../server/logger.js';
+import { metrics } from '../server/metrics.js';
 
 export default async function handler(req, res) {
+  const start = Date.now();
+  res.on('finish', () => {
+    metrics.recordHttpRequest({
+      endpoint: '/api/chat',
+      method: req.method,
+      status: res.statusCode,
+      durationMs: Date.now() - start,
+    });
+  });
+
   try {
     await handleChatRequest(req, res);
   } catch (err) {
@@ -10,6 +21,6 @@ export default async function handler(req, res) {
       res.end(JSON.stringify({ error: { message: err.message || 'Internal server error.' } }));
     }
   } finally {
-    await logger.flush();
+    await Promise.allSettled([logger.flush(), metrics.flush()]);
   }
 }
