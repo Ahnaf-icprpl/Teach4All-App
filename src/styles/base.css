@@ -101,9 +101,9 @@
   .workspace-title { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 500; color: var(--text); min-width: 0; padding: 8px 0; }
   .workspace-title span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 340px; }
   .topbar-divider { height: 19px; width: 1px; background: var(--line-strong); }
-  .open-sidebar { display: none !important; }
+  .open-sidebar { display: none; }
   .sidebar-is-collapsed .sidebar { display: none; }
-  .sidebar-is-collapsed .open-sidebar { display: inline-flex !important; }
+  .sidebar-is-collapsed .open-sidebar { display: inline-flex; }
   .sidebar-scrim { display: none; }
 }
 
@@ -151,3 +151,14 @@
     .workspace-title span { max-width: 145px; }
   }
 }
+
+@media (max-width: 760px) {
+  button.open-sidebar,
+  button.hamburger-menu {
+    display: inline-flex !important;
+  }
+  button.topbar-new-chat {
+    display: none !important;
+  }
+}
+
