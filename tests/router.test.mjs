@@ -18,7 +18,7 @@ import {
   DEFAULT_MODEL as SERVER_DEFAULT_MODEL,
   OPENROUTER_API_URL,
 } from '../server/chatApi.js';
-import { buildWebSearchTool, isWebSearchRequested, DEFAULT_SEARCH_ENGINE } from '../server/webSearch.js';
+import { buildWebSearchPlugin, buildWebSearchTool, isWebSearchRequested, DEFAULT_SEARCH_ENGINE } from '../server/webSearch.js';
 import { SYSTEM_PROMPT, injectSystemPrompt } from '../prompts/systemPrompt.js';
 import {
   TITLE_SYSTEM_PROMPT,
@@ -1425,16 +1425,15 @@ test('createChatMiddleware logs completed >= 400 requests with logger.error', as
   }
 });
 
-test('buildWebSearchTool returns cheapest parallel server tool by default and respects env overrides', () => {
+test('buildWebSearchPlugin returns cheapest parallel plugin by default and respects env overrides', () => {
   assert.strictEqual(DEFAULT_SEARCH_ENGINE, 'parallel');
-  const defaultTool = buildWebSearchTool({});
-  assert.strictEqual(defaultTool.type, 'openrouter:web_search');
-  assert.strictEqual(defaultTool.parameters.engine, 'parallel');
-  assert.strictEqual(defaultTool.parameters.max_results, 3);
-  assert.strictEqual(defaultTool.parameters.max_uses, 1);
+  const defaultPlugin = buildWebSearchPlugin({});
+  assert.strictEqual(defaultPlugin.id, 'web');
+  assert.strictEqual(defaultPlugin.engine, 'parallel');
+  assert.strictEqual(defaultPlugin.max_results, 3);
 
-  const customTool = buildWebSearchTool({ OPENROUTER_SEARCH_ENGINE: 'perplexity' });
-  assert.strictEqual(customTool.parameters.engine, 'perplexity');
+  const customPlugin = buildWebSearchPlugin({ OPENROUTER_SEARCH_ENGINE: 'perplexity' });
+  assert.strictEqual(customPlugin.engine, 'perplexity');
 });
 
 test('isWebSearchRequested recognizes boolean and falsy triggers', () => {
@@ -1446,7 +1445,7 @@ test('isWebSearchRequested recognizes boolean and falsy triggers', () => {
   assert.strictEqual(isWebSearchRequested(0), false);
 });
 
-test('server handleChatRequest provides autonomous web_search tool with cheapest engine and max_tool_calls limit', async () => {
+test('server handleChatRequest provides web search plugin with cheapest parallel engine and max_results limit', async () => {
   const originalFetch = globalThis.fetch;
   let interceptedPayload = null;
 
@@ -1473,19 +1472,17 @@ test('server handleChatRequest provides autonomous web_search tool with cheapest
     });
 
     assert.ok(interceptedPayload);
-    assert.strictEqual(interceptedPayload.max_tool_calls, 1);
-    assert.ok(Array.isArray(interceptedPayload.tools));
-    assert.strictEqual(interceptedPayload.tools.length, 1);
-    assert.strictEqual(interceptedPayload.tools[0].type, 'openrouter:web_search');
-    assert.strictEqual(interceptedPayload.tools[0].parameters.engine, 'parallel');
-    assert.strictEqual(interceptedPayload.tools[0].parameters.max_results, 3);
-    assert.strictEqual(interceptedPayload.tools[0].parameters.max_uses, 1);
+    assert.ok(Array.isArray(interceptedPayload.plugins));
+    assert.strictEqual(interceptedPayload.plugins.length, 1);
+    assert.strictEqual(interceptedPayload.plugins[0].id, 'web');
+    assert.strictEqual(interceptedPayload.plugins[0].engine, 'parallel');
+    assert.strictEqual(interceptedPayload.plugins[0].max_results, 3);
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test('server handleChatRequest omits tools when webSearch is explicitly false', async () => {
+test('server handleChatRequest omits plugins when webSearch is explicitly false', async () => {
   const originalFetch = globalThis.fetch;
   let interceptedPayload = null;
 
@@ -1512,8 +1509,7 @@ test('server handleChatRequest omits tools when webSearch is explicitly false', 
     });
 
     assert.ok(interceptedPayload);
-    assert.strictEqual(interceptedPayload.tools, undefined);
-    assert.strictEqual(interceptedPayload.max_tool_calls, undefined);
+    assert.strictEqual(interceptedPayload.plugins, undefined);
   } finally {
     globalThis.fetch = originalFetch;
   }

@@ -23,7 +23,7 @@ import { handleQuizzesRequest } from './quizzesApi.js';
 import { handleMaterialsRequest } from './materialsApi.js';
 import { logger, logDevRequest } from './logger.js';
 import { metrics } from './metrics.js';
-import { buildWebSearchTool, isWebSearchRequested } from './webSearch.js';
+import { buildWebSearchPlugin, buildWebSearchTool, isWebSearchRequested } from './webSearch.js';
 import { createChatMiddleware, dispatchApi } from './chatMiddleware.js';
 
 export const DEFAULT_MODEL = 'google/gemini-2.5-flash-lite';
@@ -43,6 +43,7 @@ export {
   handleChatPromptsRequest,
   handleQuizzesRequest,
   handleMaterialsRequest,
+  buildWebSearchPlugin,
   buildWebSearchTool,
   isWebSearchRequested,
   createChatMiddleware,
@@ -203,7 +204,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
   const providerRouting = buildProviderRoutingPayload(conversationId, cachedProvider);
 
   const enableSearch = isWebSearchRequested(webSearch);
-  const searchTool = enableSearch ? buildWebSearchTool(serverEnv) : null;
+  const webPlugin = enableSearch ? buildWebSearchPlugin(serverEnv) : null;
 
   const clientLoc = getClientLocation(req);
   logger.info('Chat stream requested', {
@@ -216,7 +217,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
     prompt: promptText,
     messages_count: messages.length,
     cached_provider: cachedProvider || 'none',
-    web_search: enableSearch ? (searchTool?.parameters?.engine || 'parallel') : 'disabled',
+    web_search: enableSearch ? (webPlugin?.engine || 'parallel') : 'disabled',
   });
 
   const formattedMessages = formatMessages(messages);
@@ -243,7 +244,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
         messages: formattedMessages,
         stream: true,
         user: userId || clientIp,
-        ...(searchTool ? { tools: [searchTool], max_tool_calls: 1 } : {}),
+        ...(webPlugin ? { plugins: [webPlugin] } : {}),
         ...providerRouting,
       }),
       signal: controller.signal,
@@ -312,6 +313,8 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
     let sseBuffer = '';
     let chunkCount = 0;
     let bytesStreamed = 0;
+    let accumulatedText = '';
+    const citations = [];
 
     try {
       while (true) {
@@ -341,7 +344,16 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
             }
             const delta = json.choices?.[0]?.delta?.content || '';
             if (delta) {
+              accumulatedText += delta;
               streamWriter.writeChunk(delta);
+            }
+            const anns = json.choices?.[0]?.delta?.annotations || [];
+            for (const ann of anns) {
+              if (ann?.type === 'url_citation' && ann.url_citation?.url) {
+                if (!citations.some(c => c.url === ann.url_citation.url)) {
+                  citations.push(ann.url_citation);
+                }
+              }
             }
           } catch {}
         }
@@ -354,10 +366,26 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
             const json = JSON.parse(data);
             const delta = json.choices?.[0]?.delta?.content || '';
             if (delta) {
+              accumulatedText += delta;
               streamWriter.writeChunk(delta);
+            }
+            const anns = json.choices?.[0]?.delta?.annotations || [];
+            for (const ann of anns) {
+              if (ann?.type === 'url_citation' && ann.url_citation?.url) {
+                if (!citations.some(c => c.url === ann.url_citation.url)) {
+                  citations.push(ann.url_citation);
+                }
+              }
             }
           } catch {}
         }
+      }
+
+      if (citations.length > 0 && !accumulatedText.includes('http')) {
+        const sourcesBlock = '\n\n**Sumber:**\n' + citations.map(c => `- [${c.title || c.url}](${c.url})`).join('\n');
+        accumulatedText += sourcesBlock;
+        res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: sourcesBlock } }] })}\n\n`);
+        streamWriter.writeChunk(sourcesBlock);
       }
 
       await streamWriter.finish();
