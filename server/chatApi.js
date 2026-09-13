@@ -408,7 +408,7 @@ export function createChatMiddleware(serverEnv = {}) {
     const method = req.method || 'GET';
 
     if (isDev) {
-      logger.info(`[DEV] Incoming ${method} ${fullUrl}`, {
+      logger.info(`Incoming ${method} ${fullUrl}`, {
         dev_trace: true,
         method,
         url: fullUrl,
@@ -422,7 +422,7 @@ export function createChatMiddleware(serverEnv = {}) {
       metrics.recordHttpRequest({ endpoint: url || fullUrl, method, status: res.statusCode, durationMs });
       metrics.flush().catch(() => {});
       if (isDev) {
-        logger.info(`[DEV] Completed ${method} ${fullUrl} -> ${res.statusCode} (${durationMs}ms)`, {
+        logger.info(`Completed ${method} ${fullUrl} -> ${res.statusCode} (${durationMs}ms)`, {
           dev_trace: true,
           method,
           url: fullUrl,

@@ -375,7 +375,7 @@ export function logDevRequest(req, endpoint = '', extra = {}) {
   const url = req?.url || endpoint || '/';
   const ip = getClientIp(req);
   const loc = getClientLocation(req);
-  logger.info(`[DEV] Request: ${method} ${url}`, {
+  logger.info(`Request: ${method} ${url}`, {
     dev_trace: true,
     endpoint: endpoint || url,
     method,
