@@ -47,13 +47,96 @@
 @layer responsive {
   @media (max-width: 760px) {
     .app-dialog { padding: 22px; }
-    .dialog-wide { padding: 20px 16px; height: calc(100dvh - 32px); max-height: calc(100dvh - 32px); }
-    .dialog-heading h2 { font-size: 17px; }
+    .dialog-wide {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      max-width: 100vw;
+      min-width: 100vw;
+      height: 100dvh;
+      max-height: 100dvh;
+      min-height: 100dvh;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      z-index: 100;
+    }
+    .dialog-wide::backdrop {
+      background: var(--bg);
+      backdrop-filter: none;
+    }
+    .dialog-wide .dialog-heading {
+      min-height: 56px;
+      padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px;
+      margin-bottom: 0;
+      background: var(--surface);
+      border-bottom: 1px solid var(--line);
+      box-sizing: border-box;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .dialog-wide .dialog-heading h2 {
+      font-size: 16px;
+      font-weight: 600;
+    }
     .app-dialog input { font-size: 16px; }
-    .topic-card { padding: 12px; }
-    .topic-card-title { font-size: 12.5px; }
-    .topic-card-summary { font-size: 11px; }
-    .topic-card-footer { flex-direction: column; align-items: flex-start; gap: 6px; }
-    .topic-open-btn { width: 100%; justify-content: center; }
+    .dialog-wide .topic-dialog-content {
+      padding: 16px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      -webkit-overflow-scrolling: touch;
+    }
+    .dialog-wide .topic-dialog-desc {
+      margin-bottom: 14px;
+      font-size: 12.5px;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+    .dialog-wide .topic-card-grid {
+      gap: 12px;
+      padding-right: 0;
+    }
+    .dialog-wide .topic-card {
+      padding: 14px 15px;
+      border-radius: 14px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      box-shadow: 0 1px 4px rgba(34, 46, 60, 0.04);
+    }
+    .dialog-wide .topic-card-title {
+      font-size: 13.5px;
+      font-weight: 600;
+      line-height: 1.35;
+    }
+    .dialog-wide .topic-card-summary {
+      font-size: 11.5px;
+      line-height: 1.5;
+      margin-top: 6px;
+    }
+    .dialog-wide .topic-card-footer {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+      padding-top: 10px;
+      margin-top: 2px;
+      border-top: 1px solid var(--line);
+    }
+    .dialog-wide .topic-card-meta {
+      font-size: 11px;
+    }
+    .dialog-wide .topic-open-btn {
+      width: 100%;
+      justify-content: center;
+      min-height: 36px;
+      font-size: 12px;
+    }
   }
 }
