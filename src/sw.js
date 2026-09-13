@@ -32,30 +32,57 @@ self.addEventListener('fetch', event => {
   const { request } = event;
   if (request.method !== 'GET' || !request.url.startsWith(scope)) return;
   const url = new URL(request.url);
-  // Only the app root/index receive the shell, never arbitrary routes or API calls.
+
+  // Non-cached endpoints (like API calls) are always sent directly to server
+  if (url.pathname.startsWith('/api/')) return;
+
   const isShell = request.mode === 'navigate'
     && [new URL(scope).pathname, new URL(shellUrl).pathname].includes(url.pathname);
-  const cacheKey = isShell ? shellUrl : request.url;
-  if (!isShell && !assetUrls.includes(cacheKey)) return;
 
-  if (isShell) {
+  if (request.mode === 'navigate') {
+    if (isShell) {
+      event.respondWith((async () => {
+        try {
+          const netRes = await fetch(request);
+          if (netRes && netRes.ok) {
+            const cache = await caches.open(CACHE_NAME);
+            cache.put(shellUrl, netRes.clone()).catch(() => {});
+            return netRes;
+          }
+        } catch {}
+        const cache = await caches.open(CACHE_NAME);
+        return (await cache.match(shellUrl)) || fetch(request);
+      })());
+      return;
+    }
+
+    // For non-cached navigation endpoints: send to server so server returns 404 properly.
+    // When offline, fallback to precached 404 page with 404 status.
     event.respondWith((async () => {
       try {
-        const netRes = await fetch(request);
-        if (netRes && netRes.ok) {
-          const cache = await caches.open(CACHE_NAME);
-          cache.put(shellUrl, netRes.clone()).catch(() => {});
-          return netRes;
+        return await fetch(request);
+      } catch {
+        const cache = await caches.open(CACHE_NAME);
+        const match404 = await cache.match(new URL('404.html', scope).href);
+        if (match404) {
+          return new Response(match404.body, {
+            status: 404,
+            statusText: 'Not Found',
+            headers: { 'Content-Type': 'text/html; charset=utf-8' },
+          });
         }
-      } catch {}
-      const cache = await caches.open(CACHE_NAME);
-      return (await cache.match(shellUrl)) || fetch(request);
+        return (await cache.match(shellUrl)) || fetch(request);
+      }
     })());
     return;
   }
 
-  event.respondWith((async () => {
-    const cache = await caches.open(CACHE_NAME);
-    return (await cache.match(cacheKey)) || fetch(request);
-  })());
+  // Precached static assets
+  if (assetUrls.includes(request.url)) {
+    event.respondWith((async () => {
+      const cache = await caches.open(CACHE_NAME);
+      return (await cache.match(request.url)) || fetch(request);
+    })());
+    return;
+  }
 });

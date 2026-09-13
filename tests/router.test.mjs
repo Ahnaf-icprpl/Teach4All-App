@@ -1356,6 +1356,35 @@ test('getConversations and handleConversationsRequest search database by title a
   }
 });
 
+test('handleSsrRequest returns 404 status and 404.html template for unknown paths', async () => {
+  const { handleSsrRequest, load404HtmlTemplate } = await import('../server/ssr.js');
+
+  const template404 = load404HtmlTemplate();
+  assert.ok(template404.includes('Halaman Tidak Ditemukan'));
+  assert.ok(!template404.includes('id="app"'));
+
+  let statusCode = 0;
+  let headers = {};
+  let body = '';
+  const req = { url: '/unknown-route-123' };
+  const res = {
+    writeHead(code, h) {
+      statusCode = code;
+      headers = h;
+    },
+    end(b) {
+      body = b;
+    },
+  };
+
+  await handleSsrRequest(req, res);
+  assert.strictEqual(statusCode, 404);
+  assert.strictEqual(headers['Content-Type'], 'text/html; charset=utf-8');
+  assert.ok(body.includes('Halaman Tidak Ditemukan'));
+  assert.ok(!body.includes('id="app"'));
+});
+
+
 
 
 

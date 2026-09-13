@@ -466,6 +466,24 @@ export function createChatMiddleware(serverEnv = {}) {
       res.end(JSON.stringify({ error: { message: `Route ${url} not found` } }));
       return;
     }
+
+    if (
+      req.headers.accept?.includes('text/html') &&
+      url !== '/' &&
+      url !== '/index.html' &&
+      url !== '/404.html' &&
+      !url.startsWith('/@') &&
+      !url.startsWith('/src/') &&
+      !url.startsWith('/node_modules/') &&
+      !url.includes('.')
+    ) {
+      const { load404HtmlTemplate } = await import('./ssr.js');
+      const p404 = load404HtmlTemplate();
+      res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(p404);
+      return;
+    }
+
     if (next) next();
   };
 }

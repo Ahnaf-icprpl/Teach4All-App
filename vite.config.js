@@ -89,6 +89,13 @@ export default defineConfig(({ mode }) => {
           } catch {}
           return html;
         },
+        generateBundle(options, bundle) {
+          for (const [fileName, chunk] of Object.entries(bundle)) {
+            if (fileName === '404.html' && chunk.type === 'asset' && typeof chunk.source === 'string') {
+              chunk.source = chunk.source.replace(/<link rel="stylesheet"[^>]*>/g, '');
+            }
+          }
+        },
       },
     ],
     build: {

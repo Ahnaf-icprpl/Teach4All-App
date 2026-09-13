@@ -216,7 +216,33 @@ export function loadHtmlTemplate() {
   return '';
 }
 
+export function load404HtmlTemplate() {
+  const distPath = resolve(process.cwd(), 'dist', '404.html');
+  if (existsSync(distPath)) {
+    return readFileSync(distPath, 'utf8');
+  }
+  const rootPath = resolve(process.cwd(), '404.html');
+  if (existsSync(rootPath)) {
+    return readFileSync(rootPath, 'utf8');
+  }
+  return '<!doctype html><html><head><title>404 Not Found</title></head><body><h1>404 Not Found</h1></body></html>';
+}
+
 export async function handleSsrRequest(req, res, env = {}) {
+  const rawUrl = req.url || '/';
+  const pathname = rawUrl.split('?')[0];
+
+  const isRoot = pathname === '/' || pathname === '/index.html' || pathname === '';
+  if (!isRoot) {
+    const template404 = load404HtmlTemplate();
+    res.writeHead(404, {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+    });
+    res.end(template404);
+    return;
+  }
+
   const dbUrl = env.DATABASE_URL || process.env.DATABASE_URL;
   try {
     const texts = await getUiTextsFromDb(dbUrl);
