@@ -8,6 +8,7 @@ import {
   markMaterialSolved,
   normalizeQuizQuestion,
   normalizeMaterialSection,
+  shuffleArray,
 } from '../studyModules.js';
 import { t } from '../uiTexts.js';
 
@@ -20,7 +21,7 @@ export function QuizSolver(quizId) {
   const userAnswers = van.state({});
   const isCompleted = van.state(false);
 
-  fetchQuizDetails(quizId).then(data => {
+  fetchQuizDetails(quizId, { shuffle: true }).then(data => {
     quiz.val = data;
     loading.val = false;
   }).catch(() => {
@@ -38,7 +39,7 @@ export function QuizSolver(quizId) {
       );
     }
 
-    const questions = (qData.questions || []).map(normalizeQuizQuestion).filter(Boolean);
+    const questions = Array.isArray(qData.questions) ? qData.questions : [];
     const totalQuestions = questions.length;
     const currentQ = questions[currentIndex.val] || {};
     const answeredCount = Object.keys(userAnswers.val).length;
@@ -82,6 +83,15 @@ export function QuizSolver(quizId) {
                 userAnswers.val = {};
                 currentIndex.val = 0;
                 isCompleted.val = false;
+                if (quiz.val && Array.isArray(quiz.val.questions)) {
+                  quiz.val = {
+                    ...quiz.val,
+                    questions: quiz.val.questions.map(q => ({
+                      ...q,
+                      options: shuffleArray(q.options),
+                    })),
+                  };
+                }
               },
             }, icon('compose'), span(() => t('dialogs_quiz_restart_btn'))),
             button({
@@ -119,7 +129,7 @@ export function QuizSolver(quizId) {
                 userAnswers.val = { ...userAnswers.val, [currentIndex.val]: opt.id };
               },
             },
-            span({ class: 'study-option-key' }, String(opt.id !== undefined ? Number(opt.id) + 1 : optIndex + 1)),
+            span({ class: 'study-option-key' }, String(optIndex + 1)),
             span({ class: 'study-option-text' }, opt.text),
             );
           }),

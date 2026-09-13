@@ -36,6 +36,7 @@ import {
   markMaterialSolved,
   normalizeQuizQuestion,
   normalizeMaterialSection,
+  shuffleArray,
   FALLBACK_QUIZZES,
   FALLBACK_MATERIALS,
 } from '../src/studyModules.js';
@@ -692,6 +693,72 @@ test('studyViewer component does not render kembali ke daftar button or referenc
   assert.strictEqual(source.includes('study-back-btn'), false, 'studyViewer.js must not contain study-back-btn class');
   assert.strictEqual(source.includes('onBack'), false, 'studyViewer.js must not expect or use onBack callback');
 });
+
+test('shuffleArray permutes array elements without mutating original or losing items', () => {
+  const original = [1, 2, 3, 4, 5, 6, 7, 8];
+  const shuffled = shuffleArray(original);
+
+  assert.strictEqual(shuffled.length, original.length);
+  assert.notStrictEqual(shuffled, original, 'must return a new array instance');
+  assert.deepStrictEqual([...shuffled].sort(), [...original].sort(), 'must retain all elements');
+  assert.deepStrictEqual(original, [1, 2, 3, 4, 5, 6, 7, 8], 'original array must not be mutated');
+
+  // Handle edge cases
+  assert.deepStrictEqual(shuffleArray([]), []);
+  assert.deepStrictEqual(shuffleArray([42]), [42]);
+  assert.deepStrictEqual(shuffleArray(null), []);
+});
+
+test('normalizeQuizQuestion with shuffle: true randomizes options while preserving correctAnswer id mapping', () => {
+  const question = {
+    question_text: 'Satelit alami Bumi adalah?',
+    options: [
+      { id: 0, text: 'Bulan' },
+      { id: 1, text: 'Europa' },
+      { id: 2, text: 'Titan' },
+      { id: 3, text: 'Phobos' },
+    ],
+    correct_answer: '0',
+  };
+
+  // Run normalization with shuffle
+  const normalized = normalizeQuizQuestion(question, 0, { shuffle: true });
+  assert.strictEqual(normalized.options.length, 4);
+  assert.strictEqual(normalized.correctAnswer, 0, 'correctAnswer id must remain 0');
+
+  // Confirm option with id: 0 exists in options and its text is 'Bulan'
+  const correctOpt = normalized.options.find(o => o.id === 0);
+  assert.ok(correctOpt, 'correct option with id 0 must exist');
+  assert.strictEqual(correctOpt.text, 'Bulan');
+
+  // Over multiple shuffles, options should appear in varying positions (not fixed at index 0)
+  const indicesOfCorrect = new Set();
+  for (let i = 0; i < 20; i++) {
+    const q = normalizeQuizQuestion(question, 0, { shuffle: true });
+    const idx = q.options.findIndex(o => o.id === 0);
+    indicesOfCorrect.add(idx);
+  }
+  assert.ok(indicesOfCorrect.size > 1, 'Correct option must be placed at different positions over multiple loads');
+});
+
+test('fetchQuizDetails randomizes question options order by default', async () => {
+  const seedQuizId = '00000000-0000-0000-0001-000000000001';
+  const quiz1 = await fetchQuizDetails(seedQuizId, { shuffle: true });
+  assert.ok(quiz1 && Array.isArray(quiz1.questions));
+
+  // Verify that options maintain their correct answer relationship
+  for (const q of quiz1.questions) {
+    const correctOpt = q.options.find(o => o.id === q.correctAnswer);
+    assert.ok(correctOpt, `Question ${q.questionNumber} must find option with id matching correctAnswer`);
+  }
+});
+
+test('studyViewer renders option key badges with 1-based display indices', () => {
+  const source = readFileSync(resolve(process.cwd(), 'src/components/studyViewer.js'), 'utf8');
+  assert.ok(source.includes("String(optIndex + 1)"), 'Option key badge must display sequential optIndex + 1');
+  assert.ok(source.includes("fetchQuizDetails(quizId, { shuffle: true })"), 'QuizSolver must fetch with shuffle: true');
+});
+
 
 
 

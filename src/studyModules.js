@@ -293,7 +293,24 @@ export async function markMaterialSolved(id, isSolved = true) {
   return updated;
 }
 
-export function normalizeQuizQuestion(q, idx = 0) {
+export function shuffleArray(array) {
+  if (!Array.isArray(array) || array.length <= 1) return array ? [...array] : [];
+  const copy = [...array];
+  let tries = 0;
+  do {
+    for (let i = copy.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    tries++;
+  } while (
+    tries < 5 &&
+    copy.every((item, idx) => item === array[idx])
+  );
+  return copy;
+}
+
+export function normalizeQuizQuestion(q, idx = 0, { shuffle = false } = {}) {
   if (!q) return null;
   const questionNumber = q.question_number ?? q.questionNumber ?? (idx + 1);
   const questionText = q.question_text ?? q.questionText ?? '';
@@ -332,12 +349,14 @@ export function normalizeQuizQuestion(q, idx = 0) {
     }
   }
 
+  const finalOptions = shuffle ? shuffleArray(options) : options;
+
   return {
     questionNumber,
     questionText,
     question_number: questionNumber,
     question_text: questionText,
-    options,
+    options: finalOptions,
     correctAnswer,
     correct_answer: correctAnswer,
     explanation: q.explanation || '',
@@ -361,7 +380,7 @@ export function normalizeMaterialSection(s, idx = 0) {
   };
 }
 
-export async function fetchQuizDetails(id) {
+export async function fetchQuizDetails(id, { shuffle = true } = {}) {
   if (!id) return null;
   try {
     const res = await fetch(`/api/quizzes?id=${id}`);
@@ -369,7 +388,7 @@ export async function fetchQuizDetails(id) {
       const data = await res.json();
       if (data?.quiz) {
         const raw = Array.isArray(data.quiz.questions) ? data.quiz.questions : [];
-        const questions = raw.map(normalizeQuizQuestion).filter(Boolean);
+        const questions = raw.map((q, qIdx) => normalizeQuizQuestion(q, qIdx, { shuffle })).filter(Boolean);
         return {
           ...data.quiz,
           questions,
@@ -382,7 +401,7 @@ export async function fetchQuizDetails(id) {
   const localQuiz = quizzes.val.find(q => q.id === id) || INITIAL_QUIZZES.find(q => q.id === id);
   if (!localQuiz) return null;
   const rawQuestions = SEED_QUIZ_QUESTIONS[id] || [];
-  const questions = rawQuestions.map(normalizeQuizQuestion).filter(Boolean);
+  const questions = rawQuestions.map((q, qIdx) => normalizeQuizQuestion(q, qIdx, { shuffle })).filter(Boolean);
   return { ...localQuiz, questions, questionCount: questions.length, question_count: questions.length };
 }
 
