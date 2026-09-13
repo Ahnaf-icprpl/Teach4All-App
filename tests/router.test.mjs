@@ -30,6 +30,7 @@ import {
   ConversationStreamWriter, DEFAULT_USER_ID, runSql,
   getConversations, getMessages, deleteConversation,
   updateConversationTitle, saveConversation, saveMessage,
+  query, getPool, getSslConfig,
 } from '../server/db.js';
 import {
   generateTitle, TITLE_API_URL,
@@ -505,6 +506,25 @@ test('server db operations persist, retrieve, rename, and delete conversations a
   await deleteConversation({ conversationId: convId, userId: uId });
   const afterDeleteList = await getConversations({ userId: uId });
   assert.ok(!afterDeleteList.some(c => c.id === convId));
+});
+
+test('pg driver connection pool, ssl configuration, and query helper operate correctly', async () => {
+  // 1. SSL config tests
+  assert.strictEqual(getSslConfig(null), false);
+  assert.strictEqual(getSslConfig('postgres://localhost:5432/testdb'), false);
+  assert.deepStrictEqual(getSslConfig('postgres://user:pass@ep-cool-neon.us-east-2.aws.neon.tech/neondb'), { rejectUnauthorized: false });
+  assert.deepStrictEqual(getSslConfig('postgres://localhost:5432/testdb?sslmode=require'), { rejectUnauthorized: false });
+
+  // 2. Graceful behavior when no DB url provided
+  const emptyRows = await query('SELECT 1', [], null);
+  assert.deepStrictEqual(emptyRows, []);
+  const emptySql = await runSql('SELECT 1', null);
+  assert.strictEqual(emptySql, '');
+
+  // 3. Pool instantiation
+  const pool = getPool('postgres://fake:fake@127.0.0.1:5432/fake');
+  assert.ok(pool, 'should create pg Pool instance');
+  assert.strictEqual(getPool('postgres://fake:fake@127.0.0.1:5432/fake'), pool, 'should reuse pool instance for identical URL');
 });
 
 test('server handleConversationsRequest and handleMessagesRequest handle HTTP lifecycle', async () => {
