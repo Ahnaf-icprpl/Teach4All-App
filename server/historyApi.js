@@ -172,6 +172,11 @@ export async function handleMessagesRequest(req, res, serverEnv = {}) {
   applyRateLimitHeaders(res, rateInfo);
 
   if (!rateInfo.allowed) {
+    logger.warn('Messages rate limit exceeded', {
+      endpoint: '/api/messages',
+      client_ip: clientIp,
+      retry_after: rateInfo.resetSeconds,
+    });
     res.writeHead(429, {
       'Content-Type': 'application/json',
       'Retry-After': String(rateInfo.resetSeconds),
