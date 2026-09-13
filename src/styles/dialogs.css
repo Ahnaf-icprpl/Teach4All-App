@@ -1,8 +1,8 @@
 @layer components {
   .app-dialog { color: var(--text); background: var(--surface); border: 0; border-radius: 19px; width: min(490px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); padding: 26px; box-shadow: 0 24px 90px rgba(34, 46, 60, 0.28); }
-  .dialog-wide { width: min(680px, calc(100vw - 32px)); max-height: min(88dvh, 780px); padding: 26px 28px; }
+  .dialog-wide { width: min(680px, calc(100vw - 32px)); height: min(86dvh, 780px); max-height: min(92dvh, 840px); padding: 26px 28px; display: flex; flex-direction: column; }
   .app-dialog::backdrop { background: rgba(34, 46, 60, 0.45); backdrop-filter: blur(3px); }
-  .dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin-bottom: 20px; }
+  .dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin-bottom: 20px; flex-shrink: 0; }
   .dialog-heading h2 { font-size: 18px; font-weight: 550; letter-spacing: -.5px; color: var(--text); }
   .dialog-heading-text { display: flex; align-items: center; gap: 10px; }
   .dialog-count-badge { font-size: 11px; font-weight: 550; padding: 2px 8px; border-radius: 20px; background: var(--hover); color: var(--terracotta); border: 1px solid rgba(199, 92, 58, 0.2); }
@@ -24,8 +24,9 @@
   .field-label { display: block; font-size: 12px; font-weight: 500; margin-bottom: 10px; color: var(--text); }
   .app-dialog input { width: 100%; background: var(--bg); border: 0; border-radius: 8px; padding: 11px; font-size: 13px; color: var(--text); }
   .dialog-actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 24px; }
-  .topic-dialog-desc { margin-bottom: 14px; font-size: 12px; color: var(--muted); line-height: 1.6; }
-  .topic-card-grid { display: flex; flex-direction: column; gap: 10px; max-height: 56dvh; overflow-y: auto; scrollbar-width: thin; padding-right: 4px; margin-bottom: 0; }
+  .topic-dialog-content { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  .topic-dialog-desc { margin-bottom: 14px; font-size: 12px; color: var(--muted); line-height: 1.6; flex-shrink: 0; }
+  .topic-card-grid { display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; padding-right: 4px; margin-bottom: 0; }
   .topic-card { display: flex; flex-direction: column; justify-content: space-between; gap: 10px; padding: 13px 15px; border: 1px solid rgba(34, 46, 60, 0.08); border-radius: 12px; background: var(--bg); transition: transform .15s, border-color .15s, box-shadow .15s; }
   .topic-card:hover { transform: translateY(-1px); border-color: rgba(199, 92, 58, 0.35); box-shadow: 0 4px 16px rgba(34, 46, 60, 0.05); }
   .topic-card-header { display: flex; align-items: flex-start; gap: 12px; }
@@ -46,10 +47,9 @@
 @layer responsive {
   @media (max-width: 760px) {
     .app-dialog { padding: 22px; }
-    .dialog-wide { padding: 20px 16px; max-height: calc(100dvh - 30px); }
+    .dialog-wide { padding: 20px 16px; height: calc(100dvh - 32px); max-height: calc(100dvh - 32px); }
     .dialog-heading h2 { font-size: 17px; }
     .app-dialog input { font-size: 16px; }
-    .topic-card-grid { max-height: 48dvh; }
     .topic-card { padding: 12px; }
     .topic-card-title { font-size: 12.5px; }
     .topic-card-summary { font-size: 11px; }
