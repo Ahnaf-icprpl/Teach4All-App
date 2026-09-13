@@ -420,9 +420,12 @@ export function createChatMiddleware(serverEnv = {}) {
       });
     }
 
+    const endTracking = metrics.startRequest({ endpoint: url || fullUrl, method, req });
+
     res.on('finish', () => {
       const durationMs = Date.now() - start;
-      metrics.recordHttpRequest({ endpoint: url || fullUrl, method, status: res.statusCode, durationMs });
+      endTracking();
+      metrics.recordHttpRequest({ endpoint: url || fullUrl, method, status: res.statusCode, durationMs, req, res });
       metrics.flush().catch(() => {});
       if (isDev) {
         logger.info(`Completed ${method} ${fullUrl} -> ${res.statusCode} (${durationMs}ms)`, {

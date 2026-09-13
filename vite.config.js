@@ -69,7 +69,12 @@ export default defineConfig(({ mode }) => {
         configurePreviewServer(server) {
           server.middlewares.use(createChatMiddleware({ ...env, ENV: appEnv, env: appEnv }));
         },
-        async transformIndexHtml(html) {
+        async transformIndexHtml(html, ctx) {
+          const path = ctx?.path || '';
+          const filename = ctx?.filename || '';
+          if (path.includes('404') || filename.includes('404') || html.includes('Galat 404')) {
+            return html;
+          }
           try {
             const dbUrl = process.env.DATABASE_URL || env.DATABASE_URL;
             if (dbUrl) {

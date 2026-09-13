@@ -14,7 +14,6 @@ const { div, section, h1, h2, p, span, button, textarea, form, article } = van.t
 function Welcome() {
   return section({ class: 'welcome', 'aria-labelledby': 'welcome-title' },
     div({ class: 'welcome-symbol' }, icon('mountain'), span({ class: 'symbol-dot' })),
-    div({ class: 'welcome-eyebrow' }, span(), () => t('chat_welcome_eyebrow')),
     h1({ id: 'welcome-title' }, () => t('chat_welcome_title_p1'), van.tags.br(), () => t('chat_welcome_title_p2'), span({ class: 'accent-word' }, () => t('chat_welcome_title_p3'))),
     p({ class: 'welcome-description' },
       () => t('chat_welcome_desc_p1'),

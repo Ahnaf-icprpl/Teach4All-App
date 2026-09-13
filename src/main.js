@@ -95,6 +95,15 @@ function App() {
 }
 
 async function initApp() {
+  if (typeof window !== 'undefined') {
+    const path = window.location.pathname;
+    const isAppPath = path === '/' || path.endsWith('/index.html') || path.endsWith('/');
+    if (!isAppPath && !path.includes('404.html')) {
+      window.location.replace('./404.html');
+      return;
+    }
+  }
+
   const loaded = await initUiTexts();
   if (!loaded) return;
 

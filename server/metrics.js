@@ -2,6 +2,21 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { getRedisClient } from './redis.js';
 import { getActiveEnv } from './logger.js';
+import {
+  toOtlpMetricAttributes,
+  parseMetricKey,
+  extractRequestMetadata,
+  recordRedisMetrics,
+  MetricsWindowTracker,
+} from './metricsUtils.js';
+import {
+  formatLocalMetrics,
+  formatRedisMetrics,
+  recordCalculatedGauges,
+  buildOtlpResourcePayload,
+} from './metricsFormatter.js';
+
+export { toOtlpMetricAttributes, parseMetricKey };
 
 try {
   const envPath = resolve(process.cwd(), '.env');
@@ -29,46 +44,7 @@ export const DEFAULT_METRICS_URL =
 export const DEFAULT_SERVICE_NAME = 'teach4all';
 
 const REDIS_METRICS_KEY = 'teach4all:metrics:counters';
-
-/**
- * Convert key-value object into OpenTelemetry attribute list.
- */
-export function toOtlpMetricAttributes(attrs = {}) {
-  return Object.entries(attrs)
-    .filter(([_, v]) => v !== undefined && v !== null && v !== '')
-    .map(([key, value]) => ({
-      key,
-      value: {
-        stringValue: String(value),
-      },
-    }));
-}
-
-/**
- * Parse compact metric key with tags, e.g.
- * "http_requests_total{endpoint=/api/chat,status=200,method=POST}"
- */
-export function parseMetricKey(rawKey) {
-  const match = rawKey.match(/^([^{]+)(?:\{([^}]+)\})?$/);
-  if (!match) return { name: rawKey, attributes: {} };
-
-  const name = match[1];
-  const tagStr = match[2];
-  const attributes = {};
-
-  if (tagStr) {
-    for (const pair of tagStr.split(',')) {
-      const eqIdx = pair.indexOf('=');
-      if (eqIdx !== -1) {
-        const k = pair.slice(0, eqIdx).trim();
-        const v = pair.slice(eqIdx + 1).trim();
-        attributes[k] = v;
-      }
-    }
-  }
-
-  return { name, attributes };
-}
+const REDIS_RATE_PREFIX = 'teach4all:metrics:rate:';
 
 export class GrafanaMetrics {
   constructor({
@@ -93,6 +69,7 @@ export class GrafanaMetrics {
     this.localDataPoints = [];
     this.flushTimer = null;
     this.flushing = false;
+    this.windowTracker = new MetricsWindowTracker();
   }
 
   get env() {
@@ -102,6 +79,33 @@ export class GrafanaMetrics {
   getRedis() {
     if (this.redisClient) return this.redisClient;
     return getRedisClient(this.redisUrl);
+  }
+
+  /**
+   * Track concurrent in-flight request lifecycle.
+   */
+  startRequest({ endpoint = '/', method = 'GET', req = null } = {}) {
+    const rawUrl = req?.url || endpoint || '/';
+    const cleanEndpoint = (rawUrl.split('?')[0] || '/').replace(/\/+$/, '') || '/';
+    const endWindow = this.windowTracker.startRequest(cleanEndpoint);
+
+    this.record('http_active_requests', this.windowTracker.activeRequests, {
+      unit: '1',
+      description: 'Concurrent active in-flight HTTP requests',
+      attributes: { endpoint: cleanEndpoint },
+    });
+
+    let ended = false;
+    return () => {
+      if (ended) return;
+      ended = true;
+      endWindow();
+      this.record('http_active_requests', this.windowTracker.activeRequests, {
+        unit: '1',
+        description: 'Concurrent active in-flight HTTP requests',
+        attributes: { endpoint: cleanEndpoint },
+      });
+    };
   }
 
   /**
@@ -130,36 +134,86 @@ export class GrafanaMetrics {
   }
 
   /**
-   * Record HTTP request count and latency.
+   * Record HTTP request count, errors, error rate, latency, and data sizes.
    * Atomically increments Redis hash to handle Vercel serverless fan-out across lambdas.
    */
-  recordHttpRequest({ endpoint = '/api/chat', method = 'GET', status = 200, durationMs = 0 }) {
-    const cleanEndpoint = endpoint.split('?')[0];
-    const statusStr = String(status);
-    const activeEnv = this.env;
+  recordHttpRequest(options = {}) {
+    const meta = extractRequestMetadata(options);
 
-    // 1. Record atomic counter in Redis across fanned-out Vercel instances
-    const redis = this.getRedis();
-    if (redis) {
-      const redisField = `http_requests_total{endpoint=${cleanEndpoint},method=${method},status=${statusStr},env=${activeEnv}}`;
-      redis.hincrby(REDIS_METRICS_KEY, redisField, 1).catch(() => {});
-    }
+    // 1. Record into window tracker for local rate & error calculations
+    this.windowTracker.recordRequest(meta);
 
-    // 2. Record instantaneous latency gauge in local memory
-    if (durationMs > 0) {
-      this.record('http_request_duration_ms', durationMs, {
+    // 2. Record atomic counters in Redis across fanned-out instances
+    recordRedisMetrics(this.getRedis(), meta, this.env, {
+      metricsKey: REDIS_METRICS_KEY,
+      ratePrefix: REDIS_RATE_PREFIX,
+    });
+
+    // 3. Record instantaneous latency gauge in local memory
+    if (meta.durationMs > 0) {
+      this.record('http_request_duration_ms', meta.durationMs, {
         unit: 'ms',
         description: 'Duration of HTTP requests in milliseconds',
-        attributes: { endpoint: cleanEndpoint, method, status: statusStr },
+        attributes: {
+          endpoint: meta.endpoint,
+          method: meta.method,
+          status: meta.statusStr,
+          status_class: meta.statusClass,
+          is_error: String(meta.isError),
+          error_type: meta.errorType,
+        },
       });
     }
 
-    // 3. Record instantaneous request hit
+    // 4. Record single HTTP request hit event with rich request info
+    const reqAttrs = {
+      endpoint: meta.endpoint,
+      method: meta.method,
+      status: meta.statusStr,
+      status_class: meta.statusClass,
+      is_error: String(meta.isError),
+      error_type: meta.errorType,
+      client_category: meta.clientCategory,
+    };
+    if (meta.country && meta.country !== 'unknown') {
+      reqAttrs.country = meta.country;
+    }
     this.record('http_requests_count', 1, {
       unit: '1',
       description: 'Single HTTP request event',
-      attributes: { endpoint: cleanEndpoint, method, status: statusStr },
+      attributes: reqAttrs,
     });
+
+    // 5. Record error event if request resulted in error
+    if (meta.isError) {
+      this.record('http_request_errors', 1, {
+        unit: '1',
+        description: 'Single HTTP error event',
+        attributes: {
+          endpoint: meta.endpoint,
+          method: meta.method,
+          status: meta.statusStr,
+          status_class: meta.statusClass,
+          error_type: meta.errorType,
+        },
+      });
+    }
+
+    // 6. Record payload sizes if available
+    if (meta.requestBytes > 0) {
+      this.record('http_request_bytes', meta.requestBytes, {
+        unit: 'By',
+        description: 'Incoming HTTP request payload size in bytes',
+        attributes: { endpoint: meta.endpoint, method: meta.method },
+      });
+    }
+    if (meta.responseBytes > 0) {
+      this.record('http_response_bytes', meta.responseBytes, {
+        unit: 'By',
+        description: 'Outgoing HTTP response payload size in bytes',
+        attributes: { endpoint: meta.endpoint, method: meta.method },
+      });
+    }
   }
 
   /**
@@ -207,7 +261,7 @@ export class GrafanaMetrics {
    * Record rate limit violations (HTTP 429).
    */
   recordRateLimitHit({ endpoint = '/api/chat' }) {
-    const cleanEndpoint = endpoint.split('?')[0];
+    const cleanEndpoint = (endpoint.split('?')[0] || '/api/chat').replace(/\/+$/, '') || '/api/chat';
     const redis = this.getRedis();
     const activeEnv = this.env;
 
@@ -251,6 +305,40 @@ export class GrafanaMetrics {
   }
 
   /**
+   * Calculates rate gauges and aggregates local and Redis metrics into an OTLP metrics list.
+   */
+  async buildMetricsList() {
+    const redis = this.getRedis();
+    const activeEnv = this.env;
+    const timeUnixNano = String(BigInt(Date.now()) * 1000000n);
+
+    let rateHash = null;
+    if (redis) {
+      try {
+        const minuteBucket = Math.floor(Date.now() / 60000);
+        rateHash = await redis.hgetall(`${REDIS_RATE_PREFIX}${minuteBucket}`);
+      } catch {}
+    }
+
+    const localStats = this.windowTracker.computeWindowStats();
+    recordCalculatedGauges(this, localStats, rateHash);
+    this.windowTracker.resetWindow();
+
+    const pointsToSend = this.localDataPoints.splice(0, this.localDataPoints.length);
+    const localMetrics = formatLocalMetrics(pointsToSend);
+
+    let redisMetrics = [];
+    if (redis) {
+      try {
+        const rawHash = await redis.hgetall(REDIS_METRICS_KEY);
+        redisMetrics = formatRedisMetrics(rawHash, activeEnv, timeUnixNano);
+      } catch {}
+    }
+
+    return [...localMetrics, ...redisMetrics];
+  }
+
+  /**
    * Flush all aggregated metrics to Grafana Cloud OTLP Gateway.
    * Reads fanned-out Redis counters and local data points.
    */
@@ -259,107 +347,17 @@ export class GrafanaMetrics {
     if (process.env.NODE_ENV === 'test' && !this.forceSendInTest) return;
 
     this.flushing = true;
-    const pointsToSend = this.localDataPoints.splice(0, this.localDataPoints.length);
 
     try {
       const activeEnv = this.env;
-      const timeUnixNano = String(BigInt(Date.now()) * 1000000n);
-      const metricsList = [];
-
-      // 1. Group local data points by metric name
-      const groupedByName = new Map();
-      for (const pt of pointsToSend) {
-        if (!groupedByName.has(pt.name)) {
-          groupedByName.set(pt.name, { unit: pt.unit, description: pt.description, points: [] });
-        }
-        const g = groupedByName.get(pt.name);
-        const dataPoint = {
-          timeUnixNano: pt.timeUnixNano,
-          attributes: toOtlpMetricAttributes(pt.attributes),
-        };
-        if (pt.isInteger) {
-          dataPoint.asInt = Math.round(pt.value);
-        } else {
-          dataPoint.asDouble = pt.value;
-        }
-        g.points.push(dataPoint);
-      }
-
-      for (const [name, g] of groupedByName.entries()) {
-        metricsList.push({
-          name,
-          unit: g.unit,
-          description: g.description,
-          gauge: {
-            dataPoints: g.points,
-          },
-        });
-      }
-
-      // 2. Read global fanned-out cumulative counters from Redis
-      const redis = this.getRedis();
-      if (redis) {
-        try {
-          const rawHash = await redis.hgetall(REDIS_METRICS_KEY);
-          if (rawHash && typeof rawHash === 'object') {
-            const redisGrouped = new Map();
-
-            for (const [field, countStr] of Object.entries(rawHash)) {
-              const count = parseInt(countStr, 10);
-              if (isNaN(count)) continue;
-
-              const { name, attributes } = parseMetricKey(field);
-              if (!redisGrouped.has(name)) {
-                redisGrouped.set(name, []);
-              }
-
-              redisGrouped.get(name).push({
-                asInt: count,
-                timeUnixNano,
-                attributes: toOtlpMetricAttributes({
-                  ...attributes,
-                  env: attributes.env || activeEnv,
-                }),
-              });
-            }
-
-            for (const [name, dataPoints] of redisGrouped.entries()) {
-              metricsList.push({
-                name,
-                unit: '1',
-                description: `Global cumulative ${name} aggregated across Vercel instances via Redis`,
-                gauge: {
-                  dataPoints,
-                },
-              });
-            }
-          }
-        } catch {
-          // Non-blocking fallback if Redis read fails
-        }
-      }
-
+      const metricsList = await this.buildMetricsList();
       if (metricsList.length === 0) return;
 
-      const payload = {
-        resourceMetrics: [
-          {
-            resource: {
-              attributes: [
-                { key: 'service.name', value: { stringValue: this.serviceName } },
-                { key: 'deployment.environment', value: { stringValue: activeEnv } },
-                { key: 'env', value: { stringValue: activeEnv } },
-              ],
-            },
-            scopeMetrics: [
-              {
-                scope: { name: 'teach4all-metrics', version: '0.1.0' },
-                metrics: metricsList,
-              },
-            ],
-          },
-        ],
-      };
+      const payload = buildOtlpResourcePayload({
+        serviceName: this.serviceName,
+        activeEnv,
+        metrics: metricsList,
+      });
 
       const authPair = `${this.instanceId}:${this.apiKey}`;
       const encoded = Buffer.from(authPair).toString('base64');

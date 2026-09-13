@@ -2,11 +2,9 @@
   .workspace { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--bg); }
   .chat-stage { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; overflow-y: auto; padding: 0 42px; }
   .welcome { text-align: center; margin-top: clamp(38px, 7.7vh, 92px); flex-shrink: 0; }
-  .welcome-symbol { display: inline-flex; align-items: center; justify-content: center; width: 59px; height: 59px; border-radius: 19px; background: var(--off-white); border: 0; color: var(--gold-amber); position: relative; transform: rotate(-5deg); box-shadow: var(--shadow); }
+  .welcome-symbol { display: inline-flex; align-items: center; justify-content: center; width: 59px; height: 59px; border-radius: 19px; background: var(--off-white); border: 0; color: var(--gold-amber); position: relative; transform: rotate(-5deg); box-shadow: var(--shadow); margin-bottom: 22px; }
   .welcome-symbol .icon { width: 35px; height: 35px; transform: rotate(5deg); stroke-width: 1.45; }
   .symbol-dot { position: absolute; width: 10px; height: 10px; border-radius: 50%; background: var(--terracotta); border: 0; right: -3px; top: -2px; }
-  .welcome-eyebrow { color: var(--medium-gray); display: flex; align-items: center; justify-content: center; gap: 7px; font-size: 9px; letter-spacing: 2px; font-weight: 500; margin: 24px 0 18px; }
-  .welcome-eyebrow span { display: inline-block; height: 4px; width: 4px; border-radius: 50%; background: var(--dusty-terracotta); }
   .welcome h1 { font-size: clamp(35px, 3.5vw, 49px); font-weight: 450; line-height: 1.2; letter-spacing: -2px; color: var(--near-black); }
   .accent-word { color: var(--terracotta); }
   .welcome-description { margin-top: 20px; color: var(--medium-gray); font-size: 13px; line-height: 1.9; letter-spacing: .03px; }
@@ -105,7 +103,7 @@
   [data-theme="dark"] .composer { border-color: var(--line); background: var(--surface); }
   [data-theme="dark"] .welcome-symbol { background: var(--surface); }
   [data-theme="dark"] .welcome h1 { color: var(--text); }
-  [data-theme="dark"] .welcome-description, [data-theme="dark"] .welcome-eyebrow { color: var(--muted); }
+  [data-theme="dark"] .welcome-description { color: var(--muted); }
   [data-theme="dark"] .composer textarea { color: var(--text); }
   [data-theme="dark"] .message-user .message-text { background: var(--surface); color: var(--text); }
   [data-theme="dark"] .assistant-label, [data-theme="dark"] .message-text { color: var(--text); }
@@ -188,9 +186,8 @@
   @media (max-width: 760px) {
     .welcome { margin-top: clamp(24px, 7vh, 68px); }
     .welcome h1 { font-size: clamp(31px, 6vw, 43px); letter-spacing: -1.5px; }
-    .welcome-symbol { height: 49px; width: 49px; border-radius: 16px; }
+    .welcome-symbol { height: 49px; width: 49px; border-radius: 16px; margin-bottom: 18px; }
     .welcome-symbol .icon { height: 29px; width: 29px; }
-    .welcome-eyebrow { margin-top: 20px; margin-bottom: 16px; font-size: 8px; }
     .welcome-description { font-size: 11px; margin-top: 16px; }
     .chat-stage { padding: 0 20px; }
     .composer-wrap { margin-top: 24px; }
@@ -278,9 +275,8 @@
   }
   @media (max-height: 780px) and (min-width: 1001px) {
     .welcome { margin-top: 28px; }
-    .welcome-symbol { height: 47px; width: 47px; border-radius: 15px; }
+    .welcome-symbol { height: 47px; width: 47px; border-radius: 15px; margin-bottom: 16px; }
     .welcome-symbol .icon { height: 29px; width: 29px; }
-    .welcome-eyebrow { margin-top: 17px; margin-bottom: 13px; }
     .welcome h1 { font-size: 42px; }
     .welcome-description { margin-top: 14px; }
     .composer-wrap { margin-top: 27px; }

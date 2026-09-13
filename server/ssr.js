@@ -147,7 +147,6 @@ export function renderSsrHtml({ htmlTemplate, texts, prompts = [] }) {
               </svg>
               <span class="symbol-dot"></span>
             </div>
-            <div class="welcome-eyebrow"><span></span>${escapeHtml(texts.chat_welcome_eyebrow || '')}</div>
             <h1 id="welcome-title">${escapeHtml(texts.chat_welcome_title_p1 || '')}<br/>${escapeHtml(texts.chat_welcome_title_p2 || '')}<span class="accent-word">${escapeHtml(texts.chat_welcome_title_p3 || '')}</span></h1>
             <p class="welcome-description">${escapeHtml(texts.chat_welcome_desc_p1 || '')}<br/>${escapeHtml(texts.chat_welcome_desc_p2 || '')}</p>
           </section>
