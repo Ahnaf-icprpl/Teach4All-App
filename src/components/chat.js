@@ -40,7 +40,6 @@ function Messages() {
     ...messagesList.map((message, idx) => {
       const isLastAssistant = message.role === 'assistant' && idx === messagesList.length - 1;
       const isGenerating = loading.val && isLastAssistant && !message.text;
-      const isStreaming = loading.val && isLastAssistant && Boolean(message.text);
       const isError = message.role === 'assistant' && Boolean(message.text?.startsWith('Error: '));
 
       return article({ class: `message message-${message.role} ${isError ? 'message-error' : ''}` },
@@ -48,17 +47,11 @@ function Messages() {
           ? div({ class: 'assistant-label' },
               span({ class: 'assistant-mark' }, icon('mountain')),
               'Teach4All',
-              isGenerating
-                ? span({ class: 'demo-label loading-label' }, icon('settings'), 'Connecting...')
-                : isStreaming
-                  ? span({ class: 'demo-label loading-label' }, icon('settings'), 'Streaming...')
-                  : isError
-                    ? span({ class: 'demo-label error-label' }, 'Notice')
-                    : span({ class: 'demo-label' }, 'AI response')
+              isError ? span({ class: 'demo-label error-label' }, 'Notice') : null,
             )
           : h2({ class: 'sr-only' }, 'You'),
-        div({ class: 'message-text' }, message.text || (isGenerating ? 'Connecting to OpenRouter...' : '...')),
-        message.role === 'assistant' && message.text && !isGenerating && !isStreaming
+        div({ class: 'message-text' }, message.text || (isGenerating ? '...' : '')),
+        message.role === 'assistant' && message.text && !loading.val
           ? button({
               class: 'icon-button copy-button',
               'aria-label': 'Copy response',

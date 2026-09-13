@@ -6,6 +6,7 @@ const paths = {
   plus: ['M12 5v14M5 12h14'],
   search: ['M21 21l-4.5-4.5', 'M19 10.5a8.5 8.5 0 1 1-17 0 8.5 8.5 0 0 1 17 0'],
   panel: ['M4 3h16a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1', 'M9 3v18'],
+  panelClose: ['M4 3h16a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1', 'M9 3v18', 'm16 9-3 3 3 3'],
   arrow: ['M12 19V5m-6 6 6-6 6 6'],
   arrowRight: ['M5 12h14m-6-6 6 6-6 6'],
   chevron: ['m8 10 4 4 4-4'],
@@ -30,12 +31,13 @@ const paths = {
 };
 
 export function icon(name, className = '') {
+  const iconPaths = paths[name] || [];
   return svg.svg({
     viewBox: '0 0 24 24', width: '20', height: '20', fill: 'none',
     stroke: 'currentColor', 'stroke-width': name === 'more' ? 3 : 1.65,
     'stroke-linecap': 'round', 'stroke-linejoin': 'round',
     'aria-hidden': 'true', class: `icon ${className}`,
-  }, paths[name].map(d => svg.path({ d })));
+  }, iconPaths.map(d => svg.path({ d })));
 }
 
 export function landscape() {
