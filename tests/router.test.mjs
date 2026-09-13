@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import { EventEmitter } from 'node:events';
+
+process.env.NODE_ENV = 'test';
 import {
   getModel,
   isPlaceholderKey,
@@ -54,6 +56,16 @@ import {
   isProdEnv,
 } from '../src/env.js';
 import { resolveAppEnv } from '../vite.config.js';
+import {
+  GrafanaLogger,
+  logger,
+  toOtlpValue,
+  toOtlpAttributes,
+  SEVERITY_LEVELS,
+  DEFAULT_GRAFANA_INSTANCE_ID,
+  DEFAULT_GRAFANA_API_KEY,
+  DEFAULT_GRAFANA_OTLP_URL,
+} from '../server/logger.js';
 
 test('router uses google/gemini-2.5-flash-lite by default', () => {
   assert.strictEqual(DEFAULT_MODEL, 'google/gemini-2.5-flash-lite');
@@ -828,6 +840,93 @@ test('isDevEnv and isProdEnv reflect the active environment accurately', () => {
     process.env.ENV = originalEnv;
   }
 });
+
+test('toOtlpValue and toOtlpAttributes convert data structures to OpenTelemetry specification', () => {
+  assert.deepStrictEqual(toOtlpValue('hello'), { stringValue: 'hello' });
+  assert.deepStrictEqual(toOtlpValue(true), { boolValue: true });
+  assert.deepStrictEqual(toOtlpValue(42), { intValue: '42' });
+  assert.deepStrictEqual(toOtlpValue(3.14), { doubleValue: 3.14 });
+  assert.deepStrictEqual(toOtlpValue({ key: 'val' }), { stringValue: JSON.stringify({ key: 'val' }) });
+  assert.deepStrictEqual(toOtlpValue(null), { stringValue: '' });
+  assert.deepStrictEqual(toOtlpValue(undefined), { stringValue: '' });
+
+  const attrs = toOtlpAttributes({
+    service: 'teach4all',
+    port: 5173,
+    active: true,
+  });
+
+  assert.strictEqual(attrs.length, 3);
+  assert.strictEqual(attrs[0].key, 'service');
+  assert.deepStrictEqual(attrs[0].value, { stringValue: 'teach4all' });
+  assert.strictEqual(attrs[1].key, 'port');
+  assert.deepStrictEqual(attrs[1].value, { intValue: '5173' });
+  assert.strictEqual(attrs[2].key, 'active');
+  assert.deepStrictEqual(attrs[2].value, { boolValue: true });
+});
+
+test('GrafanaLogger configures tokens, formats OTLP payloads, and sends Basic Auth correctly', async () => {
+  assert.strictEqual(DEFAULT_GRAFANA_INSTANCE_ID, '1828340');
+  assert.ok(DEFAULT_GRAFANA_OTLP_URL.includes('grafana.net'));
+
+  let capturedUrl = '';
+  let capturedHeaders = {};
+  let capturedBody = null;
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, options) => {
+    capturedUrl = url;
+    capturedHeaders = options.headers;
+    capturedBody = JSON.parse(options.body);
+    return new Response('', { status: 204 });
+  };
+
+  try {
+    const testLogger = new GrafanaLogger({
+      instanceId: '1828340',
+      apiKey: 'test-token',
+      otlpUrl: 'https://test-gateway.grafana.net/otlp/v1/logs',
+      serviceName: 'teach4all-test',
+      enableConsole: false,
+      forceSendInTest: true,
+    });
+
+    testLogger.info('Testing info log line', { client_ip: '127.0.0.1', status_code: 200 });
+    testLogger.warn('Testing warning log line', { detail: 'high memory' });
+    testLogger.error('Testing error log line', { err: 'failed db connect' });
+
+    assert.strictEqual(testLogger.queue.length, 3);
+
+    await testLogger.flush();
+
+    assert.strictEqual(capturedUrl, 'https://test-gateway.grafana.net/otlp/v1/logs');
+    assert.strictEqual(capturedHeaders['Content-Type'], 'application/json');
+
+    const expectedAuth = Buffer.from('1828340:test-token').toString('base64');
+    assert.strictEqual(capturedHeaders['Authorization'], `Basic ${expectedAuth}`);
+
+    assert.ok(capturedBody.resourceLogs && capturedBody.resourceLogs.length > 0);
+    const resourceAttrs = capturedBody.resourceLogs[0].resource.attributes;
+    assert.ok(resourceAttrs.some(a => a.key === 'service.name' && a.value.stringValue === 'teach4all-test'));
+
+    const logRecords = capturedBody.resourceLogs[0].scopeLogs[0].logRecords;
+    assert.strictEqual(logRecords.length, 3);
+    assert.strictEqual(logRecords[0].severityText, 'INFO');
+    assert.strictEqual(logRecords[0].severityNumber, 9);
+    assert.strictEqual(logRecords[0].body.stringValue, 'Testing info log line');
+
+    assert.strictEqual(logRecords[1].severityText, 'WARN');
+    assert.strictEqual(logRecords[1].severityNumber, 13);
+
+    assert.strictEqual(logRecords[2].severityText, 'ERROR');
+    assert.strictEqual(logRecords[2].severityNumber, 17);
+
+    assert.strictEqual(testLogger.queue.length, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 
 
 

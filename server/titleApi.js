@@ -19,6 +19,7 @@ import {
   buildProviderRoutingPayload,
   extractProvider,
 } from './providerCache.js';
+import { logger } from './logger.js';
 
 export const DEFAULT_MODEL = 'google/gemini-2.5-flash-lite';
 export const DEFAULT_TITLE_TEMPERATURE = 0.85;
@@ -69,6 +70,11 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
   applyRateLimitHeaders(res, rateInfo);
 
   if (!rateInfo.allowed) {
+    logger.warn('Title rate limit exceeded', {
+      endpoint: '/api/title',
+      client_ip: clientIp,
+      retry_after: rateInfo.resetSeconds,
+    });
     res.writeHead(429, {
       'Content-Type': 'application/json',
       'Retry-After': String(rateInfo.resetSeconds),
@@ -114,9 +120,17 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
   const firstUserText = firstUserMsg ? (firstUserMsg.text || firstUserMsg.content || '') : '';
   const fallbackTitle = generateOfflineTitle(firstUserText);
 
-  const apiKey = (process.env.OPENROUTER_API_KEY || serverEnv.OPENROUTER_API_KEY || '').trim();
-  const model = (process.env.OPENROUTER_MODEL || serverEnv.OPENROUTER_MODEL || DEFAULT_MODEL).trim();
-  const temperature = Number(process.env.TITLE_TEMPERATURE || serverEnv.TITLE_TEMPERATURE || DEFAULT_TITLE_TEMPERATURE);
+  const apiKey = (serverEnv.OPENROUTER_API_KEY !== undefined
+    ? serverEnv.OPENROUTER_API_KEY
+    : (process.env.OPENROUTER_API_KEY || '')).trim();
+  const model = (serverEnv.OPENROUTER_MODEL !== undefined
+    ? serverEnv.OPENROUTER_MODEL
+    : (process.env.OPENROUTER_MODEL || DEFAULT_MODEL)).trim();
+  const temperature = Number(
+    serverEnv.TITLE_TEMPERATURE !== undefined
+      ? serverEnv.TITLE_TEMPERATURE
+      : (process.env.TITLE_TEMPERATURE || DEFAULT_TITLE_TEMPERATURE)
+  );
 
   let finalTitle = fallbackTitle;
 
@@ -180,6 +194,12 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
       databaseUrl,
     }).catch(() => {});
   }
+
+  logger.info('Title generated successfully', {
+    endpoint: '/api/title',
+    conversation_id: conversationId,
+    title: finalTitle,
+  });
 
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ title: finalTitle }));

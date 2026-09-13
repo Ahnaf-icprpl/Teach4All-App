@@ -12,6 +12,7 @@ import {
   deleteConversation,
   updateConversationTitle,
 } from './db.js';
+import { logger } from './logger.js';
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -46,6 +47,11 @@ export async function handleConversationsRequest(req, res, serverEnv = {}) {
   applyRateLimitHeaders(res, rateInfo);
 
   if (!rateInfo.allowed) {
+    logger.warn('Conversations rate limit exceeded', {
+      endpoint: '/api/conversations',
+      client_ip: clientIp,
+      retry_after: rateInfo.resetSeconds,
+    });
     res.writeHead(429, {
       'Content-Type': 'application/json',
       'Retry-After': String(rateInfo.resetSeconds),
@@ -95,6 +101,11 @@ export async function handleConversationsRequest(req, res, serverEnv = {}) {
 
     try {
       await deleteConversation({ conversationId: id, userId, databaseUrl });
+      logger.info('Deleted conversation', {
+        endpoint: '/api/conversations',
+        conversation_id: id,
+        user_id: userId,
+      });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true }));
     } catch (err) {
@@ -117,6 +128,11 @@ export async function handleConversationsRequest(req, res, serverEnv = {}) {
       }
 
       const result = await updateConversationTitle({ conversationId: targetId, userId, title, databaseUrl });
+      logger.info('Updated conversation title', {
+        endpoint: '/api/conversations',
+        conversation_id: targetId,
+        title,
+      });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));
     } catch (err) {

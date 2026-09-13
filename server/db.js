@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import pg from 'pg';
+import { logger } from './logger.js';
 
 const { Pool } = pg;
 
@@ -170,7 +171,7 @@ export async function saveConversation({
       }
       return { id: convId, userId: uId };
     } catch (err) {
-      console.error('Failed to save conversation to DB:', err.message);
+      logger.error('Failed to save conversation to DB', { conversation_id: convId, error: err.message });
       return { id: convId, userId: uId, error: err.message };
     }
   }
@@ -220,7 +221,7 @@ export async function saveMessage({
       }
       return { id: msgId, conversationId: convId };
     } catch (err) {
-      console.error(`Failed to save ${safeRole} message to DB:`, err.message);
+      logger.error(`Failed to save ${safeRole} message to DB`, { message_id: msgId, conversation_id: convId, error: err.message });
       return { id: msgId, conversationId: convId, error: err.message };
     }
   }

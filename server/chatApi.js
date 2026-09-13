@@ -16,6 +16,7 @@ import {
   buildProviderRoutingPayload,
   extractProvider,
 } from './providerCache.js';
+import { logger } from './logger.js';
 
 export const DEFAULT_MODEL = 'google/gemini-2.5-flash-lite';
 export const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
@@ -67,6 +68,11 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
   applyRateLimitHeaders(res, rateInfo);
 
   if (!rateInfo.allowed) {
+    logger.warn('Chat rate limit exceeded', {
+      endpoint: '/api/chat',
+      client_ip: clientIp,
+      retry_after: rateInfo.resetSeconds,
+    });
     res.writeHead(429, {
       'Content-Type': 'application/json',
       'Retry-After': String(rateInfo.resetSeconds),
@@ -83,10 +89,15 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
   // Record ephemeral request metric into Redis (zero DB writes)
   recordRequestMetric(clientIp, '/api/chat', { redisClient });
 
-  const apiKey = (process.env.OPENROUTER_API_KEY || serverEnv.OPENROUTER_API_KEY || '').trim();
-  const model = (process.env.OPENROUTER_MODEL || serverEnv.OPENROUTER_MODEL || DEFAULT_MODEL).trim();
+  const apiKey = (serverEnv.OPENROUTER_API_KEY !== undefined
+    ? serverEnv.OPENROUTER_API_KEY
+    : (process.env.OPENROUTER_API_KEY || '')).trim();
+  const model = (serverEnv.OPENROUTER_MODEL !== undefined
+    ? serverEnv.OPENROUTER_MODEL
+    : (process.env.OPENROUTER_MODEL || DEFAULT_MODEL)).trim();
 
   if (!apiKey || isPlaceholderKey(apiKey)) {
+    logger.warn('OpenRouter API key is unconfigured or placeholder', { endpoint: '/api/chat' });
     res.writeHead(503, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       error: {
@@ -208,6 +219,14 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
         userMsg = `OpenRouter error (${status}): ${errorMsg}`;
       }
 
+      logger.error('OpenRouter upstream error', {
+        endpoint: '/api/chat',
+        status,
+        model,
+        conversation_id: conversationId,
+        error: errorMsg || userMsg,
+      });
+
       res.writeHead(status, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: { message: userMsg } }));
       return;
@@ -282,11 +301,21 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
       }
 
       await streamWriter.finish();
+      logger.info('Chat completion stream finished', {
+        endpoint: '/api/chat',
+        conversation_id: conversationId,
+        provider: detectedProvider,
+        model,
+      });
     } finally {
       res.end();
     }
   } catch (err) {
-    if (controller.signal.aborted) return;
+    if (controller.signal.aborted) {
+      logger.info('Chat request aborted by client', { endpoint: '/api/chat', conversation_id: conversationId });
+      return;
+    }
+    logger.error('Unhandled proxy error in chatApi', { endpoint: '/api/chat', error: err.message });
     if (!res.headersSent) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: { message: 'Server proxy error communicating with OpenRouter.' } }));

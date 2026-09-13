@@ -31,6 +31,15 @@ export default defineConfig(({ mode }) => {
   if (env.OPENROUTER_API_KEY && !process.env.OPENROUTER_API_KEY) {
     process.env.OPENROUTER_API_KEY = env.OPENROUTER_API_KEY;
   }
+  if (env.GRAFANA_API_KEY && !process.env.GRAFANA_API_KEY) {
+    process.env.GRAFANA_API_KEY = env.GRAFANA_API_KEY;
+  }
+  if (env.GRAFANA_INSTANCE_ID && !process.env.GRAFANA_INSTANCE_ID) {
+    process.env.GRAFANA_INSTANCE_ID = env.GRAFANA_INSTANCE_ID;
+  }
+  if (env.GRAFANA_OTLP_URL && !process.env.GRAFANA_OTLP_URL) {
+    process.env.GRAFANA_OTLP_URL = env.GRAFANA_OTLP_URL;
+  }
 
   return {
     base: './',
