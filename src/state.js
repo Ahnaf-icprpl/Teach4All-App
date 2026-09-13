@@ -11,6 +11,7 @@ import {
 import { createReply } from './replies.js';
 import { isDevEnv } from './env.js';
 import { reportClientError } from './errorLogger.js';
+import { t } from './uiTexts.js';
 
 export { TEST_USER_ID };
 
@@ -131,7 +132,7 @@ export async function loadChatHistory() {
     if (Array.isArray(data?.conversations)) {
       const dbChats = data.conversations.map(c => ({
         id: c.id,
-        title: c.title || 'Percakapan baru',
+        title: c.title || t('state_default_title'),
         messages: [],
         messagesLoaded: false,
         updatedAt: c.updated_at ? new Date(c.updated_at).getTime() : Date.now(),
@@ -157,12 +158,12 @@ export function sendMessage() {
   const text = draft.val.trim();
   if (!text || loading.val) return;
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    toast('Anda tampaknya sedang luring. Sambungkan kembali untuk mengirim pesan.');
+    toast(t('state_offline_notice'));
     return;
   }
   const existing = currentChat();
   if (!existing && chats.val.length >= MAX_CHATS) {
-    toast('Ruang kerja Anda memiliki 100 obrolan. Ekspor atau hapus percakapan lama untuk memberi ruang.');
+    toast(t('state_max_chats_notice'));
     return;
   }
   const isNewConversation = !existing || existing.messages.length === 0;
@@ -256,7 +257,7 @@ export function sendMessage() {
     focusComposer();
   }).catch((error) => {
     loading.val = false;
-    const errorMessage = error.message || 'Gagal mengirim pesan. Silakan coba lagi.';
+    const errorMessage = error.message || t('state_send_failed');
 
     if (errorMessage.toLowerCase().includes('rate limit')) {
       const updatedChats = chats.val.map(c => {
@@ -312,7 +313,7 @@ export function deleteChat(id) {
   chats.val = chats.val.filter(chat => chat.id !== id);
   if (activeId.val === id) activeId.val = null;
   modal.val = null;
-  toast('Percakapan telah dihapus.');
+  toast(t('state_chat_deleted'));
   deleteConversationApi(id, { userId: TEST_USER_ID }).catch(() => {});
 }
 
@@ -321,7 +322,7 @@ export function clearWorkspace() {
   activeId.val = null;
   draft.val = '';
   modal.val = null;
-  toast('Percakapan dan draf telah dibersihkan.');
+  toast(t('state_workspace_cleared'));
 }
 
 export function exportWorkspace() {
@@ -332,7 +333,7 @@ export function exportWorkspace() {
   link.download = `teach4all-${new Date().toISOString().slice(0, 10)}.json`;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-  toast('Ekspor ruang kerja berhasil diunduh.');
+  toast(t('state_export_success'));
 }
 
 export function setTheme(value) {

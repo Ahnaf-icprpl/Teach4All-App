@@ -1096,6 +1096,83 @@ test('GrafanaLogger ALWAYS includes env (from .env or process.env) in log record
   }
 });
 
+test('handleUiTextsRequest rejects non-GET and returns 200 with texts dictionary', async () => {
+  const { handleUiTextsRequest } = await import('../server/uiTextsApi.js');
+
+  // Test 405 on POST
+  let postStatusCode = 0;
+  let postBody = '';
+  const postReq = { method: 'POST', url: '/api/ui-texts' };
+  const postRes = {
+    writeHead(status) { postStatusCode = status; },
+    end(body) { postBody = body; },
+  };
+  await handleUiTextsRequest(postReq, postRes);
+  assert.strictEqual(postStatusCode, 405);
+  assert.ok(JSON.parse(postBody).error);
+
+  // Test GET
+  let getStatusCode = 0;
+  let getHeaders = {};
+  let getBody = '';
+  const getReq = { method: 'GET', url: '/api/ui-texts' };
+  const getRes = {
+    writeHead(status, headers) {
+      getStatusCode = status;
+      getHeaders = headers;
+    },
+    end(body) { getBody = body; },
+  };
+  await handleUiTextsRequest(getReq, getRes);
+  assert.strictEqual(getStatusCode, 200);
+  assert.strictEqual(getHeaders['Content-Type'], 'application/json');
+  const data = JSON.parse(getBody);
+  assert.ok(data.texts && typeof data.texts === 'object');
+});
+
+test('UI texts module strictly references DB without any fallback and does not load if DB is empty', async () => {
+  const { initUiTexts, t, uiTexts } = await import('../src/uiTexts.js');
+  const originalFetch = globalThis.fetch;
+
+  try {
+    // 1. If DB returns empty or nothing, initUiTexts returns false (does not load)
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({ texts: {} }),
+    });
+    const loadedEmpty = await initUiTexts();
+    assert.strictEqual(loadedEmpty, false, 'app must not load if db has no texts');
+
+    // 2. If DB fetch fails, initUiTexts returns false (does not load)
+    globalThis.fetch = async () => ({
+      ok: false,
+      status: 500,
+    });
+    const loadedFail = await initUiTexts();
+    assert.strictEqual(loadedFail, false, 'app must not load if db fetch fails');
+
+    // 3. When DB returns valid texts, it loads and t(key) returns strictly from DB
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        texts: {
+          topbar_new_chat: 'Percakapan baru dari DB',
+          topbar_open_nav: 'Buka navigasi dari DB',
+        },
+      }),
+    });
+    const loadedSuccess = await initUiTexts();
+    assert.strictEqual(loadedSuccess, true);
+    assert.strictEqual(t('topbar_new_chat'), 'Percakapan baru dari DB');
+    assert.strictEqual(t('topbar_open_nav'), 'Buka navigasi dari DB');
+
+    // 4. Missing key returns empty string, absolutely NO fallback text
+    assert.strictEqual(t('non_existent_key'), '');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 
 
 

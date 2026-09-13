@@ -1,5 +1,6 @@
 import { offlineReady, updateReady, toast } from './state.js';
 import { isDevEnv } from './env.js';
+import { t } from './uiTexts.js';
 
 let registration;
 
@@ -19,7 +20,7 @@ export async function registerOffline() {
     await navigator.serviceWorker.ready;
     offlineReady.val = true;
   } catch {
-    toast('Pemasangan mode luring belum selesai. Percakapan Anda tetap tersimpan secara lokal; sambungkan kembali dan muat ulang untuk mencoba lagi.');
+    toast(t('offline_setup_failed'));
   }
 }
 

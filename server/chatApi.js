@@ -18,6 +18,7 @@ import {
   extractProvider,
 } from './providerCache.js';
 import { handleErrorLogRequest } from './errorApi.js';
+import { handleUiTextsRequest } from './uiTextsApi.js';
 import { logger, logDevRequest } from './logger.js';
 import { metrics } from './metrics.js';
 
@@ -34,6 +35,7 @@ export {
   buildProviderRoutingPayload,
   extractProvider,
   handleErrorLogRequest,
+  handleUiTextsRequest,
 };
 
 export function isPlaceholderKey(key) {
@@ -447,6 +449,9 @@ export function createChatMiddleware(serverEnv = {}) {
     }
     if (url === '/api/log-error' || url === '/api/log-error/') {
       return dispatchApi(handleErrorLogRequest, req, res, serverEnv, '/api/log-error');
+    }
+    if (url === '/api/ui-texts' || url === '/api/ui-texts/') {
+      return dispatchApi(handleUiTextsRequest, req, res, serverEnv, '/api/ui-texts');
     }
     if (url.startsWith('/api/')) {
       logger.warn('API endpoint not found (404)', { endpoint: url, method, client_ip: clientIp });
