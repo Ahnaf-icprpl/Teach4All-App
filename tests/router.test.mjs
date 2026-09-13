@@ -37,6 +37,13 @@ import {
   renameConversationApi, CONVERSATIONS_API_URL, MESSAGES_API_URL,
   TEST_USER_ID,
 } from '../src/router.js';
+import {
+  getConversationProvider,
+  setConversationProvider,
+  clearConversationProvider,
+  buildProviderRoutingPayload,
+  extractProvider,
+} from '../server/providerCache.js';
 
 test('router uses google/gemini-2.5-flash-lite by default', () => {
   assert.strictEqual(DEFAULT_MODEL, 'google/gemini-2.5-flash-lite');
@@ -587,6 +594,168 @@ test('client fetchConversations and fetchMessages call endpoints with query para
     globalThis.fetch = originalFetch;
   }
 });
+
+test('providerCache helper builds payload and extracts provider accurately', () => {
+  // 1. Without cached provider
+  const payload1 = buildProviderRoutingPayload('test-convo-123');
+  assert.strictEqual(payload1.session_id, 'test-convo-123');
+  assert.strictEqual(payload1.prompt_cache_key, 'test-convo-123');
+  assert.deepStrictEqual(payload1.cache_control, { type: 'ephemeral' });
+  assert.strictEqual(payload1.provider, undefined);
+
+  // 2. With cached provider
+  const payload2 = buildProviderRoutingPayload('test-convo-123', 'Together');
+  assert.strictEqual(payload2.session_id, 'test-convo-123');
+  assert.deepStrictEqual(payload2.provider, {
+    order: ['together'],
+    allow_fallbacks: true,
+  });
+
+  // 3. Extract provider from headers
+  const mockHeaders = new Headers({ 'x-openrouter-provider': 'Google' });
+  assert.strictEqual(extractProvider(mockHeaders), 'google');
+
+  // 4. Extract provider from chunk JSON
+  assert.strictEqual(extractProvider(null, { provider: 'DeepInfra' }), 'deepinfra');
+});
+
+test('server handleChatRequest caches provider and routes subsequent conversation turns to cached provider', async () => {
+  const originalFetch = globalThis.fetch;
+  const conversationId = crypto.randomUUID();
+  const interceptedBodies = [];
+  const interceptedHeaders = [];
+
+  globalThis.fetch = async (url, options) => {
+    interceptedBodies.push(JSON.parse(options.body));
+    interceptedHeaders.push(options.headers);
+
+    const sseData = [
+      'data: {"provider":"deepinfra","choices":[{"delta":{"content":"Jawaban"}}]}\n\n',
+      'data: [DONE]\n\n',
+    ].join('');
+
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(sseData));
+        controller.close();
+      },
+    });
+
+    return new Response(stream, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'x-openrouter-provider': 'deepinfra',
+      },
+    });
+  };
+
+  try {
+    // Turn 1: First request for this conversation
+    const { req: req1, res: res1 } = createMockReqRes({
+      body: {
+        conversationId,
+        messages: [{ role: 'user', content: 'Pertanyaan 1' }],
+      },
+    });
+
+    await handleChatRequest(req1, res1, {
+      OPENROUTER_API_KEY: 'sk-or-valid-key',
+    });
+
+    assert.strictEqual(res1.statusCode, 200);
+    assert.strictEqual(res1.headers['X-Provider'], 'deepinfra');
+    assert.strictEqual(interceptedBodies.length, 1);
+    assert.strictEqual(interceptedBodies[0].session_id, conversationId);
+    assert.strictEqual(interceptedBodies[0].prompt_cache_key, conversationId);
+    assert.deepStrictEqual(interceptedBodies[0].cache_control, { type: 'ephemeral' });
+    assert.strictEqual(interceptedHeaders[0]['X-Session-Id'], conversationId);
+    // On Turn 1, no provider order was pinned yet
+    assert.strictEqual(interceptedBodies[0].provider, undefined);
+
+    // Verify provider is now cached for this conversation
+    const cached = await getConversationProvider(conversationId);
+    assert.strictEqual(cached, 'deepinfra');
+
+    // Turn 2: Second request for the same conversation
+    const { req: req2, res: res2 } = createMockReqRes({
+      body: {
+        conversationId,
+        messages: [
+          { role: 'user', content: 'Pertanyaan 1' },
+          { role: 'assistant', content: 'Jawaban' },
+          { role: 'user', content: 'Pertanyaan 2' },
+        ],
+      },
+    });
+
+    await handleChatRequest(req2, res2, {
+      OPENROUTER_API_KEY: 'sk-or-valid-key',
+    });
+
+    assert.strictEqual(res2.statusCode, 200);
+    assert.strictEqual(interceptedBodies.length, 2);
+    assert.strictEqual(interceptedBodies[1].session_id, conversationId);
+    // On Turn 2, provider routing is stickied to the cached provider!
+    assert.deepStrictEqual(interceptedBodies[1].provider, {
+      order: ['deepinfra'],
+      allow_fallbacks: true,
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+    await clearConversationProvider(conversationId);
+  }
+});
+
+test('server handleTitleRequest uses cached provider and respects sticky routing', async () => {
+  const originalFetch = globalThis.fetch;
+  const conversationId = crypto.randomUUID();
+  let interceptedPayload = null;
+  let interceptedHeaders = null;
+
+  // Pre-seed conversation provider
+  await setConversationProvider(conversationId, 'groq');
+
+  globalThis.fetch = async (url, options) => {
+    interceptedPayload = JSON.parse(options.body);
+    interceptedHeaders = options.headers;
+
+    return new Response(JSON.stringify({
+      choices: [{ message: { content: 'Judul Percakapan Baru' } }],
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+
+  try {
+    const { req, res } = createMockReqRes({
+      body: {
+        conversationId,
+        messages: [{ role: 'user', content: 'Halo guru' }],
+      },
+    });
+
+    await handleTitleRequest(req, res, {
+      OPENROUTER_API_KEY: 'sk-or-valid-key',
+    });
+
+    assert.strictEqual(res.statusCode, 200);
+    assert.strictEqual(interceptedPayload.session_id, conversationId);
+    assert.strictEqual(interceptedPayload.prompt_cache_key, conversationId);
+    assert.deepStrictEqual(interceptedPayload.cache_control, { type: 'ephemeral' });
+    assert.deepStrictEqual(interceptedPayload.provider, {
+      order: ['groq'],
+      allow_fallbacks: true,
+    });
+    assert.strictEqual(interceptedHeaders['X-Session-Id'], conversationId);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await clearConversationProvider(conversationId);
+  }
+});
+
 
 
 

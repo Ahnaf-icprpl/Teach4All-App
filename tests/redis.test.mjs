@@ -258,3 +258,41 @@ test('getEndpointConfig fetches authoritative DB policy and caches in Redis with
     client.close();
   }
 });
+
+test('setConversationProvider and getConversationProvider cache provider in Redis atomically', async () => {
+  const {
+    getConversationProvider,
+    setConversationProvider,
+    clearConversationProvider,
+  } = await import('../server/providerCache.js');
+  const client = new RedisClient(REDIS_URL);
+  client.connect();
+
+  const conversationId = `convo-test-${Date.now()}`;
+  try {
+    // 1. Initial state is null
+    const initial = await getConversationProvider(conversationId, { redisClient: client });
+    assert.strictEqual(initial, null);
+
+    // 2. Set provider
+    const saved = await setConversationProvider(conversationId, 'Google', { redisClient: client, ttlSeconds: 60 });
+    assert.strictEqual(saved, 'google');
+
+    // 3. Read back from Redis
+    const cached = await getConversationProvider(conversationId, { redisClient: client });
+    assert.strictEqual(cached, 'google');
+
+    // 4. Verify directly in Redis key
+    const rawVal = await client.get(`teach4all:convo:provider:${conversationId}`);
+    assert.strictEqual(rawVal, 'google');
+
+    // 5. Clear provider
+    await clearConversationProvider(conversationId, { redisClient: client });
+    const afterClear = await getConversationProvider(conversationId, { redisClient: client });
+    assert.strictEqual(afterClear, null);
+  } finally {
+    await clearConversationProvider(conversationId, { redisClient: client });
+    client.close();
+  }
+});
+
