@@ -39,6 +39,17 @@ export function rotatePrompts() {
  * If there is nothing on the database or fetch fails, return false so the app does not load.
  */
 export async function initUiTexts() {
+  if (typeof window !== 'undefined' && window.__INITIAL_UI_DATA__) {
+    const { texts, prompts } = window.__INITIAL_UI_DATA__;
+    if (texts && Object.keys(texts).length > 0 && Array.isArray(prompts) && prompts.length > 0) {
+      uiTexts.val = texts;
+      allChatPrompts.val = prompts;
+      rotatePrompts();
+      isLoaded.val = true;
+      return true;
+    }
+  }
+
   try {
     const res = await fetch('./api/ui-texts');
     if (!res.ok) return false;

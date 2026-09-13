@@ -97,9 +97,24 @@ function App() {
 async function initApp() {
   const loaded = await initUiTexts();
   if (!loaded) return;
-  van.add(document.body, App());
-  registerOffline();
-  focusComposer();
+
+  const mount = () => {
+    const existingApp = document.getElementById('app');
+    if (existingApp) {
+      existingApp.replaceWith(App());
+    } else {
+      van.add(document.body, App());
+    }
+    registerOffline();
+    focusComposer();
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', mount, { once: true });
+  } else {
+    mount();
+  }
+
   if (typeof window !== 'undefined' && document.readyState !== 'complete') {
     window.addEventListener('load', focusComposer, { once: true });
   }

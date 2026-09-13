@@ -69,6 +69,21 @@ export default defineConfig(({ mode }) => {
         configurePreviewServer(server) {
           server.middlewares.use(createChatMiddleware({ ...env, ENV: appEnv, env: appEnv }));
         },
+        async transformIndexHtml(html) {
+          try {
+            const dbUrl = process.env.DATABASE_URL || env.DATABASE_URL;
+            if (dbUrl) {
+              const { getUiTextsFromDb, getChatPromptsFromDb } = await import('./server/uiTextsApi.js');
+              const { renderSsrHtml } = await import('./server/ssr.js');
+              const texts = await getUiTextsFromDb(dbUrl);
+              const prompts = await getChatPromptsFromDb(dbUrl);
+              if (texts && Object.keys(texts).length && prompts && prompts.length) {
+                return renderSsrHtml({ htmlTemplate: html, texts, prompts });
+              }
+            }
+          } catch {}
+          return html;
+        },
       },
     ],
     build: {

@@ -1239,6 +1239,61 @@ test('chat prompts rotate randomly across items from table without fallback', as
   assert.strictEqual(activePrompts.val.length, 4);
 });
 
+test('renderSsrHtml strictly populates database texts and prompts without fallback', async () => {
+  const { renderSsrHtml } = await import('../server/ssr.js');
+
+  // Throws if texts or prompts are missing
+  assert.throws(() => {
+    renderSsrHtml({ htmlTemplate: '<html><head></head><body></body></html>', texts: {}, prompts: [] });
+  }, /No UI text or prompts available/);
+
+  const mockTexts = {
+    app_skip_link: 'Skip to content',
+    sidebar_brand_prefix: 'Teach',
+    sidebar_brand_number: '4',
+    sidebar_brand_suffix: 'All',
+    chat_welcome_title_p1: 'Hello World',
+  };
+  const mockPrompts = [
+    { id: 1, title: 'Test Prompt 1', detail: 'Detail 1', prompt: 'Prompt 1', icon: 'bulb', color: 'amber' },
+  ];
+
+  const html = renderSsrHtml({
+    htmlTemplate: '<!doctype html><html><head></head><body></body></html>',
+    texts: mockTexts,
+    prompts: mockPrompts,
+  });
+
+  assert.ok(html.includes('id="__TEACH4ALL_DATA__"'));
+  assert.ok(html.includes('window.__INITIAL_UI_DATA__ ='));
+  assert.ok(html.includes('Skip to content'));
+  assert.ok(html.includes('Hello World'));
+  assert.ok(html.includes('Test Prompt 1'));
+});
+
+test('initUiTexts hydrates instantly from window.__INITIAL_UI_DATA__', async () => {
+  const { uiTexts, allChatPrompts, activePrompts, isLoaded, initUiTexts } = await import('../src/uiTexts.js');
+
+  globalThis.window = {
+    __INITIAL_UI_DATA__: {
+      texts: { app_skip_link: 'Lompat ke pesan' },
+      prompts: [
+        { id: 1, title: 'Prompt SSR', detail: 'Detail SSR', prompt: 'Text SSR', icon: 'bulb', color: 'amber' },
+      ],
+    },
+  };
+
+  const success = await initUiTexts();
+  assert.strictEqual(success, true);
+  assert.strictEqual(uiTexts.val.app_skip_link, 'Lompat ke pesan');
+  assert.strictEqual(allChatPrompts.val.length, 1);
+  assert.strictEqual(activePrompts.val.length, 1);
+  assert.strictEqual(isLoaded.val, true);
+
+  delete globalThis.window;
+});
+
+
 
 
 
