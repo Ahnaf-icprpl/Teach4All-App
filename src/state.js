@@ -10,6 +10,7 @@ import {
 } from './router.js';
 import { createReply } from './replies.js';
 import { isDevEnv } from './env.js';
+import { reportClientError } from './errorLogger.js';
 
 export { TEST_USER_ID };
 
@@ -101,7 +102,10 @@ export async function loadMessagesForChat(id) {
       });
     }
   } catch (err) {
-    console.warn('Failed to lazy load messages:', err.message);
+    reportClientError({
+      type: 'client_lazy_load_failed',
+      message: err.message,
+    });
   } finally {
     messagesLoading.val = false;
   }
@@ -140,7 +144,10 @@ export async function loadChatHistory() {
       }
     }
   } catch (err) {
-    console.warn('Failed to load chat history:', err.message);
+    reportClientError({
+      type: 'client_load_history_failed',
+      message: err.message,
+    });
   } finally {
     historyLoading.val = false;
   }

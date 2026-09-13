@@ -268,7 +268,7 @@ export async function getConversations({
         return rows;
       }
     } catch (err) {
-      console.error('Failed to get conversations from DB:', err.message);
+      logger.error('Failed to get conversations from DB', { error: err.message });
     }
   }
 

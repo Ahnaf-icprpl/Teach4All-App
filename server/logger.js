@@ -151,7 +151,7 @@ export class GrafanaLogger {
     serviceName = process.env.GRAFANA_SERVICE_NAME || DEFAULT_SERVICE_NAME,
     batchSize = 50,
     flushIntervalMs = 1000,
-    enableConsole = true,
+    enableConsole = process.env.ENABLE_CONSOLE === 'true',
     forceSendInTest = false,
     maxTextLength = Number(process.env.GRAFANA_MAX_TEXT_LENGTH) || DEFAULT_MAX_LOG_TEXT_LENGTH,
     env = null,
