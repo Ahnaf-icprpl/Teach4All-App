@@ -4,7 +4,7 @@ import { createChatMiddleware } from './server/chatApi.js';
 export const VALID_ENVS = ['production', 'development'];
 
 export function resolveAppEnv(env = {}, mode = 'development') {
-  const raw = env.ENV || env.env || process.env.ENV || process.env.env;
+  const raw = env.ENV || env.env;
   if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
     const normalized = String(raw).trim().toLowerCase();
     if (!VALID_ENVS.includes(normalized)) {

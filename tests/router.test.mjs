@@ -64,6 +64,7 @@ import {
   truncateText,
   sanitizeAttributes,
   DEFAULT_MAX_LOG_TEXT_LENGTH,
+  getActiveEnv,
   SEVERITY_LEVELS,
   DEFAULT_GRAFANA_INSTANCE_ID,
   DEFAULT_GRAFANA_API_KEY,
@@ -1015,6 +1016,82 @@ test('truncateText, sanitizeAttributes, and GrafanaLogger ALWAYS truncate giant 
     assert.strictEqual(promptAttr.value.stringValue.length, 150 + '... [truncated]'.length);
     assert.ok(promptAttr.value.stringValue.endsWith('... [truncated]'));
   } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('GrafanaLogger ALWAYS includes env (from .env or process.env) in log record attributes and OTLP resource attributes', async () => {
+  const originalEnv = process.env.ENV;
+  const originalFetch = globalThis.fetch;
+  let deliveredBody = null;
+
+  globalThis.fetch = async (url, options) => {
+    deliveredBody = JSON.parse(options.body);
+    return new Response('', { status: 204 });
+  };
+
+  try {
+    // 1. Development environment
+    process.env.ENV = 'development';
+    assert.strictEqual(getActiveEnv(), 'development');
+
+    const devLogger = new GrafanaLogger({
+      instanceId: '1828340',
+      apiKey: 'test-token',
+      otlpUrl: 'https://test-gateway.grafana.net/otlp/v1/logs',
+      enableConsole: false,
+      forceSendInTest: true,
+    });
+
+    assert.strictEqual(devLogger.env, 'development');
+    devLogger.info('Testing dev environment log', { request_id: 'req-dev-1' });
+    assert.strictEqual(devLogger.queue[0].attributes.find(a => a.key === 'env').value.stringValue, 'development');
+
+    await devLogger.flush();
+    assert.ok(deliveredBody);
+    const devResourceAttrs = deliveredBody.resourceLogs[0].resource.attributes;
+    assert.ok(devResourceAttrs.some(a => a.key === 'deployment.environment' && a.value.stringValue === 'development'));
+    assert.ok(devResourceAttrs.some(a => a.key === 'env' && a.value.stringValue === 'development'));
+
+    const devRecordAttrs = deliveredBody.resourceLogs[0].scopeLogs[0].logRecords[0].attributes;
+    assert.ok(devRecordAttrs.some(a => a.key === 'env' && a.value.stringValue === 'development'));
+
+    // 2. Production environment
+    process.env.ENV = 'production';
+    assert.strictEqual(getActiveEnv(), 'production');
+
+    const prodLogger = new GrafanaLogger({
+      instanceId: '1828340',
+      apiKey: 'test-token',
+      otlpUrl: 'https://test-gateway.grafana.net/otlp/v1/logs',
+      enableConsole: false,
+      forceSendInTest: true,
+    });
+
+    assert.strictEqual(prodLogger.env, 'production');
+    prodLogger.info('Testing prod environment log', { request_id: 'req-prod-1' });
+    assert.strictEqual(prodLogger.queue[0].attributes.find(a => a.key === 'env').value.stringValue, 'production');
+
+    await prodLogger.flush();
+    assert.ok(deliveredBody);
+    const prodResourceAttrs = deliveredBody.resourceLogs[0].resource.attributes;
+    assert.ok(prodResourceAttrs.some(a => a.key === 'deployment.environment' && a.value.stringValue === 'production'));
+    assert.ok(prodResourceAttrs.some(a => a.key === 'env' && a.value.stringValue === 'production'));
+
+    const prodRecordAttrs = deliveredBody.resourceLogs[0].scopeLogs[0].logRecords[0].attributes;
+    assert.ok(prodRecordAttrs.some(a => a.key === 'env' && a.value.stringValue === 'production'));
+
+    // 3. Explicit env parameter overrides process.env
+    const explicitLogger = new GrafanaLogger({
+      instanceId: '1828340',
+      apiKey: 'test-token',
+      otlpUrl: 'https://test-gateway.grafana.net/otlp/v1/logs',
+      enableConsole: false,
+      env: 'development',
+    });
+    assert.strictEqual(explicitLogger.env, 'development');
+  } finally {
+    process.env.ENV = originalEnv;
     globalThis.fetch = originalFetch;
   }
 });

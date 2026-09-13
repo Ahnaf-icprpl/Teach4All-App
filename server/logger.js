@@ -9,24 +9,38 @@ import { resolve } from 'node:path';
  */
 
 // Load local .env fallback if not yet loaded in process.env
-if (!process.env.GRAFANA_API_KEY) {
-  try {
-    const envPath = resolve(process.cwd(), '.env');
-    if (existsSync(envPath)) {
-      const content = readFileSync(envPath, 'utf8');
-      for (const line of content.split('\n')) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('#')) continue;
-        const eqIdx = trimmed.indexOf('=');
-        if (eqIdx === -1) continue;
-        const key = trimmed.slice(0, eqIdx).trim();
-        const val = trimmed.slice(eqIdx + 1).trim();
-        if (key.startsWith('GRAFANA_') && !process.env[key]) {
-          process.env[key] = val;
-        }
+try {
+  const envPath = resolve(process.cwd(), '.env');
+  if (existsSync(envPath)) {
+    const content = readFileSync(envPath, 'utf8');
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eqIdx = trimmed.indexOf('=');
+      if (eqIdx === -1) continue;
+      const key = trimmed.slice(0, eqIdx).trim();
+      const val = trimmed.slice(eqIdx + 1).trim();
+      if ((key.startsWith('GRAFANA_') || key === 'ENV' || key === 'env') && !process.env[key]) {
+        process.env[key] = val;
       }
     }
-  } catch {}
+  }
+} catch {}
+
+/**
+ * Resolves current active environment ('production' | 'development').
+ * Prioritizes process.env.ENV / process.env.env, normalizing to lowercase,
+ * defaulting to 'development'.
+ */
+export function getActiveEnv() {
+  const raw = process.env.ENV || process.env.env;
+  if (raw && typeof raw === 'string') {
+    const normalized = raw.trim().toLowerCase();
+    if (normalized === 'production' || normalized === 'development') {
+      return normalized;
+    }
+  }
+  return 'development';
 }
 
 export const DEFAULT_GRAFANA_INSTANCE_ID = '1828340';
@@ -139,6 +153,7 @@ export class GrafanaLogger {
     enableConsole = true,
     forceSendInTest = false,
     maxTextLength = Number(process.env.GRAFANA_MAX_TEXT_LENGTH) || DEFAULT_MAX_LOG_TEXT_LENGTH,
+    env = null,
   } = {}) {
     this.instanceId = instanceId;
     this.apiKey = apiKey;
@@ -149,10 +164,21 @@ export class GrafanaLogger {
     this.enableConsole = enableConsole;
     this.forceSendInTest = forceSendInTest;
     this.maxTextLength = maxTextLength;
+    this._explicitEnv = env;
 
     this.queue = [];
     this.flushTimer = null;
     this.flushing = false;
+  }
+
+  /**
+   * Resolves the active environment ('production' | 'development') for this logger instance.
+   */
+  get env() {
+    if (this._explicitEnv) {
+      return String(this._explicitEnv).trim().toLowerCase();
+    }
+    return getActiveEnv();
   }
 
   /**
@@ -174,9 +200,14 @@ export class GrafanaLogger {
   log(level, message, attributes = {}, { immediate = false } = {}) {
     const sev = SEVERITY_LEVELS[level?.toLowerCase()] || SEVERITY_LEVELS.info;
     const nowUnixNano = String(BigInt(Date.now()) * 1000000n);
+    const activeEnv = this.env;
 
     const safeMessage = truncateText(message, this.maxTextLength);
     const sanitizedAttrs = sanitizeAttributes(attributes, this.maxTextLength);
+    const recordAttrs = {
+      ...sanitizedAttrs,
+      env: sanitizedAttrs.env || activeEnv,
+    };
 
     if (this.enableConsole) {
       const consoleFn =
@@ -185,9 +216,9 @@ export class GrafanaLogger {
           : level === 'warn'
             ? console.warn
             : console.log;
-      const attrKeys = Object.keys(sanitizedAttrs);
-      const suffix = attrKeys.length > 0 ? ` ${JSON.stringify(sanitizedAttrs)}` : '';
-      consoleFn(`[${sev.text}] ${safeMessage}${suffix}`);
+      const attrKeys = Object.keys(recordAttrs);
+      const suffix = attrKeys.length > 0 ? ` ${JSON.stringify(recordAttrs)}` : '';
+      consoleFn(`[${sev.text}] [${activeEnv}] ${safeMessage}${suffix}`);
     }
 
     const record = {
@@ -196,7 +227,7 @@ export class GrafanaLogger {
       severityNumber: sev.number,
       severityText: sev.text,
       body: { stringValue: safeMessage },
-      attributes: toOtlpAttributes(sanitizedAttrs, this.maxTextLength),
+      attributes: toOtlpAttributes(recordAttrs, this.maxTextLength),
     };
 
     this.queue.push(record);
@@ -274,7 +305,7 @@ export class GrafanaLogger {
 
     const authPair = `${instanceId}:${apiKey}`;
     const encoded = Buffer.from(authPair).toString('base64');
-    const env = process.env.ENV || process.env.env || 'development';
+    const activeEnv = this.env;
 
     const payload = {
       resourceLogs: [
@@ -282,7 +313,8 @@ export class GrafanaLogger {
           resource: {
             attributes: [
               { key: 'service.name', value: { stringValue: this.serviceName } },
-              { key: 'deployment.environment', value: { stringValue: env } },
+              { key: 'deployment.environment', value: { stringValue: activeEnv } },
+              { key: 'env', value: { stringValue: activeEnv } },
             ],
           },
           scopeLogs: [
