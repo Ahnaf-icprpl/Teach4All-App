@@ -135,3 +135,20 @@ test('offline standalone companion generates deterministic replies with zero ext
   assert.ok(photoReply.includes('solar-powered kitchen'), 'reply must include intuitive explanation');
 });
 
+test('.env.example documents valid ENV options and UpdateBanner is dev-only', () => {
+  const envExample = readFileSync('.env.example', 'utf8');
+  assert.ok(envExample.includes('ENV='), '.env.example must define ENV');
+  assert.ok(envExample.includes('production') && envExample.includes('development'), '.env.example must specify valid options');
+
+  const mainContent = readFileSync('src/main.js', 'utf8');
+  assert.ok(mainContent.includes('isDevEnv()'), 'main.js must guard UpdateBanner with isDevEnv()');
+  assert.ok(mainContent.includes('Versi terbaru Teach4All telah siap.'), 'main.js contains update banner text');
+
+  const offlineContent = readFileSync('src/offline.js', 'utf8');
+  assert.ok(offlineContent.includes('isDevEnv()'), 'offline.js must guard updateReady with isDevEnv()');
+
+  const stateContent = readFileSync('src/state.js', 'utf8');
+  assert.ok(stateContent.includes('updateReady = van.state(isDevEnv())'), 'state.js must initialize updateReady based on isDevEnv()');
+});
+
+

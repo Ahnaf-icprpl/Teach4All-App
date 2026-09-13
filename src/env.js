@@ -51,6 +51,9 @@ export function getAppEnv() {
  * Check if running in development environment.
  */
 export function isDevEnv() {
+  if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.ENV) {
+    return import.meta.env.ENV === 'development';
+  }
   return getAppEnv() === 'development';
 }
 
@@ -58,5 +61,8 @@ export function isDevEnv() {
  * Check if running in production environment.
  */
 export function isProdEnv() {
+  if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.ENV) {
+    return import.meta.env.ENV === 'production';
+  }
   return getAppEnv() === 'production';
 }

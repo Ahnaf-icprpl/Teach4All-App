@@ -45,6 +45,15 @@ import {
   buildProviderRoutingPayload,
   extractProvider,
 } from '../server/providerCache.js';
+import {
+  VALID_ENVS,
+  isValidEnv,
+  parseAppEnv,
+  getAppEnv,
+  isDevEnv,
+  isProdEnv,
+} from '../src/env.js';
+import { resolveAppEnv } from '../vite.config.js';
 
 test('router uses google/gemini-2.5-flash-lite by default', () => {
   assert.strictEqual(DEFAULT_MODEL, 'google/gemini-2.5-flash-lite');
@@ -775,6 +784,51 @@ test('server handleTitleRequest uses cached provider and respects sticky routing
     await clearConversationProvider(conversationId);
   }
 });
+
+test('ENV validation allows only production or development and rejects invalid values', () => {
+  assert.strictEqual(isValidEnv('development'), true);
+  assert.strictEqual(isValidEnv('production'), true);
+  assert.strictEqual(isValidEnv('Development'), true);
+  assert.strictEqual(isValidEnv('PRODUCTION'), true);
+  assert.strictEqual(isValidEnv('staging'), false);
+  assert.strictEqual(isValidEnv('test'), false);
+  assert.strictEqual(isValidEnv(''), false);
+  assert.strictEqual(isValidEnv(null), false);
+
+  assert.strictEqual(parseAppEnv('production'), 'production');
+  assert.strictEqual(parseAppEnv('development'), 'development');
+  assert.strictEqual(parseAppEnv('Development'), 'development');
+  assert.strictEqual(parseAppEnv(null, 'development'), 'development');
+  assert.throws(() => parseAppEnv('invalid_env'), /Invalid env/);
+});
+
+test('resolveAppEnv parses env variable for production and development with strict validation', () => {
+  assert.strictEqual(resolveAppEnv({ ENV: 'production' }), 'production');
+  assert.strictEqual(resolveAppEnv({ env: 'development' }), 'development');
+  assert.strictEqual(resolveAppEnv({ ENV: 'DEVELOPMENT' }), 'development');
+  assert.strictEqual(resolveAppEnv({}, 'production'), 'production');
+  assert.strictEqual(resolveAppEnv({}, 'development'), 'development');
+  assert.throws(() => resolveAppEnv({ ENV: 'staging' }), /Invalid env/);
+  assert.throws(() => resolveAppEnv({ env: 'invalid' }), /Invalid env/);
+});
+
+test('isDevEnv and isProdEnv reflect the active environment accurately', () => {
+  const originalEnv = process.env.ENV;
+  try {
+    process.env.ENV = 'development';
+    assert.strictEqual(isDevEnv(), true);
+    assert.strictEqual(isProdEnv(), false);
+    assert.strictEqual(getAppEnv(), 'development');
+
+    process.env.ENV = 'production';
+    assert.strictEqual(isDevEnv(), false);
+    assert.strictEqual(isProdEnv(), true);
+    assert.strictEqual(getAppEnv(), 'production');
+  } finally {
+    process.env.ENV = originalEnv;
+  }
+});
+
 
 
 
