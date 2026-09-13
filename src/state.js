@@ -35,7 +35,7 @@ export const storageError = van.state('');
 export const notice = van.state('');
 export const online = van.state(typeof navigator !== 'undefined' ? navigator.onLine : true);
 export const offlineReady = van.state(false);
-export const updateReady = van.state(isDevEnv());
+export const updateReady = van.state(false);
 export const modal = van.state(null);
 let toastTimer;
 

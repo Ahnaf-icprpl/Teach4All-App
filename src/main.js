@@ -5,9 +5,9 @@ import { Chat } from './components/chat.js';
 import { Dialogs } from './components/dialogs.js';
 import {
   sidebarOpen, sidebarCollapsed, theme, setTheme, modal, notice,
-  online, updateReady, newChat, focusComposer, currentChat,
+  online, newChat, focusComposer, currentChat,
 } from './state.js';
-import { registerOffline, applyUpdate } from './offline.js';
+import { registerOffline } from './offline.js';
 import { isDevEnv } from './env.js';
 import './styles/base.css';
 import './styles/sidebar.css';
@@ -67,16 +67,6 @@ function Toast() {
   }, notice.val);
 }
 
-export function UpdateBanner() {
-  if (!isDevEnv()) return () => null;
-  return () => updateReady.val
-    ? div({ class: 'update-notice', role: 'status' },
-        span('Versi terbaru Teach4All telah siap.'),
-        button({ class: 'text-button', onclick: applyUpdate }, 'Muat ulang sekarang'),
-      )
-    : null;
-}
-
 function App() {
   return div({
     class: () => [
@@ -96,7 +86,6 @@ function App() {
       Chat(),
     ),
     Toast(),
-    UpdateBanner(),
     Dialogs(),
   );
 }
