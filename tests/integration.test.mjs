@@ -158,4 +158,13 @@ test('.env.example documents valid ENV options and update banner is removed from
   assert.strictEqual(mainContent.includes('Versi terbaru Teach4All telah siap.'), false, 'Update banner text must be removed from main.js');
 });
 
+test('migration 009 defines quiz and material list dialog texts', () => {
+  const sql = readFileSync('migrations/009_add_quiz_material_dialog_texts.sql', 'utf8');
+  assert.ok(sql.includes('dialogs_title_quiz'), 'must define dialogs_title_quiz');
+  assert.ok(sql.includes('dialogs_title_material'), 'must define dialogs_title_material');
+  assert.ok(sql.includes('dialogs_quiz_desc'), 'must define dialogs_quiz_desc');
+  assert.ok(sql.includes('dialogs_material_desc'), 'must define dialogs_material_desc');
+});
+
+
 

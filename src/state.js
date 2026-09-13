@@ -131,7 +131,7 @@ export function newChat() {
   focusComposer();
 }
 
-export function openQuickChat(type) {
+export function startTopicChat(type, topicOrPrompt) {
   if (loading.val) return;
   if (chats.val.length >= MAX_CHATS) {
     toast(t('state_max_chats_notice'));
@@ -139,22 +139,28 @@ export function openQuickChat(type) {
   }
   const isQuiz = type === 'quiz';
   const prefix = isQuiz ? t('sidebar_quiz_draft') : t('sidebar_material_draft');
-  const currentDraft = draft.val.trim();
+  const custom = (topicOrPrompt || '').trim();
   let promptText = '';
 
-  if (currentDraft && !currentDraft.startsWith(prefix)) {
-    promptText = `${prefix}${currentDraft}`;
-  } else if (currentDraft.startsWith(prefix) && currentDraft.length > prefix.length) {
-    promptText = currentDraft;
+  if (custom && custom.startsWith(prefix)) {
+    promptText = custom;
+  } else if (custom) {
+    promptText = `${prefix}${custom}`;
   } else {
     promptText = isQuiz
       ? `${prefix}Sains dan Pengetahuan Umum`
       : `${prefix}Sains dan Konsep Dasar`;
   }
 
+  modal.val = null;
   newChat();
   draft.val = promptText;
   sendMessage();
+}
+
+export function openQuickChat(type) {
+  sidebarOpen.val = false;
+  modal.val = { type };
 }
 
 export async function loadMessagesForChat(id) {
