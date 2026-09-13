@@ -7,6 +7,14 @@ let registration;
 export async function registerOffline() {
   if (!import.meta.env.PROD || !('serviceWorker' in navigator)) return;
   try {
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!refreshing) {
+        refreshing = true;
+        location.reload();
+      }
+    });
+
     registration = await navigator.serviceWorker.register('./sw.js', { scope: './' });
     if (registration.waiting && isDevEnv()) updateReady.val = true;
     registration.addEventListener('updatefound', () => {

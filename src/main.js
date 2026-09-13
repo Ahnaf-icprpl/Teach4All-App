@@ -37,10 +37,10 @@ function Topbar() {
       button({
         class: 'icon-button open-sidebar hamburger-menu', 'aria-label': () => t('topbar_open_nav'), 'aria-controls': 'sidebar',
         'aria-expanded': () => String(sidebarOpen.val || !sidebarCollapsed.val),
-        onclick: () => { sidebarOpen.val = true; sidebarCollapsed.val = false; },
+        onclick: () => { sidebarOpen.val = !sidebarOpen.val; sidebarCollapsed.val = false; },
       }, icon('menu')),
       button({
-        class: 'icon-button', 'aria-label': () => t('topbar_new_chat'), title: () => t('topbar_new_chat'),
+        class: 'icon-button topbar-new-chat', 'aria-label': () => t('topbar_new_chat'), title: () => t('topbar_new_chat'),
         onclick: newChat,
       }, icon('compose')),
       () => {

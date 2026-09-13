@@ -124,7 +124,7 @@ export function renderSsrHtml({ htmlTemplate, texts, prompts = [] }) {
               <path d="M4 6h16M4 12h16M4 18h16"/>
             </svg>
           </button>
-          <button type="button" class="icon-button" aria-label="${escapeHtml(texts.topbar_new_chat || '')}" title="${escapeHtml(texts.topbar_new_chat || '')}">
+          <button type="button" class="icon-button topbar-new-chat" aria-label="${escapeHtml(texts.topbar_new_chat || '')}" title="${escapeHtml(texts.topbar_new_chat || '')}">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
             </svg>
