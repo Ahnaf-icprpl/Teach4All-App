@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, extname } from 'node:path';
+import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
+import { join, extname, resolve } from 'node:path';
 import { createReply } from '../src/replies.js';
+import { generateOfflineTitle } from '../src/prompts/titlePrompt.js';
 
 test('all code files under 500 lines', () => {
   const root = 'src';
@@ -133,6 +134,19 @@ test('offline standalone companion generates deterministic replies with zero ext
   const photoReply = createReply('Explain photosynthesis simply');
   assert.ok(photoReply.includes('photosynthesis'), 'reply must explain photosynthesis');
   assert.ok(photoReply.includes('solar-powered kitchen'), 'reply must include intuitive explanation');
+
+  // Verify quiz and material offline companion replies
+  const quizReply = createReply('Buatkan kuis singkat 5 soal pilihan ganda tentang topik berikut: Sains');
+  assert.ok(quizReply.includes('kuis singkat 5 soal'), 'reply must include quiz structure');
+  assert.ok(quizReply.includes('1.'), 'reply must include numbered quiz items');
+
+  const materialReply = createReply('Jelaskan ringkasan materi pembelajaran terstruktur mengenai topik berikut: Sains');
+  assert.ok(materialReply.includes('ringkasan materi terstruktur'), 'reply must include structured material');
+  assert.ok(materialReply.includes('3 Pilar Pemahaman'), 'reply must include 3 pillars');
+
+  // Verify offline title cleaner handles quiz and material prompts seamlessly
+  assert.strictEqual(generateOfflineTitle('Buatkan kuis singkat 5 soal pilihan ganda tentang topik berikut: Sains dan Pengetahuan Umum'), 'Sains dan Pengetahuan Umum');
+  assert.strictEqual(generateOfflineTitle('Jelaskan ringkasan materi pembelajaran terstruktur mengenai topik berikut: Fotosintesis'), 'Fotosintesis');
 });
 
 test('.env.example documents valid ENV options and update banner is removed from all envs', () => {
@@ -143,5 +157,65 @@ test('.env.example documents valid ENV options and update banner is removed from
   const mainContent = readFileSync('src/main.js', 'utf8');
   assert.strictEqual(mainContent.includes('Versi terbaru Teach4All telah siap.'), false, 'Update banner text must be removed from main.js');
 });
+
+test('migration 009 defines quiz and material list dialog texts', () => {
+  const sql = readFileSync('migrations/009_add_quiz_material_dialog_texts.sql', 'utf8');
+  assert.ok(sql.includes('dialogs_title_quiz'), 'must define dialogs_title_quiz');
+  assert.ok(sql.includes('dialogs_title_material'), 'must define dialogs_title_material');
+  assert.ok(sql.includes('dialogs_quiz_desc'), 'must define dialogs_quiz_desc');
+  assert.ok(sql.includes('dialogs_material_desc'), 'must define dialogs_material_desc');
+});
+
+test('migration 010 defines all UI suffixes, buttons, and categories with zero fallback', () => {
+  const sql = readFileSync('migrations/010_add_mock_quiz_material_ui_texts.sql', 'utf8');
+  assert.ok(sql.includes('dialogs_meta_parts_suffix'), 'must define dialogs_meta_parts_suffix');
+  assert.ok(sql.includes('dialogs_meta_read_time_suffix'), 'must define dialogs_meta_read_time_suffix');
+  assert.ok(sql.includes('dialogs_meta_questions_suffix'), 'must define dialogs_meta_questions_suffix');
+  assert.ok(sql.includes('dialogs_modules_count_suffix'), 'must define dialogs_modules_count_suffix');
+  assert.ok(sql.includes('dialogs_quiz_start_button'), 'must define dialogs_quiz_start_button');
+  assert.ok(sql.includes('dialogs_material_open_button'), 'must define dialogs_material_open_button');
+  assert.ok(sql.includes('dialogs_quiz_create_new'), 'must define dialogs_quiz_create_new');
+  assert.ok(sql.includes('dialogs_material_create_new'), 'must define dialogs_material_create_new');
+  assert.ok(sql.includes('dialogs_time_today'), 'must define dialogs_time_today');
+  assert.ok(sql.includes('dialogs_time_yesterday'), 'must define dialogs_time_yesterday');
+  assert.ok(sql.includes('dialogs_time_days_ago_suffix'), 'must define dialogs_time_days_ago_suffix');
+  assert.ok(sql.includes('dialogs_cat_biology'), 'must define dialogs_cat_biology');
+});
+
+test('migration 015 defines development notice banner UI texts without fallback', () => {
+  const filePath = resolve(process.cwd(), 'migrations/015_add_dev_banner_ui_texts.sql');
+  assert.strictEqual(existsSync(filePath), true, 'migration file 015 must exist');
+
+  const sql = readFileSync(filePath, 'utf8');
+  assert.ok(sql.includes('dev_banner_badge'), 'must define dev_banner_badge');
+  assert.ok(sql.includes('dev_banner_notice'), 'must define dev_banner_notice');
+  assert.ok(sql.includes('dev_banner_close_aria'), 'must define dev_banner_close_aria');
+});
+
+test('DevNotice component and logic adheres to environment checks and UI texts', async () => {
+  const { isDevEnv, isProdEnv } = await import('../src/env.js');
+  const { appEnvState } = await import('../src/uiTexts.js');
+  const devNoticeSource = readFileSync(resolve(process.cwd(), 'src/components/devNotice.js'), 'utf8');
+
+  assert.ok(devNoticeSource.includes("t('dev_banner_badge')"), 'must reference dev_banner_badge via t()');
+  assert.ok(devNoticeSource.includes("t('dev_banner_notice')"), 'must reference dev_banner_notice via t()');
+  assert.ok(devNoticeSource.includes("t('dev_banner_close_aria')"), 'must reference dev_banner_close_aria via t()');
+  assert.ok(devNoticeSource.includes('isDevEnv()'), 'must check isDevEnv()');
+
+  // Verify appEnvState reactivity in env.js
+  appEnvState.val = 'development';
+  assert.strictEqual(isDevEnv(), true);
+  assert.strictEqual(isProdEnv(), false);
+
+  appEnvState.val = 'production';
+  assert.strictEqual(isDevEnv(), false);
+  assert.strictEqual(isProdEnv(), true);
+
+  // Reset back to development
+  appEnvState.val = 'development';
+});
+
+
+
 
 

@@ -4,12 +4,16 @@ import { metrics } from '../server/metrics.js';
 
 export default async function handler(req, res) {
   const start = Date.now();
+  const endTracking = metrics.startRequest({ endpoint: '/api/chat-prompts', method: req.method, req });
   res.on('finish', () => {
+    endTracking();
     metrics.recordHttpRequest({
       endpoint: '/api/chat-prompts',
       method: req.method,
       status: res.statusCode,
       durationMs: Date.now() - start,
+      req,
+      res,
     });
   });
 

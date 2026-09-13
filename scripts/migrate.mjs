@@ -99,8 +99,8 @@ export async function initMigrationsTable(databaseUrl, tableName = 'teach4all_mi
  */
 export async function getAppliedMigrations(databaseUrl, tableName = 'teach4all_migrations', client = null) {
   const sanitizedTable = tableName.replace(/[^a-zA-Z0-9_]/g, '');
+  await initMigrationsTable(databaseUrl, sanitizedTable, client);
   if (client) {
-    await initMigrationsTable(databaseUrl, sanitizedTable, client);
     const res = await client.query(`SELECT name FROM ${sanitizedTable} ORDER BY id ASC;`);
     return new Set(res.rows.map(r => r.name.trim()).filter(Boolean));
   }

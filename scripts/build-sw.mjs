@@ -1,8 +1,14 @@
-import { readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { createHash } from 'node:crypto';
 
 const dist = 'dist';
+const p404 = join(dist, '404.html');
+if (existsSync(p404)) {
+  const content = readFileSync(p404, 'utf8').replace(/<link rel="stylesheet"[^>]*>\s*/g, '');
+  writeFileSync(p404, content);
+}
+
 const swSrc = 'src/sw.js';
 const swDest = join(dist, 'sw.js');
 

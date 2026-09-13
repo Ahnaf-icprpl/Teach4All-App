@@ -4,6 +4,7 @@ import { MAX_INPUT } from '../storage.js';
 import {
   currentChat, hasMessages, draft, setDraft, sendMessage, focusComposer,
   modal, toast, online, offlineReady, storageError, loading, messagesLoading,
+  webSearchEnabled, toggleWebSearch, searchingWeb,
 } from '../state.js';
 import { getModel } from '../router.js';
 import { renderMarkdown } from '../markdown.js';
@@ -14,7 +15,6 @@ const { div, section, h1, h2, p, span, button, textarea, form, article } = van.t
 function Welcome() {
   return section({ class: 'welcome', 'aria-labelledby': 'welcome-title' },
     div({ class: 'welcome-symbol' }, icon('mountain'), span({ class: 'symbol-dot' })),
-    div({ class: 'welcome-eyebrow' }, span(), () => t('chat_welcome_eyebrow')),
     h1({ id: 'welcome-title' }, () => t('chat_welcome_title_p1'), van.tags.br(), () => t('chat_welcome_title_p2'), span({ class: 'accent-word' }, () => t('chat_welcome_title_p3'))),
     p({ class: 'welcome-description' },
       () => t('chat_welcome_desc_p1'),
@@ -68,11 +68,16 @@ function Messages() {
           message.text
             ? renderMarkdown(message.text)
             : (isGenerating
-                ? span({ class: 'typing-indicator', 'aria-label': () => t('chat_typing_aria'), title: () => t('chat_typing_aria') },
-                    span({ class: 'typing-dot' }),
-                    span({ class: 'typing-dot' }),
-                    span({ class: 'typing-dot' }),
-                  )
+                ? (searchingWeb.val
+                    ? span({ class: 'searching-web-indicator' },
+                        icon('globe', 'spin-slow'),
+                        () => t('chat_web_search_status'),
+                      )
+                    : span({ class: 'typing-indicator', 'aria-label': () => t('chat_typing_aria'), title: () => t('chat_typing_aria') },
+                        span({ class: 'typing-dot' }),
+                        span({ class: 'typing-dot' }),
+                        span({ class: 'typing-dot' }),
+                      ))
                 : '')
         ),
         message.role === 'assistant' && message.text && !loading.val
@@ -134,6 +139,15 @@ function Composer() {
             'aria-label': () => t('chat_composer_tools_aria'), title: () => t('chat_composer_tools_aria'),
             onclick: () => { modal.val = { type: 'tools' }; },
           }, icon('plus')),
+          button({
+            type: 'button',
+            class: () => `icon-button search-toggle-button ${webSearchEnabled.val && online.val ? 'is-active' : ''}`,
+            'aria-label': () => !online.val ? t('chat_web_search_offline') : (webSearchEnabled.val ? t('chat_web_search_active') : t('chat_web_search_inactive')),
+            title: () => !online.val ? t('chat_web_search_offline') : (webSearchEnabled.val ? t('chat_web_search_active') : t('chat_web_search_inactive')),
+            'aria-pressed': () => String(webSearchEnabled.val && online.val),
+            disabled: () => !online.val,
+            onclick: () => toggleWebSearch(),
+          }, icon('globe')),
         ),
         div({ class: 'send-tools' },
           () => span({ class: `input-count ${draft.val.length > MAX_INPUT - 300 ? '' : 'is-hidden'}` }, `${draft.val.length}/${MAX_INPUT}`),
@@ -158,8 +172,12 @@ function Suggestions() {
         onclick: rotatePrompts,
       }, icon('spark')),
     ),
-    div({ class: 'suggestion-grid' }, () => activePrompts.val.map(prompt =>
-      button({ class: 'suggestion-card', onclick: () => { setDraft(prompt.prompt); focusComposer(); } },
+    () => div({ class: 'suggestion-grid' }, activePrompts.val.map(prompt =>
+      button({
+        type: 'button',
+        class: 'suggestion-card',
+        onclick: () => { setDraft(prompt.prompt); focusComposer(); },
+      },
         span({ class: `suggestion-icon ${prompt.color || 'amber'}` }, icon(prompt.icon || 'bulb')),
         span({ class: 'suggestion-title' }, prompt.title),
         span({ class: 'suggestion-detail' }, prompt.detail),

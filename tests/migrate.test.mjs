@@ -53,7 +53,7 @@ test('runMigrations connects, skips already applied migrations, and stores state
     return; // Skip DB integration test if no DATABASE_URL configured
   }
 
-  const testTable = 'test_runner_migrations';
+  const testTable = `test_runner_migrations_${Date.now()}`;
   
   // Custom silent logger to capture output
   const logs = [];

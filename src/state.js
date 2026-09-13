@@ -27,12 +27,16 @@ export const chats = van.state([]);
 export const activeId = van.state(null);
 export const draft = van.state('');
 export const theme = van.state(initialTheme);
+export const webSearchEnabled = van.state(true);
+export const searchingWeb = van.state(false);
 export const loading = van.state(false);
 export const historyLoading = van.state(false);
 export const messagesLoading = van.state(false);
 export const sidebarOpen = van.state(false);
 export const sidebarCollapsed = van.state(false);
 export const search = van.state('');
+export const searchResults = van.state(null);
+export const searchLoading = van.state(false);
 export const storageError = van.state('');
 export const notice = van.state('');
 export const online = van.state(typeof navigator !== 'undefined' ? navigator.onLine : true);
@@ -40,15 +44,66 @@ export const offlineReady = van.state(false);
 export const updateReady = van.state(false);
 export const modal = van.state(null);
 let toastTimer;
+let searchDebounceTimer = null;
+
+export function onSearchInput(query) {
+  search.val = query;
+  const term = typeof query === 'string' ? query.trim() : '';
+  if (!term) {
+    if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+    searchResults.val = null;
+    searchLoading.val = false;
+    return;
+  }
+
+  searchLoading.val = true;
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+  searchDebounceTimer = setTimeout(async () => {
+    try {
+      const data = await fetchConversations({ userId: TEST_USER_ID, query: term });
+      if (Array.isArray(data?.conversations)) {
+        searchResults.val = data.conversations.map(c => {
+          const existing = chats.val.find(item => item.id === c.id);
+          return {
+            id: c.id,
+            title: c.title || t('state_default_title'),
+            messages: existing ? existing.messages : [],
+            messagesLoaded: existing ? existing.messagesLoaded : false,
+            updatedAt: c.updated_at ? new Date(c.updated_at).getTime() : Date.now(),
+          };
+        });
+      } else {
+        searchResults.val = [];
+      }
+    } catch (err) {
+      const qLower = term.toLowerCase();
+      searchResults.val = chats.val.filter(chat =>
+        chat.title.toLowerCase().includes(qLower) ||
+        (chat.messages && chat.messages.some(message => message.text?.toLowerCase().includes(qLower))),
+      );
+      reportClientError({
+        type: 'client_search_db_failed',
+        message: err.message,
+      });
+    } finally {
+      searchLoading.val = false;
+    }
+  }, 250);
+}
 
 export const currentChat = () => chats.val.find(chat => chat.id === activeId.val);
 export const hasMessages = () => Boolean(activeId.val || currentChat()?.messages?.length);
 export const workspace = () => ({
   version: 1, chats: chats.val, activeId: activeId.val, draft: draft.val, theme: theme.val,
+  webSearchEnabled: webSearchEnabled.val,
 });
 
 export function persist() {
   saveWorkspace(storage, workspace());
+}
+
+export function toggleWebSearch() {
+  webSearchEnabled.val = !webSearchEnabled.val;
 }
 
 export function setDraft(value) {
@@ -81,6 +136,38 @@ export function newChat() {
   rotatePrompts();
   persist();
   focusComposer();
+}
+
+export function startTopicChat(type, topicOrPrompt) {
+  if (loading.val) return;
+  if (chats.val.length >= MAX_CHATS) {
+    toast(t('state_max_chats_notice'));
+    return;
+  }
+  const isQuiz = type === 'quiz';
+  const prefix = isQuiz ? t('sidebar_quiz_draft') : t('sidebar_material_draft');
+  const custom = (topicOrPrompt || '').trim();
+  let promptText = '';
+
+  if (custom && custom.startsWith(prefix)) {
+    promptText = custom;
+  } else if (custom) {
+    promptText = `${prefix}${custom}`;
+  } else {
+    promptText = isQuiz
+      ? `${prefix}Sains dan Pengetahuan Umum`
+      : `${prefix}Sains dan Konsep Dasar`;
+  }
+
+  modal.val = null;
+  newChat();
+  draft.val = promptText;
+  sendMessage();
+}
+
+export function openQuickChat(type) {
+  sidebarOpen.val = false;
+  modal.val = { type };
 }
 
 export async function loadMessagesForChat(id) {
@@ -120,7 +207,15 @@ export async function selectChat(id) {
   persist();
   focusComposer();
 
-  const chat = chats.val.find(c => c.id === id);
+  let chat = chats.val.find(c => c.id === id);
+  if (!chat && searchResults.val) {
+    const foundInSearch = searchResults.val.find(c => c.id === id);
+    if (foundInSearch) {
+      chats.val = [foundInSearch, ...chats.val];
+      chat = foundInSearch;
+    }
+  }
+
   if (chat && !chat.messagesLoaded) {
     await loadMessagesForChat(id);
   }
@@ -158,10 +253,6 @@ export async function loadChatHistory() {
 export function sendMessage() {
   const text = draft.val.trim();
   if (!text || loading.val) return;
-  if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    toast(t('state_offline_notice'));
-    return;
-  }
   const existing = currentChat();
   if (!existing && chats.val.length >= MAX_CHATS) {
     toast(t('state_max_chats_notice'));
@@ -204,7 +295,7 @@ export function sendMessage() {
       .catch(() => {});
   }
   
-  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+  if ((typeof navigator !== 'undefined' && !navigator.onLine) || !online.val) {
     const replyText = createReply(text);
     chats.val = chats.val.map(c => {
       if (c.id === chat.id) {
@@ -228,7 +319,9 @@ export function sendMessage() {
     return;
   }
 
+  searchingWeb.val = Boolean(webSearchEnabled.val && online.val);
   sendApiMessage(messageHistory, (chunkText) => {
+    if (searchingWeb.val) searchingWeb.val = false;
     const updatedChats = chats.val.map(c => {
       if (c.id === chat.id) {
         return {
@@ -252,11 +345,14 @@ export function sendMessage() {
     userMessageId: userMessage.id,
     assistantMessageId: assistantMessage.id,
     userId: TEST_USER_ID,
+    webSearch: webSearchEnabled.val && online.val,
   }).then(() => {
+    searchingWeb.val = false;
     loading.val = false;
     persist();
     focusComposer();
   }).catch((error) => {
+    searchingWeb.val = false;
     loading.val = false;
     const errorMessage = error.message || t('state_send_failed');
 

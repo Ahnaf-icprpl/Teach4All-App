@@ -2,15 +2,13 @@
   .workspace { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--bg); }
   .chat-stage { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; overflow-y: auto; padding: 0 42px; }
   .welcome { text-align: center; margin-top: clamp(38px, 7.7vh, 92px); flex-shrink: 0; }
-  .welcome-symbol { display: inline-flex; align-items: center; justify-content: center; width: 59px; height: 59px; border-radius: 19px; background: var(--off-white); border: 0; color: var(--gold-amber); position: relative; transform: rotate(-5deg); box-shadow: var(--shadow); }
+  .welcome-symbol { display: inline-flex; align-items: center; justify-content: center; width: 59px; height: 59px; border-radius: 19px; background: var(--off-white); border: 0; color: var(--gold-amber); position: relative; transform: rotate(-5deg); box-shadow: var(--shadow); margin-bottom: 22px; }
   .welcome-symbol .icon { width: 35px; height: 35px; transform: rotate(5deg); stroke-width: 1.45; }
   .symbol-dot { position: absolute; width: 10px; height: 10px; border-radius: 50%; background: var(--terracotta); border: 0; right: -3px; top: -2px; }
-  .welcome-eyebrow { color: var(--medium-gray); display: flex; align-items: center; justify-content: center; gap: 7px; font-size: 9px; letter-spacing: 2px; font-weight: 500; margin: 24px 0 18px; }
-  .welcome-eyebrow span { display: inline-block; height: 4px; width: 4px; border-radius: 50%; background: var(--dusty-terracotta); }
   .welcome h1 { font-size: clamp(35px, 3.5vw, 49px); font-weight: 450; line-height: 1.2; letter-spacing: -2px; color: var(--near-black); }
   .accent-word { color: var(--terracotta); }
   .welcome-description { margin-top: 20px; color: var(--medium-gray); font-size: 13px; line-height: 1.9; letter-spacing: .03px; }
-  .composer-wrap { width: 100%; max-width: 720px; flex-shrink: 0; margin-top: 35px; }
+  .composer-wrap { width: 100%; max-width: 780px; flex-shrink: 0; margin-top: 35px; }
   .composer { background: var(--off-white); border: 1px solid var(--muted-gray); border-radius: 17px; padding: 20px 17px 12px; box-shadow: var(--shadow); transition: border-color .15s, box-shadow .15s; }
   .composer:focus-within { border-color: var(--terracotta); box-shadow: 0 0 0 3px rgba(159, 81, 58, 0.12), var(--shadow); }
   .composer textarea { display: block; width: 100%; padding: 0 3px; border: 0; outline: none; background: transparent; resize: none; min-height: 29px; max-height: 180px; font-size: 14px; line-height: 1.65; scrollbar-width: thin; color: var(--near-black); }
@@ -19,13 +17,18 @@
   .composer-tools, .send-tools { display: flex; align-items: center; gap: 10px; }
   .add-button { width: 28px; height: 28px; border-radius: 50%; color: var(--slate-gray); }
   .add-button .icon { width: 20px; height: 20px; }
+  .search-toggle-button { width: 28px; height: 28px; border-radius: 50%; color: var(--slate-gray); transition: color .15s, background .15s; }
+  .search-toggle-button .icon { width: 18px; height: 18px; }
+  .search-toggle-button:hover:not(:disabled) { background: rgba(0, 0, 0, 0.05); }
+  .search-toggle-button.is-active { color: var(--terracotta); background: rgba(184, 80, 66, 0.12); }
+  .search-toggle-button:disabled { opacity: 0.4; cursor: not-allowed; }
   .send-button { width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; border-radius: 11px; background: var(--terracotta); color: var(--off-white); transition: background .15s, transform .15s; }
   .send-button:not(:disabled):hover { background: var(--terracotta-hover); transform: translateY(-1px); }
   .send-button:disabled { background: var(--soft-beige); color: var(--muted-gray); cursor: not-allowed; }
   .send-button .icon { width: 20px; height: 20px; }
   .send-button .is-loading { animation: spin 1s linear infinite; }
   .input-count { font-size: 9px; color: var(--medium-gray); }
-  .suggestions { width: 100%; max-width: 720px; margin-top: 32px; margin-bottom: 24px; }
+  .suggestions { width: 100%; max-width: 780px; margin-top: 32px; margin-bottom: 24px; }
   .suggestions-label { display: flex; align-items: center; gap: 12px; font-size: 10px; color: var(--medium-gray); margin-bottom: 13px; }
   .little-line { height: 1px; background: var(--muted-gray); flex: 1; opacity: .75; }
   .suggestion-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
@@ -37,8 +40,8 @@
   .blue { background: #E5ECF2; color: var(--slate-navy); }
   .purple { background: #F4ECE7; color: var(--terracotta); }
   .green { background: var(--soft-beige); color: var(--slate-gray); }
-  .suggestion-title { font-size: 11px; font-weight: 550; letter-spacing: -.05px; white-space: nowrap; color: var(--near-black); }
-  .suggestion-detail { font-size: 9px; color: var(--medium-gray); margin-top: 7px; white-space: nowrap; }
+  .suggestion-title { font-size: 13.5px; font-weight: 550; letter-spacing: -.05px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; color: var(--near-black); }
+  .suggestion-detail { font-size: 11.5px; color: var(--medium-gray); margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   .suggestion-arrow { position: absolute; right: 12px; top: 20px; height: 13px; width: 13px; color: var(--terracotta); opacity: 0; transform: translateX(-4px); transition: opacity .15s, transform .15s; }
   .suggestion-card:hover .suggestion-arrow, .suggestion-card:focus-visible .suggestion-arrow { opacity: 1; transform: translateX(0); }
   .workspace-footer { display: flex; align-items: center; justify-content: center; gap: 7px; color: var(--medium-gray); font-size: 9px; letter-spacing: .1px; padding: 20px 15px 23px; flex-shrink: 0; }
@@ -89,6 +92,9 @@
   .error-label { color: var(--terracotta); background: rgba(159, 81, 58, 0.08); }
   @keyframes spin { to { transform: rotate(360deg); } }
   .typing-indicator { display: inline-flex; align-items: center; gap: 5px; padding: 4px 2px; min-height: 22px; vertical-align: middle; }
+  .searching-web-indicator { display: inline-flex; align-items: center; gap: 7px; padding: 5px 12px; border-radius: 12px; background: rgba(184, 80, 66, 0.08); border: 1px solid rgba(184, 80, 66, 0.2); font-size: 11.5px; color: var(--slate-gray); font-weight: 500; }
+  .searching-web-indicator .icon { width: 14px; height: 14px; color: var(--terracotta); }
+  .spin-slow { animation: spin 3s linear infinite; }
   .typing-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--terracotta); opacity: 0.3; animation: typing-pulse 1.3s infinite ease-in-out; }
   .typing-dot:nth-child(1) { animation-delay: 0s; }
   .typing-dot:nth-child(2) { animation-delay: 0.2s; }
@@ -100,12 +106,12 @@
   .copy-button { margin-top: 9px; width: 28px; height: 28px; color: var(--slate-gray); }
   .copy-button .icon { width: 14px; height: 14px; }
   .message-history-loader { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 48px 0; color: var(--medium-gray); font-size: 12.5px; }
-  .has-messages .composer-wrap { margin-top: 10px; width: calc(100% - 80px); }
+  .has-messages .composer-wrap { margin-top: 10px; width: calc(100% - 48px); max-width: 800px; }
   .has-messages .workspace-footer { padding-top: 14px; padding-bottom: 17px; }
   [data-theme="dark"] .composer { border-color: var(--line); background: var(--surface); }
   [data-theme="dark"] .welcome-symbol { background: var(--surface); }
   [data-theme="dark"] .welcome h1 { color: var(--text); }
-  [data-theme="dark"] .welcome-description, [data-theme="dark"] .welcome-eyebrow { color: var(--muted); }
+  [data-theme="dark"] .welcome-description { color: var(--muted); }
   [data-theme="dark"] .composer textarea { color: var(--text); }
   [data-theme="dark"] .message-user .message-text { background: var(--surface); color: var(--text); }
   [data-theme="dark"] .assistant-label, [data-theme="dark"] .message-text { color: var(--text); }
@@ -127,57 +133,169 @@
   }
   @media (max-width: 1200px) {
     .suggestion-card { padding-left: 10px; padding-right: 10px; }
-    .suggestion-title { font-size: 10px; }
-    .suggestion-detail { font-size: 8px; }
+    .suggestion-title { font-size: 12.5px; }
+    .suggestion-detail { font-size: 10.5px; }
   }
   @media (max-width: 1000px) {
     .chat-stage { padding: 0 28px; }
     .welcome h1 { font-size: 38px; }
-    .suggestion-grid { grid-template-columns: repeat(2, 1fr); }
-    .suggestion-card { padding: 12px 13px 13px 52px; min-height: 62px; justify-content: center; }
-    .suggestion-icon { position: absolute; left: 12px; top: 15px; margin: 0; }
-    .suggestion-title { font-size: 11px; }
-    .suggestion-detail { font-size: 9px; }
-    .suggestion-arrow { display: none; }
+    .suggestion-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .suggestion-card {
+      display: grid;
+      grid-template-columns: 36px 1fr auto;
+      grid-template-rows: auto auto;
+      column-gap: 12px;
+      row-gap: 2px;
+      align-items: center;
+      padding: 13px 16px;
+      min-height: 60px;
+    }
+    .suggestion-icon {
+      position: static;
+      grid-column: 1;
+      grid-row: 1 / span 2;
+      width: 36px;
+      height: 36px;
+      margin: 0;
+      align-self: center;
+    }
+    .suggestion-icon .icon { width: 18px; height: 18px; }
+    .suggestion-title {
+      grid-column: 2;
+      grid-row: 1;
+      font-size: 13.5px;
+      font-weight: 550;
+      white-space: normal;
+      overflow: visible;
+      line-height: 1.35;
+    }
+    .suggestion-detail {
+      grid-column: 2;
+      grid-row: 2;
+      font-size: 11.5px;
+      margin-top: 0;
+      white-space: normal;
+      overflow: visible;
+      line-height: 1.35;
+    }
+    .suggestion-arrow {
+      position: static;
+      grid-column: 3;
+      grid-row: 1 / span 2;
+      display: block;
+      width: 15px;
+      height: 15px;
+      opacity: 0.6;
+      transform: none;
+      align-self: center;
+    }
     .suggestions { margin-top: 25px; }
   }
   @media (max-width: 760px) {
     .welcome { margin-top: clamp(24px, 7vh, 68px); }
     .welcome h1 { font-size: clamp(31px, 6vw, 43px); letter-spacing: -1.5px; }
-    .welcome-symbol { height: 49px; width: 49px; border-radius: 16px; }
+    .welcome-symbol { height: 49px; width: 49px; border-radius: 16px; margin-bottom: 18px; }
     .welcome-symbol .icon { height: 29px; width: 29px; }
-    .welcome-eyebrow { margin-top: 20px; margin-bottom: 16px; font-size: 8px; }
     .welcome-description { font-size: 11px; margin-top: 16px; }
-    .chat-stage { padding: 0 22px; }
-    .composer-wrap { margin-top: 28px; }
-    .composer { border-radius: 14px; padding: 17px 13px 10px; }
-    .composer textarea { font-size: 16px; }
-    .composer-toolbar { margin-top: 14px; }
-    .suggestion-card { padding-left: 45px; }
-    .suggestion-icon { width: 25px; height: 25px; left: 10px; top: 17px; }
-    .suggestion-icon .icon { height: 15px; width: 15px; }
-    .suggestion-title { font-size: 10px; }
-    .suggestion-detail { font-size: 8px; }
-    .suggestions { margin-top: 24px; }
+    .chat-stage { padding: 0 14px; }
+    .composer-wrap { margin-top: 24px; }
+    .composer { border-radius: 14px; padding: 15px 13px 10px; }
+    .composer textarea { font-size: 13.5px; line-height: 1.55; }
+    .composer-toolbar { margin-top: 12px; }
+    .suggestions { width: 100%; margin-top: 22px; margin-bottom: 20px; }
+    .suggestion-grid { grid-template-columns: 1fr; gap: 9px; width: 100%; }
+    .suggestion-card {
+      display: grid;
+      grid-template-columns: 36px 1fr auto;
+      grid-template-rows: auto auto;
+      column-gap: 12px;
+      row-gap: 2px;
+      align-items: center;
+      padding: 12px 15px;
+      min-height: 56px;
+      width: 100%;
+      border-radius: 12px;
+    }
+    .suggestion-icon {
+      position: static;
+      grid-column: 1;
+      grid-row: 1 / span 2;
+      width: 36px;
+      height: 36px;
+      border-radius: 9px;
+      margin: 0;
+      align-self: center;
+      justify-self: center;
+    }
+    .suggestion-icon .icon { width: 18px; height: 18px; }
+    .suggestion-title {
+      grid-column: 2;
+      grid-row: 1;
+      font-size: 13.5px;
+      font-weight: 550;
+      white-space: normal;
+      overflow: visible;
+      line-height: 1.35;
+      text-overflow: clip;
+    }
+    .suggestion-detail {
+      grid-column: 2;
+      grid-row: 2;
+      font-size: 11.5px;
+      margin-top: 0;
+      white-space: normal;
+      overflow: visible;
+      line-height: 1.35;
+      text-overflow: clip;
+    }
+    .suggestion-arrow {
+      position: static;
+      grid-column: 3;
+      grid-row: 1 / span 2;
+      display: block;
+      width: 15px;
+      height: 15px;
+      opacity: 0.65;
+      transform: none;
+      align-self: center;
+    }
     .workspace-footer { padding-top: 14px; padding-bottom: max(17px, env(safe-area-inset-bottom)); font-size: 8px; }
-    .has-messages .composer-wrap { width: calc(100% - 32px); }
+    .has-messages .composer-wrap {
+      width: calc(100% - 20px);
+      margin-top: 8px;
+      margin-bottom: max(20px, calc(10px + env(safe-area-inset-bottom, 0px)));
+    }
     .message-content { padding: 18px 22px; }
     .message { font-size: 13px; }
     .has-messages .workspace-footer { display: none; }
   }
   @media (max-width: 370px) {
-    .chat-stage { padding: 0 15px; }
+    .chat-stage { padding: 0 10px; }
     .welcome h1 { font-size: 29px; }
     .welcome-description { font-size: 10px; }
-    .suggestion-grid { gap: 7px; }
-    .suggestion-title { font-size: 9px; }
-    .suggestion-detail { font-size: 7px; }
+    .composer { border-radius: 13px; padding: 13px 11px 8px; }
+    .composer textarea { font-size: 12.5px; }
+    .has-messages .composer-wrap {
+      width: calc(100% - 14px);
+      margin-top: 6px;
+      margin-bottom: max(16px, calc(8px + env(safe-area-inset-bottom, 0px)));
+    }
+    .suggestion-grid { gap: 8px; }
+    .suggestion-card {
+      grid-template-columns: 32px 1fr auto;
+      column-gap: 10px;
+      padding: 10px 12px;
+      min-height: 52px;
+    }
+    .suggestion-icon { width: 32px; height: 32px; }
+    .suggestion-icon .icon { width: 16px; height: 16px; }
+    .suggestion-title { font-size: 12.5px; }
+    .suggestion-detail { font-size: 10.5px; }
   }
   @media (max-height: 780px) and (min-width: 1001px) {
     .welcome { margin-top: 28px; }
-    .welcome-symbol { height: 47px; width: 47px; border-radius: 15px; }
+    .welcome-symbol { height: 47px; width: 47px; border-radius: 15px; margin-bottom: 16px; }
     .welcome-symbol .icon { height: 29px; width: 29px; }
-    .welcome-eyebrow { margin-top: 17px; margin-bottom: 13px; }
     .welcome h1 { font-size: 42px; }
     .welcome-description { margin-top: 14px; }
     .composer-wrap { margin-top: 27px; }

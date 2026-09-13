@@ -1,0 +1,61 @@
+/**
+ * Web search plugin builder for OpenRouter integration.
+ * Uses the cheapest search engine ('parallel' at $0.001/request) by default,
+ * executing web search grounding and injecting verified real-time sources into prompt context.
+ */
+
+export const DEFAULT_SEARCH_ENGINE = 'parallel';
+
+/**
+ * Builds the OpenRouter web search plugin descriptor.
+ * @param {object} serverEnv
+ * @returns {object} OpenRouter web search plugin configuration
+ */
+export function buildWebSearchPlugin(serverEnv = {}) {
+  const engine = (
+    serverEnv.OPENROUTER_SEARCH_ENGINE ||
+    process.env.OPENROUTER_SEARCH_ENGINE ||
+    DEFAULT_SEARCH_ENGINE
+  ).trim();
+
+  return {
+    id: 'web',
+    engine,
+    max_results: 3,
+  };
+}
+
+/**
+ * Builds the openrouter:web_search server tool descriptor (for models supporting server tools).
+ * @param {object} serverEnv
+ * @returns {object}
+ */
+export function buildWebSearchTool(serverEnv = {}) {
+  const engine = (
+    serverEnv.OPENROUTER_SEARCH_ENGINE ||
+    process.env.OPENROUTER_SEARCH_ENGINE ||
+    DEFAULT_SEARCH_ENGINE
+  ).trim();
+
+  return {
+    type: 'openrouter:web_search',
+    parameters: {
+      engine,
+      max_results: 3,
+      max_uses: 1,
+    },
+  };
+}
+
+/**
+ * Determines whether web search should be provided to the model.
+ * Defaults to true unless explicitly turned off by the client.
+ * @param {any} webSearchParam
+ * @returns {boolean}
+ */
+export function isWebSearchRequested(webSearchParam) {
+  if (webSearchParam === false || webSearchParam === 'false' || webSearchParam === 0) {
+    return false;
+  }
+  return true;
+}

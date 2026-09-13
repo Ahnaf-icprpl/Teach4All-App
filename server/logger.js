@@ -217,6 +217,8 @@ export class GrafanaLogger {
     const sanitizedAttrs = sanitizeAttributes(attributes, this.maxTextLength);
     const recordAttrs = {
       ...sanitizedAttrs,
+      level: level?.toLowerCase() || 'info',
+      severity: sev.text,
       env: sanitizedAttrs.env || activeEnv,
     };
 
@@ -278,23 +280,32 @@ export class GrafanaLogger {
    * Send batched log records to Grafana OTLP Gateway over HTTP.
    */
   async flush() {
-    if (this.queue.length === 0 || this.flushing) return;
+    if (this.queue.length === 0 && !this.flushing) return;
 
-    const records = this.queue.splice(0, this.batchSize);
-    this.flushing = true;
+    while (this.queue.length > 0 || this.flushing) {
+      if (this.flushing) {
+        await this._currentFlushPromise;
+        continue;
+      }
+      if (this.queue.length === 0) break;
 
-    try {
-      await this.sendToGrafana(records);
-    } catch (err) {
-      // Gracefully handle network drops without crashing application runtime
-      if (this.enableConsole) {
-        console.error('[GrafanaLogger] Failed to deliver logs to Grafana:', err.message);
-      }
-    } finally {
-      this.flushing = false;
-      if (this.queue.length > 0) {
-        this.scheduleFlush();
-      }
+      const records = this.queue.splice(0, this.batchSize);
+      this.flushing = true;
+
+      this._currentFlushPromise = (async () => {
+        try {
+          await this.sendToGrafana(records);
+        } catch (err) {
+          // Gracefully handle network drops without crashing application runtime
+          if (this.enableConsole) {
+            console.error('[GrafanaLogger] Failed to deliver logs to Grafana:', err.message);
+          }
+        } finally {
+          this.flushing = false;
+        }
+      })();
+
+      await this._currentFlushPromise;
     }
   }
 

@@ -69,6 +69,33 @@ export default defineConfig(({ mode }) => {
         configurePreviewServer(server) {
           server.middlewares.use(createChatMiddleware({ ...env, ENV: appEnv, env: appEnv }));
         },
+        async transformIndexHtml(html, ctx) {
+          const path = ctx?.path || '';
+          const filename = ctx?.filename || '';
+          if (path.includes('404') || filename.includes('404') || html.includes('Galat 404')) {
+            return html;
+          }
+          try {
+            const dbUrl = process.env.DATABASE_URL || env.DATABASE_URL;
+            if (dbUrl) {
+              const { getUiTextsFromDb, getChatPromptsFromDb } = await import('./server/uiTextsApi.js');
+              const { renderSsrHtml } = await import('./server/ssr.js');
+              const texts = await getUiTextsFromDb(dbUrl);
+              const prompts = await getChatPromptsFromDb(dbUrl);
+              if (texts && Object.keys(texts).length && prompts && prompts.length) {
+                return renderSsrHtml({ htmlTemplate: html, texts, prompts });
+              }
+            }
+          } catch {}
+          return html;
+        },
+        generateBundle(options, bundle) {
+          for (const [fileName, chunk] of Object.entries(bundle)) {
+            if (fileName === '404.html' && chunk.type === 'asset' && typeof chunk.source === 'string') {
+              chunk.source = chunk.source.replace(/<link rel="stylesheet"[^>]*>/g, '');
+            }
+          }
+        },
       },
     ],
     build: {

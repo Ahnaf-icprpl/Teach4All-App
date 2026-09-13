@@ -1,11 +1,13 @@
 export const THEME_STORAGE_KEY = 'teach4all.theme.v1';
+export const QUIZZES_STORAGE_KEY = 'teach4all.quizzes.v1';
+export const MATERIALS_STORAGE_KEY = 'teach4all.materials.v1';
 export const LOCAL_DB_NAME = 'teach4all_localdb';
 export const LOCAL_DB_STORE = 'settings';
 export const MAX_CHATS = 100;
 export const MAX_INPUT = 6000;
 
 export function emptyWorkspace() {
-  return { version: 1, chats: [], activeId: null, draft: '', theme: 'system' };
+  return { version: 1, chats: [], activeId: null, draft: '', theme: 'system', webSearchEnabled: true };
 }
 
 /**

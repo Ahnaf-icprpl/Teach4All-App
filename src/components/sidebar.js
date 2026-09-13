@@ -2,7 +2,8 @@ import van from 'vanjs-core';
 import { icon } from '../icons.js';
 import {
   chats, activeId, newChat, selectChat, modal, sidebarOpen,
-  sidebarCollapsed, search, setDraft, focusComposer, historyLoading,
+  sidebarCollapsed, search, searchResults, searchLoading,
+  onSearchInput, openQuickChat, historyLoading,
 } from '../state.js';
 import { t } from '../uiTexts.js';
 
@@ -18,16 +19,18 @@ function emptyHistory() {
 
 export function Sidebar() {
   const filtered = () => {
-    const term = search.val.trim().toLowerCase();
+    const term = search.val.trim();
     if (!term) return chats.val;
+    if (searchResults.val !== null) return searchResults.val;
+    const qLower = term.toLowerCase();
     return chats.val.filter(chat =>
-      chat.title.toLowerCase().includes(term) ||
-      (chat.messages && chat.messages.some(message => message.text?.toLowerCase().includes(term))),
+      chat.title.toLowerCase().includes(qLower) ||
+      (chat.messages && chat.messages.some(message => message.text?.toLowerCase().includes(qLower))),
     );
   };
 
   const conversationList = () => {
-    if (historyLoading.val && !chats.val.length) {
+    if ((historyLoading.val && !chats.val.length) || (searchLoading.val && searchResults.val === null)) {
       return div({ class: 'empty-history' },
         span({ class: 'typing-indicator', 'aria-label': () => t('sidebar_history_loading_aria'), title: () => t('sidebar_history_loading_aria') },
           span({ class: 'typing-dot' }),
@@ -85,27 +88,19 @@ export function Sidebar() {
         button({
           class: 'quick-action-button',
           'aria-label': () => t('sidebar_quiz_aria'),
-          onclick: () => {
-            newChat();
-            setDraft(t('sidebar_quiz_draft'));
-            focusComposer();
-          },
+          onclick: () => openQuickChat('quiz'),
         }, icon('spark'), span(() => t('sidebar_quiz_button'))),
         button({
           class: 'quick-action-button',
           'aria-label': () => t('sidebar_material_aria'),
-          onclick: () => {
-            newChat();
-            setDraft(t('sidebar_material_draft'));
-            focusComposer();
-          },
+          onclick: () => openQuickChat('material'),
         }, icon('book'), span(() => t('sidebar_material_button'))),
       ),
       div({ class: 'search-field' }, icon('search'),
         input({
           id: 'chat-search', type: 'search', placeholder: () => t('sidebar_search_placeholder'),
           'aria-label': () => t('sidebar_search_aria'), value: () => search.val,
-          oninput: event => { search.val = event.target.value; },
+          oninput: event => onSearchInput(event.target.value),
         }),
       ),
     ),

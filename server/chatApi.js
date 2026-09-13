@@ -19,8 +19,12 @@ import {
 } from './providerCache.js';
 import { handleErrorLogRequest } from './errorApi.js';
 import { handleUiTextsRequest, handleChatPromptsRequest } from './uiTextsApi.js';
+import { handleQuizzesRequest } from './quizzesApi.js';
+import { handleMaterialsRequest } from './materialsApi.js';
 import { logger, logDevRequest } from './logger.js';
 import { metrics } from './metrics.js';
+import { buildWebSearchPlugin, buildWebSearchTool, isWebSearchRequested } from './webSearch.js';
+import { createChatMiddleware, dispatchApi } from './chatMiddleware.js';
 
 export const DEFAULT_MODEL = 'google/gemini-2.5-flash-lite';
 export const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
@@ -37,6 +41,13 @@ export {
   handleErrorLogRequest,
   handleUiTextsRequest,
   handleChatPromptsRequest,
+  handleQuizzesRequest,
+  handleMaterialsRequest,
+  buildWebSearchPlugin,
+  buildWebSearchTool,
+  isWebSearchRequested,
+  createChatMiddleware,
+  dispatchApi,
 };
 
 export function isPlaceholderKey(key) {
@@ -159,6 +170,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
     userMessageId,
     assistantMessageId,
     userId,
+    webSearch,
   } = parsed;
 
   if (!Array.isArray(messages) || messages.length === 0) {
@@ -191,6 +203,9 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
   const cachedProvider = conversationId ? await getConversationProvider(conversationId, { redisClient }) : null;
   const providerRouting = buildProviderRoutingPayload(conversationId, cachedProvider);
 
+  const enableSearch = isWebSearchRequested(webSearch);
+  const webPlugin = enableSearch ? buildWebSearchPlugin(serverEnv) : null;
+
   const clientLoc = getClientLocation(req);
   logger.info('Chat stream requested', {
     endpoint: '/api/chat',
@@ -202,6 +217,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
     prompt: promptText,
     messages_count: messages.length,
     cached_provider: cachedProvider || 'none',
+    web_search: enableSearch ? (webPlugin?.engine || 'parallel') : 'disabled',
   });
 
   const formattedMessages = formatMessages(messages);
@@ -228,6 +244,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
         messages: formattedMessages,
         stream: true,
         user: userId || clientIp,
+        ...(webPlugin ? { plugins: [webPlugin] } : {}),
         ...providerRouting,
       }),
       signal: controller.signal,
@@ -296,6 +313,8 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
     let sseBuffer = '';
     let chunkCount = 0;
     let bytesStreamed = 0;
+    let accumulatedText = '';
+    const citations = [];
 
     try {
       while (true) {
@@ -325,7 +344,16 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
             }
             const delta = json.choices?.[0]?.delta?.content || '';
             if (delta) {
+              accumulatedText += delta;
               streamWriter.writeChunk(delta);
+            }
+            const anns = json.choices?.[0]?.delta?.annotations || [];
+            for (const ann of anns) {
+              if (ann?.type === 'url_citation' && ann.url_citation?.url) {
+                if (!citations.some(c => c.url === ann.url_citation.url)) {
+                  citations.push(ann.url_citation);
+                }
+              }
             }
           } catch {}
         }
@@ -338,10 +366,26 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
             const json = JSON.parse(data);
             const delta = json.choices?.[0]?.delta?.content || '';
             if (delta) {
+              accumulatedText += delta;
               streamWriter.writeChunk(delta);
+            }
+            const anns = json.choices?.[0]?.delta?.annotations || [];
+            for (const ann of anns) {
+              if (ann?.type === 'url_citation' && ann.url_citation?.url) {
+                if (!citations.some(c => c.url === ann.url_citation.url)) {
+                  citations.push(ann.url_citation);
+                }
+              }
             }
           } catch {}
         }
+      }
+
+      if (citations.length > 0 && !accumulatedText.includes('http')) {
+        const sourcesBlock = '\n\n**Sumber:**\n' + citations.map(c => `- [${c.title || c.url}](${c.url})`).join('\n');
+        accumulatedText += sourcesBlock;
+        res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: sourcesBlock } }] })}\n\n`);
+        streamWriter.writeChunk(sourcesBlock);
       }
 
       await streamWriter.finish();
@@ -389,80 +433,4 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
   }
 }
 
-async function dispatchApi(handler, req, res, serverEnv, routeName) {
-  try {
-    await handler(req, res, serverEnv);
-  } catch (err) {
-    logger.error(`Unhandled error in ${routeName} middleware`, { error: err.message, stack: err.stack });
-    if (!res.headersSent) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: { message: 'Internal server error.' } }));
-    }
-  }
-}
 
-export function createChatMiddleware(serverEnv = {}) {
-  return async (req, res, next) => {
-    const isDev = (serverEnv.ENV || serverEnv.env || process.env.ENV || process.env.env || '').toLowerCase() === 'development' || logger.isDev();
-    const clientIp = getClientIp(req);
-    const start = Date.now();
-    const url = req.url ? req.url.split('?')[0] : '';
-    const fullUrl = req.url || '/';
-    const method = req.method || 'GET';
-
-    if (isDev) {
-      logger.info(`Incoming ${method} ${fullUrl}`, {
-        dev_trace: true,
-        method,
-        url: fullUrl,
-        client_ip: clientIp,
-        user_agent: req.headers['user-agent'] || '',
-      });
-    }
-
-    res.on('finish', () => {
-      const durationMs = Date.now() - start;
-      metrics.recordHttpRequest({ endpoint: url || fullUrl, method, status: res.statusCode, durationMs });
-      metrics.flush().catch(() => {});
-      if (isDev) {
-        logger.info(`Completed ${method} ${fullUrl} -> ${res.statusCode} (${durationMs}ms)`, {
-          dev_trace: true,
-          method,
-          url: fullUrl,
-          status: res.statusCode,
-          duration_ms: durationMs,
-          client_ip: clientIp,
-        });
-      }
-    });
-
-    if (url === '/api/chat' || url === '/api/chat/') {
-      return dispatchApi(handleChatRequest, req, res, serverEnv, '/api/chat');
-    }
-    if (url === '/api/title' || url === '/api/title/') {
-      return dispatchApi(handleTitleRequest, req, res, serverEnv, '/api/title');
-    }
-    if (url === '/api/conversations' || url === '/api/conversations/') {
-      return dispatchApi(handleConversationsRequest, req, res, serverEnv, '/api/conversations');
-    }
-    if (url === '/api/messages' || url === '/api/messages/') {
-      return dispatchApi(handleMessagesRequest, req, res, serverEnv, '/api/messages');
-    }
-    if (url === '/api/log-error' || url === '/api/log-error/') {
-      return dispatchApi(handleErrorLogRequest, req, res, serverEnv, '/api/log-error');
-    }
-    if (url === '/api/ui-texts' || url === '/api/ui-texts/') {
-      return dispatchApi(handleUiTextsRequest, req, res, serverEnv, '/api/ui-texts');
-    }
-    if (url === '/api/chat-prompts' || url === '/api/chat-prompts/') {
-      return dispatchApi(handleChatPromptsRequest, req, res, serverEnv, '/api/chat-prompts');
-    }
-    if (url.startsWith('/api/')) {
-      logger.warn('API endpoint not found (404)', { endpoint: url, method, client_ip: clientIp });
-      res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: { message: `Route ${url} not found` } }));
-      return;
-    }
-    if (next) next();
-  };
-}

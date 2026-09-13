@@ -18,6 +18,7 @@ import {
   DEFAULT_MODEL as SERVER_DEFAULT_MODEL,
   OPENROUTER_API_URL,
 } from '../server/chatApi.js';
+import { buildWebSearchPlugin, buildWebSearchTool, isWebSearchRequested, DEFAULT_SEARCH_ENGINE } from '../server/webSearch.js';
 import { SYSTEM_PROMPT, injectSystemPrompt } from '../prompts/systemPrompt.js';
 import {
   TITLE_SYSTEM_PROMPT,
@@ -37,7 +38,7 @@ import {
 import {
   generateTitle, TITLE_API_URL,
   fetchConversations, fetchMessages, deleteConversationApi,
-  renameConversationApi, CONVERSATIONS_API_URL, MESSAGES_API_URL,
+  renameConversationApi, searchConversationsApi, CONVERSATIONS_API_URL, MESSAGES_API_URL,
   TEST_USER_ID,
 } from '../src/router.js';
 import {
@@ -1238,6 +1239,284 @@ test('chat prompts rotate randomly across items from table without fallback', as
   rotatePrompts();
   assert.strictEqual(activePrompts.val.length, 4);
 });
+
+test('renderSsrHtml strictly populates database texts and prompts without fallback', async () => {
+  const { renderSsrHtml } = await import('../server/ssr.js');
+
+  // Throws if texts or prompts are missing
+  assert.throws(() => {
+    renderSsrHtml({ htmlTemplate: '<html><head></head><body></body></html>', texts: {}, prompts: [] });
+  }, /No UI text or prompts available/);
+
+  const mockTexts = {
+    app_skip_link: 'Skip to content',
+    sidebar_brand_prefix: 'Teach',
+    sidebar_brand_number: '4',
+    sidebar_brand_suffix: 'All',
+    chat_welcome_title_p1: 'Hello World',
+  };
+  const mockPrompts = [
+    { id: 1, title: 'Test Prompt 1', detail: 'Detail 1', prompt: 'Prompt 1', icon: 'bulb', color: 'amber' },
+  ];
+
+  const html = renderSsrHtml({
+    htmlTemplate: '<!doctype html><html><head></head><body></body></html>',
+    texts: mockTexts,
+    prompts: mockPrompts,
+  });
+
+  assert.ok(html.includes('id="__TEACH4ALL_DATA__"'));
+  assert.ok(html.includes('window.__INITIAL_UI_DATA__ ='));
+  assert.ok(html.includes('Skip to content'));
+  assert.ok(html.includes('Hello World'));
+  assert.ok(html.includes('Test Prompt 1'));
+});
+
+test('initUiTexts hydrates instantly from window.__INITIAL_UI_DATA__', async () => {
+  const { uiTexts, allChatPrompts, activePrompts, isLoaded, initUiTexts } = await import('../src/uiTexts.js');
+
+  globalThis.window = {
+    __INITIAL_UI_DATA__: {
+      texts: { app_skip_link: 'Lompat ke pesan' },
+      prompts: [
+        { id: 1, title: 'Prompt SSR', detail: 'Detail SSR', prompt: 'Text SSR', icon: 'bulb', color: 'amber' },
+      ],
+    },
+  };
+
+  const success = await initUiTexts();
+  assert.strictEqual(success, true);
+  assert.strictEqual(uiTexts.val.app_skip_link, 'Lompat ke pesan');
+  assert.strictEqual(allChatPrompts.val.length, 1);
+  assert.strictEqual(activePrompts.val.length, 1);
+  assert.strictEqual(isLoaded.val, true);
+
+  delete globalThis.window;
+});
+
+test('getConversations and handleConversationsRequest search database by title and message content', async () => {
+  const searchConvId = '77777777-7777-7777-7777-777777777777';
+  await saveConversation({ id: searchConvId, userId: TEST_USER_ID, title: 'Fisika Kuantum' });
+  await saveMessage({
+    id: '88888888-8888-8888-8888-888888888888',
+    conversationId: searchConvId,
+    userId: TEST_USER_ID,
+    role: 'user',
+    content: 'Jelaskan prinsip ketidakpastian Heisenberg secara mendalam.',
+  });
+
+  // 1. Search by title match
+  const titleResults = await getConversations({ userId: TEST_USER_ID, query: 'Kuantum' });
+  assert.ok(titleResults.some(c => c.id === searchConvId));
+
+  // 2. Search by message content match
+  const contentResults = await getConversations({ userId: TEST_USER_ID, query: 'Heisenberg' });
+  assert.ok(contentResults.some(c => c.id === searchConvId));
+
+  // 3. Search with non-matching term returns empty
+  const noMatchResults = await getConversations({ userId: TEST_USER_ID, query: 'NonExistentTermXYZ123' });
+  assert.strictEqual(noMatchResults.some(c => c.id === searchConvId), false);
+
+  // 4. HTTP API search via ?q=
+  const searchReq = new EventEmitter();
+  searchReq.method = 'GET';
+  searchReq.url = `/api/conversations?userId=${TEST_USER_ID}&q=Heisenberg`;
+  searchReq.headers = { 'x-forwarded-for': '127.0.0.1' };
+
+  let statusCode = 0;
+  let responseData = '';
+  const searchRes = {
+    writeHead: (code) => { statusCode = code; },
+    end: (str) => { responseData = str; },
+    setHeader: () => {},
+  };
+
+  await handleConversationsRequest(searchReq, searchRes, { RATE_LIMIT: 1000 });
+  assert.strictEqual(statusCode, 200);
+  const parsed = JSON.parse(responseData);
+  assert.ok(parsed.conversations.some(c => c.id === searchConvId));
+
+  // 5. Client searchConversationsApi helper attaches query param
+  const originalFetch = globalThis.fetch;
+  let interceptedUrl = '';
+  globalThis.fetch = async (url) => {
+    interceptedUrl = url;
+    return new Response(JSON.stringify({ conversations: [{ id: searchConvId, title: 'Fisika Kuantum' }] }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+
+  try {
+    const apiRes = await searchConversationsApi('Heisenberg', { userId: TEST_USER_ID });
+    assert.ok(interceptedUrl.includes('q=Heisenberg'));
+    assert.strictEqual(apiRes.conversations[0].id, searchConvId);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await deleteConversation({ conversationId: searchConvId, userId: TEST_USER_ID });
+  }
+});
+
+test('handleSsrRequest returns 404 status and 404.html template for unknown paths', async () => {
+  const { handleSsrRequest, load404HtmlTemplate } = await import('../server/ssr.js');
+
+  const template404 = load404HtmlTemplate();
+  assert.ok(template404.includes('Halaman Tidak Ditemukan'));
+  assert.ok(!template404.includes('id="app"'));
+
+  let statusCode = 0;
+  let headers = {};
+  let body = '';
+  const req = { url: '/unknown-route-123' };
+  const res = {
+    writeHead(code, h) {
+      statusCode = code;
+      headers = h;
+    },
+    end(b) {
+      body = b;
+    },
+  };
+
+  await handleSsrRequest(req, res);
+  assert.strictEqual(statusCode, 404);
+  assert.strictEqual(headers['Content-Type'], 'text/html; charset=utf-8');
+  assert.ok(body.includes('Halaman Tidak Ditemukan'));
+  assert.ok(!body.includes('id="app"'));
+});
+
+test('createChatMiddleware logs completed >= 400 requests with logger.error', async () => {
+  const { createChatMiddleware } = await import('../server/chatApi.js');
+  const logged = [];
+  const origError = logger.error.bind(logger);
+  const origInfo = logger.info.bind(logger);
+  logger.error = (msg, attrs) => {
+    logged.push({ level: 'error', msg, attrs });
+    return origError(msg, attrs);
+  };
+  logger.info = (msg, attrs) => {
+    logged.push({ level: 'info', msg, attrs });
+    return origInfo(msg, attrs);
+  };
+
+  try {
+    const middleware = createChatMiddleware({ ENV: 'development' });
+    const req = { method: 'GET', url: '/igrungrihbh', headers: { accept: 'text/html' } };
+    const finishListeners = [];
+    const res = {
+      statusCode: 200,
+      writeHead(code) { this.statusCode = code; },
+      end() {
+        for (const fn of finishListeners) fn();
+      },
+      on(evt, fn) {
+        if (evt === 'finish') finishListeners.push(fn);
+      },
+    };
+
+    await middleware(req, res, () => {});
+    assert.strictEqual(res.statusCode, 404);
+    const completionLog = logged.find(l => l.msg && l.msg.includes('Completed GET /igrungrihbh -> 404'));
+    assert(completionLog, 'Expected completion log for /igrungrihbh');
+    assert.strictEqual(completionLog.level, 'error', 'Expected 404 completion log to be marked as error level');
+  } finally {
+    logger.error = origError;
+    logger.info = origInfo;
+  }
+});
+
+test('buildWebSearchPlugin returns cheapest parallel plugin by default and respects env overrides', () => {
+  assert.strictEqual(DEFAULT_SEARCH_ENGINE, 'parallel');
+  const defaultPlugin = buildWebSearchPlugin({});
+  assert.strictEqual(defaultPlugin.id, 'web');
+  assert.strictEqual(defaultPlugin.engine, 'parallel');
+  assert.strictEqual(defaultPlugin.max_results, 3);
+
+  const customPlugin = buildWebSearchPlugin({ OPENROUTER_SEARCH_ENGINE: 'perplexity' });
+  assert.strictEqual(customPlugin.engine, 'perplexity');
+});
+
+test('isWebSearchRequested recognizes boolean and falsy triggers', () => {
+  assert.strictEqual(isWebSearchRequested(undefined), true);
+  assert.strictEqual(isWebSearchRequested(true), true);
+  assert.strictEqual(isWebSearchRequested('auto'), true);
+  assert.strictEqual(isWebSearchRequested(false), false);
+  assert.strictEqual(isWebSearchRequested('false'), false);
+  assert.strictEqual(isWebSearchRequested(0), false);
+});
+
+test('server handleChatRequest provides web search plugin with cheapest parallel engine and max_results limit', async () => {
+  const originalFetch = globalThis.fetch;
+  let interceptedPayload = null;
+
+  globalThis.fetch = async (url, options) => {
+    interceptedPayload = JSON.parse(options.body);
+    const sseData = 'data: {"choices":[{"delta":{"content":"Search response"}}]}\n\ndata: [DONE]\n\n';
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(sseData));
+        controller.close();
+      },
+    });
+    return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+  };
+
+  try {
+    const { req, res } = createMockReqRes({
+      body: { messages: [{ role: 'user', text: 'Berita terbaru' }] },
+    });
+
+    await handleChatRequest(req, res, {
+      OPENROUTER_API_KEY: 'sk-or-valid-test-key-1234',
+    });
+
+    assert.ok(interceptedPayload);
+    assert.ok(Array.isArray(interceptedPayload.plugins));
+    assert.strictEqual(interceptedPayload.plugins.length, 1);
+    assert.strictEqual(interceptedPayload.plugins[0].id, 'web');
+    assert.strictEqual(interceptedPayload.plugins[0].engine, 'parallel');
+    assert.strictEqual(interceptedPayload.plugins[0].max_results, 3);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('server handleChatRequest omits plugins when webSearch is explicitly false', async () => {
+  const originalFetch = globalThis.fetch;
+  let interceptedPayload = null;
+
+  globalThis.fetch = async (url, options) => {
+    interceptedPayload = JSON.parse(options.body);
+    const sseData = 'data: {"choices":[{"delta":{"content":"No search"}}]}\n\ndata: [DONE]\n\n';
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(sseData));
+        controller.close();
+      },
+    });
+    return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+  };
+
+  try {
+    const { req, res } = createMockReqRes({
+      body: { messages: [{ role: 'user', text: 'Tanpa pencarian' }], webSearch: false },
+    });
+
+    await handleChatRequest(req, res, {
+      OPENROUTER_API_KEY: 'sk-or-valid-test-key-1234',
+    });
+
+    assert.ok(interceptedPayload);
+    assert.strictEqual(interceptedPayload.plugins, undefined);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+
+
 
 
 

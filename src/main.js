@@ -3,6 +3,7 @@ import { icon } from './icons.js';
 import { Sidebar } from './components/sidebar.js';
 import { Chat } from './components/chat.js';
 import { Dialogs } from './components/dialogs.js';
+import { DevNotice } from './components/devNotice.js';
 import {
   sidebarOpen, sidebarCollapsed, theme, setTheme, modal, notice,
   online, newChat, focusComposer, currentChat,
@@ -11,6 +12,7 @@ import { registerOffline } from './offline.js';
 import { isDevEnv } from './env.js';
 import { initClientErrorMonitoring } from './errorLogger.js';
 import { initUiTexts, t } from './uiTexts.js';
+import { initStudyModules } from './studyModules.js';
 import './styles/base.css';
 import './styles/sidebar.css';
 import './styles/chat.css';
@@ -37,10 +39,10 @@ function Topbar() {
       button({
         class: 'icon-button open-sidebar hamburger-menu', 'aria-label': () => t('topbar_open_nav'), 'aria-controls': 'sidebar',
         'aria-expanded': () => String(sidebarOpen.val || !sidebarCollapsed.val),
-        onclick: () => { sidebarOpen.val = true; sidebarCollapsed.val = false; },
+        onclick: () => { sidebarOpen.val = !sidebarOpen.val; sidebarCollapsed.val = false; },
       }, icon('menu')),
       button({
-        class: 'icon-button', 'aria-label': () => t('topbar_new_chat'), title: () => t('topbar_new_chat'),
+        class: 'icon-button topbar-new-chat', 'aria-label': () => t('topbar_new_chat'), title: () => t('topbar_new_chat'),
         onclick: newChat,
       }, icon('compose')),
       () => {
@@ -86,6 +88,7 @@ function App() {
       onclick: () => { sidebarOpen.val = false; },
     }),
     main({ class: 'main', id: 'main' },
+      DevNotice(),
       Topbar(),
       Chat(),
     ),
@@ -95,11 +98,36 @@ function App() {
 }
 
 async function initApp() {
+  if (typeof window !== 'undefined') {
+    const path = window.location.pathname;
+    const isAppPath = path === '/' || path.endsWith('/index.html') || path.endsWith('/');
+    if (!isAppPath && !path.includes('404.html')) {
+      window.location.replace('./404.html');
+      return;
+    }
+  }
+
   const loaded = await initUiTexts();
   if (!loaded) return;
-  van.add(document.body, App());
-  registerOffline();
-  focusComposer();
+  initStudyModules();
+
+  const mount = () => {
+    const existingApp = document.getElementById('app');
+    if (existingApp) {
+      existingApp.replaceWith(App());
+    } else {
+      van.add(document.body, App());
+    }
+    registerOffline();
+    focusComposer();
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', mount, { once: true });
+  } else {
+    mount();
+  }
+
   if (typeof window !== 'undefined' && document.readyState !== 'complete') {
     window.addEventListener('load', focusComposer, { once: true });
   }

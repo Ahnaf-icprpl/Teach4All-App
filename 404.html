@@ -202,28 +202,5 @@
         Teach4All — Ruang untuk Rasa Ingin Tahu
       </div>
     </main>
-    <script>
-      (function() {
-        try {
-          var payload = JSON.stringify({
-            type: 'not_found',
-            path: window.location.pathname,
-            href: window.location.href,
-            referrer: document.referrer || '',
-            userAgent: navigator.userAgent || ''
-          });
-          if (navigator.sendBeacon) {
-            navigator.sendBeacon('/api/log-error', new Blob([payload], { type: 'application/json' }));
-          } else {
-            fetch('/api/log-error', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: payload,
-              keepalive: true
-            }).catch(function() {});
-          }
-        } catch (e) {}
-      })();
-    </script>
   </body>
 </html>

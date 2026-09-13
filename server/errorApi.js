@@ -83,18 +83,17 @@ export async function handleErrorLogRequest(req, res, serverEnv = {}) {
   if (source) meta.source = truncateText(String(source), 200);
   if (lineno) meta.lineno = Number(lineno);
   if (colno) meta.colno = Number(colno);
-  if (stack) meta.stack = truncateText(String(stack), 800);
+  if (type === 'not_found') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
+    return;
+  }
 
   metrics.recordClientError({ type, path: meta.path });
-
-  if (type === 'not_found') {
-    logger.warn(`Client 404: Not Found at ${meta.path || 'unknown'}`, meta);
-  } else {
-    logger.error(`Client Error: ${truncateText(String(message || 'Unknown runtime error'), 300)}`, {
-      ...meta,
-      message: truncateText(String(message || ''), 300),
-    });
-  }
+  logger.error(`Client Error: ${truncateText(String(message || 'Unknown runtime error'), 300)}`, {
+    ...meta,
+    message: truncateText(String(message || ''), 300),
+  });
 
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ ok: true }));

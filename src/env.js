@@ -1,3 +1,5 @@
+import { appEnvState } from './uiTexts.js';
+
 /**
  * Environment configuration helper for Teach4All.
  * Valid values: 'production' | 'development'
@@ -51,6 +53,12 @@ export function getAppEnv() {
  * Check if running in development environment.
  */
 export function isDevEnv() {
+  if (appEnvState?.val) {
+    return appEnvState.val === 'development';
+  }
+  if (typeof window !== 'undefined' && window.__INITIAL_UI_DATA__?.env) {
+    return window.__INITIAL_UI_DATA__.env === 'development';
+  }
   if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.ENV) {
     return import.meta.env.ENV === 'development';
   }
@@ -61,6 +69,12 @@ export function isDevEnv() {
  * Check if running in production environment.
  */
 export function isProdEnv() {
+  if (appEnvState?.val) {
+    return appEnvState.val === 'production';
+  }
+  if (typeof window !== 'undefined' && window.__INITIAL_UI_DATA__?.env) {
+    return window.__INITIAL_UI_DATA__.env === 'production';
+  }
   if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.ENV) {
     return import.meta.env.ENV === 'production';
   }
