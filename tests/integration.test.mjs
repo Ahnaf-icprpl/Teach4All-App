@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, extname } from 'node:path';
 import { createReply } from '../src/replies.js';
+import { generateOfflineTitle } from '../src/prompts/titlePrompt.js';
 
 test('all code files under 500 lines', () => {
   const root = 'src';
@@ -133,6 +134,19 @@ test('offline standalone companion generates deterministic replies with zero ext
   const photoReply = createReply('Explain photosynthesis simply');
   assert.ok(photoReply.includes('photosynthesis'), 'reply must explain photosynthesis');
   assert.ok(photoReply.includes('solar-powered kitchen'), 'reply must include intuitive explanation');
+
+  // Verify quiz and material offline companion replies
+  const quizReply = createReply('Buatkan kuis singkat 5 soal pilihan ganda tentang topik berikut: Sains');
+  assert.ok(quizReply.includes('kuis singkat 5 soal'), 'reply must include quiz structure');
+  assert.ok(quizReply.includes('1.'), 'reply must include numbered quiz items');
+
+  const materialReply = createReply('Jelaskan ringkasan materi pembelajaran terstruktur mengenai topik berikut: Sains');
+  assert.ok(materialReply.includes('ringkasan materi terstruktur'), 'reply must include structured material');
+  assert.ok(materialReply.includes('3 Pilar Pemahaman'), 'reply must include 3 pillars');
+
+  // Verify offline title cleaner handles quiz and material prompts seamlessly
+  assert.strictEqual(generateOfflineTitle('Buatkan kuis singkat 5 soal pilihan ganda tentang topik berikut: Sains dan Pengetahuan Umum'), 'Sains dan Pengetahuan Umum');
+  assert.strictEqual(generateOfflineTitle('Jelaskan ringkasan materi pembelajaran terstruktur mengenai topik berikut: Fotosintesis'), 'Fotosintesis');
 });
 
 test('.env.example documents valid ENV options and update banner is removed from all envs', () => {

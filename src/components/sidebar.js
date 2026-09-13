@@ -3,7 +3,7 @@ import { icon } from '../icons.js';
 import {
   chats, activeId, newChat, selectChat, modal, sidebarOpen,
   sidebarCollapsed, search, searchResults, searchLoading,
-  onSearchInput, setDraft, focusComposer, historyLoading,
+  onSearchInput, openQuickChat, historyLoading,
 } from '../state.js';
 import { t } from '../uiTexts.js';
 
@@ -88,20 +88,12 @@ export function Sidebar() {
         button({
           class: 'quick-action-button',
           'aria-label': () => t('sidebar_quiz_aria'),
-          onclick: () => {
-            newChat();
-            setDraft(t('sidebar_quiz_draft'));
-            focusComposer();
-          },
+          onclick: () => openQuickChat('quiz'),
         }, icon('spark'), span(() => t('sidebar_quiz_button'))),
         button({
           class: 'quick-action-button',
           'aria-label': () => t('sidebar_material_aria'),
-          onclick: () => {
-            newChat();
-            setDraft(t('sidebar_material_draft'));
-            focusComposer();
-          },
+          onclick: () => openQuickChat('material'),
         }, icon('book'), span(() => t('sidebar_material_button'))),
       ),
       div({ class: 'search-field' }, icon('search'),

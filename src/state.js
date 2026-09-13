@@ -131,6 +131,32 @@ export function newChat() {
   focusComposer();
 }
 
+export function openQuickChat(type) {
+  if (loading.val) return;
+  if (chats.val.length >= MAX_CHATS) {
+    toast(t('state_max_chats_notice'));
+    return;
+  }
+  const isQuiz = type === 'quiz';
+  const prefix = isQuiz ? t('sidebar_quiz_draft') : t('sidebar_material_draft');
+  const currentDraft = draft.val.trim();
+  let promptText = '';
+
+  if (currentDraft && !currentDraft.startsWith(prefix)) {
+    promptText = `${prefix}${currentDraft}`;
+  } else if (currentDraft.startsWith(prefix) && currentDraft.length > prefix.length) {
+    promptText = currentDraft;
+  } else {
+    promptText = isQuiz
+      ? `${prefix}Sains dan Pengetahuan Umum`
+      : `${prefix}Sains dan Konsep Dasar`;
+  }
+
+  newChat();
+  draft.val = promptText;
+  sendMessage();
+}
+
 export async function loadMessagesForChat(id) {
   if (messagesLoading.val) return;
   messagesLoading.val = true;
@@ -214,10 +240,6 @@ export async function loadChatHistory() {
 export function sendMessage() {
   const text = draft.val.trim();
   if (!text || loading.val) return;
-  if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    toast(t('state_offline_notice'));
-    return;
-  }
   const existing = currentChat();
   if (!existing && chats.val.length >= MAX_CHATS) {
     toast(t('state_max_chats_notice'));
@@ -260,7 +282,7 @@ export function sendMessage() {
       .catch(() => {});
   }
   
-  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+  if ((typeof navigator !== 'undefined' && !navigator.onLine) || !online.val) {
     const replyText = createReply(text);
     chats.val = chats.val.map(c => {
       if (c.id === chat.id) {
