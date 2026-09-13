@@ -18,6 +18,7 @@ import {
   DEFAULT_MODEL as SERVER_DEFAULT_MODEL,
   OPENROUTER_API_URL,
 } from '../server/chatApi.js';
+import { buildWebSearchTool, isWebSearchRequested, DEFAULT_SEARCH_ENGINE } from '../server/webSearch.js';
 import { SYSTEM_PROMPT, injectSystemPrompt } from '../prompts/systemPrompt.js';
 import {
   TITLE_SYSTEM_PROMPT,
@@ -1421,6 +1422,100 @@ test('createChatMiddleware logs completed >= 400 requests with logger.error', as
   } finally {
     logger.error = origError;
     logger.info = origInfo;
+  }
+});
+
+test('buildWebSearchTool returns cheapest parallel server tool by default and respects env overrides', () => {
+  assert.strictEqual(DEFAULT_SEARCH_ENGINE, 'parallel');
+  const defaultTool = buildWebSearchTool({});
+  assert.strictEqual(defaultTool.type, 'openrouter:web_search');
+  assert.strictEqual(defaultTool.parameters.engine, 'parallel');
+  assert.strictEqual(defaultTool.parameters.max_results, 3);
+  assert.strictEqual(defaultTool.parameters.max_uses, 1);
+
+  const customTool = buildWebSearchTool({ OPENROUTER_SEARCH_ENGINE: 'perplexity' });
+  assert.strictEqual(customTool.parameters.engine, 'perplexity');
+});
+
+test('isWebSearchRequested recognizes boolean and falsy triggers', () => {
+  assert.strictEqual(isWebSearchRequested(undefined), true);
+  assert.strictEqual(isWebSearchRequested(true), true);
+  assert.strictEqual(isWebSearchRequested('auto'), true);
+  assert.strictEqual(isWebSearchRequested(false), false);
+  assert.strictEqual(isWebSearchRequested('false'), false);
+  assert.strictEqual(isWebSearchRequested(0), false);
+});
+
+test('server handleChatRequest provides autonomous web_search tool with cheapest engine and max_tool_calls limit', async () => {
+  const originalFetch = globalThis.fetch;
+  let interceptedPayload = null;
+
+  globalThis.fetch = async (url, options) => {
+    interceptedPayload = JSON.parse(options.body);
+    const sseData = 'data: {"choices":[{"delta":{"content":"Search response"}}]}\n\ndata: [DONE]\n\n';
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(sseData));
+        controller.close();
+      },
+    });
+    return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+  };
+
+  try {
+    const { req, res } = createMockReqRes({
+      body: { messages: [{ role: 'user', text: 'Berita terbaru' }] },
+    });
+
+    await handleChatRequest(req, res, {
+      OPENROUTER_API_KEY: 'sk-or-valid-test-key-1234',
+    });
+
+    assert.ok(interceptedPayload);
+    assert.strictEqual(interceptedPayload.max_tool_calls, 1);
+    assert.ok(Array.isArray(interceptedPayload.tools));
+    assert.strictEqual(interceptedPayload.tools.length, 1);
+    assert.strictEqual(interceptedPayload.tools[0].type, 'openrouter:web_search');
+    assert.strictEqual(interceptedPayload.tools[0].parameters.engine, 'parallel');
+    assert.strictEqual(interceptedPayload.tools[0].parameters.max_results, 3);
+    assert.strictEqual(interceptedPayload.tools[0].parameters.max_uses, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('server handleChatRequest omits tools when webSearch is explicitly false', async () => {
+  const originalFetch = globalThis.fetch;
+  let interceptedPayload = null;
+
+  globalThis.fetch = async (url, options) => {
+    interceptedPayload = JSON.parse(options.body);
+    const sseData = 'data: {"choices":[{"delta":{"content":"No search"}}]}\n\ndata: [DONE]\n\n';
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(sseData));
+        controller.close();
+      },
+    });
+    return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+  };
+
+  try {
+    const { req, res } = createMockReqRes({
+      body: { messages: [{ role: 'user', text: 'Tanpa pencarian' }], webSearch: false },
+    });
+
+    await handleChatRequest(req, res, {
+      OPENROUTER_API_KEY: 'sk-or-valid-test-key-1234',
+    });
+
+    assert.ok(interceptedPayload);
+    assert.strictEqual(interceptedPayload.tools, undefined);
+    assert.strictEqual(interceptedPayload.max_tool_calls, undefined);
+  } finally {
+    globalThis.fetch = originalFetch;
   }
 });
 

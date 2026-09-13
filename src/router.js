@@ -34,6 +34,7 @@ export async function sendMessage(messages, onChunk, options = {}) {
       ...(options.conversationTitle ? { conversationTitle: options.conversationTitle } : {}),
       ...(options.userMessageId ? { userMessageId: options.userMessageId } : {}),
       ...(options.assistantMessageId ? { assistantMessageId: options.assistantMessageId } : {}),
+      ...(options.webSearch !== undefined ? { webSearch: options.webSearch } : {}),
     };
 
     const response = await fetch(CHAT_API_URL, {

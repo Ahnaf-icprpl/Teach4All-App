@@ -27,6 +27,8 @@ export const chats = van.state([]);
 export const activeId = van.state(null);
 export const draft = van.state('');
 export const theme = van.state(initialTheme);
+export const webSearchEnabled = van.state(true);
+export const searchingWeb = van.state(false);
 export const loading = van.state(false);
 export const historyLoading = van.state(false);
 export const messagesLoading = van.state(false);
@@ -93,10 +95,15 @@ export const currentChat = () => chats.val.find(chat => chat.id === activeId.val
 export const hasMessages = () => Boolean(activeId.val || currentChat()?.messages?.length);
 export const workspace = () => ({
   version: 1, chats: chats.val, activeId: activeId.val, draft: draft.val, theme: theme.val,
+  webSearchEnabled: webSearchEnabled.val,
 });
 
 export function persist() {
   saveWorkspace(storage, workspace());
+}
+
+export function toggleWebSearch() {
+  webSearchEnabled.val = !webSearchEnabled.val;
 }
 
 export function setDraft(value) {
@@ -312,7 +319,9 @@ export function sendMessage() {
     return;
   }
 
+  searchingWeb.val = Boolean(webSearchEnabled.val && online.val);
   sendApiMessage(messageHistory, (chunkText) => {
+    if (searchingWeb.val) searchingWeb.val = false;
     const updatedChats = chats.val.map(c => {
       if (c.id === chat.id) {
         return {
@@ -336,11 +345,14 @@ export function sendMessage() {
     userMessageId: userMessage.id,
     assistantMessageId: assistantMessage.id,
     userId: TEST_USER_ID,
+    webSearch: webSearchEnabled.val && online.val,
   }).then(() => {
+    searchingWeb.val = false;
     loading.val = false;
     persist();
     focusComposer();
   }).catch((error) => {
+    searchingWeb.val = false;
     loading.val = false;
     const errorMessage = error.message || t('state_send_failed');
 

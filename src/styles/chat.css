@@ -17,6 +17,11 @@
   .composer-tools, .send-tools { display: flex; align-items: center; gap: 10px; }
   .add-button { width: 28px; height: 28px; border-radius: 50%; color: var(--slate-gray); }
   .add-button .icon { width: 20px; height: 20px; }
+  .search-toggle-button { width: 28px; height: 28px; border-radius: 50%; color: var(--slate-gray); transition: color .15s, background .15s; }
+  .search-toggle-button .icon { width: 18px; height: 18px; }
+  .search-toggle-button:hover:not(:disabled) { background: rgba(0, 0, 0, 0.05); }
+  .search-toggle-button.is-active { color: var(--terracotta); background: rgba(184, 80, 66, 0.12); }
+  .search-toggle-button:disabled { opacity: 0.4; cursor: not-allowed; }
   .send-button { width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; border-radius: 11px; background: var(--terracotta); color: var(--off-white); transition: background .15s, transform .15s; }
   .send-button:not(:disabled):hover { background: var(--terracotta-hover); transform: translateY(-1px); }
   .send-button:disabled { background: var(--soft-beige); color: var(--muted-gray); cursor: not-allowed; }

@@ -7,7 +7,7 @@ export const MAX_CHATS = 100;
 export const MAX_INPUT = 6000;
 
 export function emptyWorkspace() {
-  return { version: 1, chats: [], activeId: null, draft: '', theme: 'system' };
+  return { version: 1, chats: [], activeId: null, draft: '', theme: 'system', webSearchEnabled: true };
 }
 
 /**
