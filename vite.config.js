@@ -1,4 +1,5 @@
 import { defineConfig, loadEnv } from 'vite';
+import { resolve } from 'node:path';
 import { createChatMiddleware } from './server/chatApi.js';
 
 export const VALID_ENVS = ['production', 'development'];
@@ -66,6 +67,12 @@ export default defineConfig(({ mode }) => {
       cssCodeSplit: false,
       sourcemap: false,
       assetsInlineLimit: 0,
+      rollupOptions: {
+        input: {
+          main: resolve(process.cwd(), 'index.html'),
+          404: resolve(process.cwd(), '404.html'),
+        },
+      },
     },
   };
 });

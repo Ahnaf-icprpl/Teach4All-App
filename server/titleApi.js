@@ -34,7 +34,10 @@ function isPlaceholderKey(key) {
 }
 
 export async function handleTitleRequest(req, res, serverEnv = {}) {
+  const clientIp = getClientIp(req);
+
   if (req.method !== 'POST') {
+    logger.warn('Method Not Allowed on /api/title', { endpoint: '/api/title', method: req.method, client_ip: clientIp });
     res.writeHead(405, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: { message: 'Method Not Allowed' } }));
     return;
@@ -52,7 +55,6 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
   });
 
   // Rate limiting check via Redis
-  const clientIp = getClientIp(req);
   const redisUrl = serverEnv.REDIS_URL || process.env.REDIS_URL;
   const redisClient = getRedisClient(redisUrl);
   const config = await getEndpointConfig('/api/title', { redisClient });
@@ -94,7 +96,14 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
   try {
     bodyStr = await bodyPromise;
   } catch (err) {
-    res.writeHead(err.message === 'Payload Too Large' ? 413 : 400, { 'Content-Type': 'application/json' });
+    const status = err.message === 'Payload Too Large' ? 413 : 400;
+    logger.warn('Title request body reading error', {
+      endpoint: '/api/title',
+      client_ip: clientIp,
+      status,
+      error: err.message,
+    });
+    res.writeHead(status, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: { message: err.message || 'Invalid request' } }));
     return;
   }
@@ -103,6 +112,7 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
   try {
     parsed = JSON.parse(bodyStr || '{}');
   } catch {
+    logger.warn('Invalid JSON in title request body', { endpoint: '/api/title', client_ip: clientIp });
     res.writeHead(400, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: { message: 'Invalid JSON body' } }));
     return;
@@ -111,6 +121,7 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
   const { messages, conversationId, userId } = parsed;
 
   if (!Array.isArray(messages) || messages.length === 0) {
+    logger.warn('Title request missing messages array', { endpoint: '/api/title', client_ip: clientIp });
     res.writeHead(400, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: { message: 'messages array is required' } }));
     return;

@@ -16,6 +16,7 @@ import {
   buildProviderRoutingPayload,
   extractProvider,
 } from './providerCache.js';
+import { handleErrorLogRequest } from './errorApi.js';
 import { logger } from './logger.js';
 
 export const DEFAULT_MODEL = 'google/gemini-2.5-flash-lite';
@@ -30,6 +31,7 @@ export {
   setConversationProvider,
   buildProviderRoutingPayload,
   extractProvider,
+  handleErrorLogRequest,
 };
 
 export function isPlaceholderKey(key) {
@@ -43,14 +45,16 @@ export function formatMessages(messages) {
 }
 
 export async function handleChatRequest(req, res, serverEnv = {}) {
+  const clientIp = getClientIp(req);
+
   if (req.method !== 'POST') {
+    logger.warn('Method Not Allowed on /api/chat', { endpoint: '/api/chat', method: req.method, client_ip: clientIp });
     res.writeHead(405, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: { message: 'Method Not Allowed' } }));
     return;
   }
 
   // Check rate limit via Redis (high-throughput in-memory check without touching PostgreSQL)
-  const clientIp = getClientIp(req);
   const redisUrl = serverEnv.REDIS_URL || process.env.REDIS_URL;
   const redisClient = getRedisClient(redisUrl);
   const config = await getEndpointConfig('/api/chat', { redisClient });
@@ -119,7 +123,14 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
       req.on('error', reject);
     });
   } catch (err) {
-    res.writeHead(err.message === 'Payload Too Large' ? 413 : 400, { 'Content-Type': 'application/json' });
+    const status = err.message === 'Payload Too Large' ? 413 : 400;
+    logger.warn('Chat request body reading error', {
+      endpoint: '/api/chat',
+      client_ip: clientIp,
+      status,
+      error: err.message,
+    });
+    res.writeHead(status, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: { message: err.message || 'Invalid request' } }));
     return;
   }
@@ -128,6 +139,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
   try {
     parsed = JSON.parse(bodyStr || '{}');
   } catch {
+    logger.warn('Invalid JSON in chat request body', { endpoint: '/api/chat', client_ip: clientIp });
     res.writeHead(400, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: { message: 'Invalid JSON body' } }));
     return;
@@ -143,6 +155,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
   } = parsed;
 
   if (!Array.isArray(messages) || messages.length === 0) {
+    logger.warn('Chat request missing messages array', { endpoint: '/api/chat', client_ip: clientIp });
     res.writeHead(400, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: { message: 'messages array is required' } }));
     return;
@@ -363,6 +376,7 @@ export function createChatMiddleware(serverEnv = {}) {
       try {
         await handleChatRequest(req, res, serverEnv);
       } catch (err) {
+        logger.error('Unhandled error in /api/chat middleware', { error: err.message, stack: err.stack });
         if (!res.headersSent) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: { message: 'Internal server error.' } }));
@@ -374,6 +388,7 @@ export function createChatMiddleware(serverEnv = {}) {
       try {
         await handleTitleRequest(req, res, serverEnv);
       } catch (err) {
+        logger.error('Unhandled error in /api/title middleware', { error: err.message, stack: err.stack });
         if (!res.headersSent) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: { message: 'Internal server error.' } }));
@@ -385,6 +400,7 @@ export function createChatMiddleware(serverEnv = {}) {
       try {
         await handleConversationsRequest(req, res, serverEnv);
       } catch (err) {
+        logger.error('Unhandled error in /api/conversations middleware', { error: err.message, stack: err.stack });
         if (!res.headersSent) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: { message: 'Internal server error.' } }));
@@ -396,11 +412,35 @@ export function createChatMiddleware(serverEnv = {}) {
       try {
         await handleMessagesRequest(req, res, serverEnv);
       } catch (err) {
+        logger.error('Unhandled error in /api/messages middleware', { error: err.message, stack: err.stack });
         if (!res.headersSent) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: { message: 'Internal server error.' } }));
         }
       }
+      return;
+    }
+    if (url === '/api/log-error' || url === '/api/log-error/') {
+      try {
+        await handleErrorLogRequest(req, res, serverEnv);
+      } catch (err) {
+        logger.error('Unhandled error in /api/log-error middleware', { error: err.message, stack: err.stack });
+        if (!res.headersSent) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: { message: 'Internal server error.' } }));
+        }
+      }
+      return;
+    }
+    if (url.startsWith('/api/')) {
+      const clientIp = getClientIp(req);
+      logger.warn('API endpoint not found (404)', {
+        endpoint: url,
+        method: req.method,
+        client_ip: clientIp,
+      });
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: `Route ${url} not found` } }));
       return;
     }
     if (next) next();

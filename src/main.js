@@ -9,10 +9,13 @@ import {
 } from './state.js';
 import { registerOffline } from './offline.js';
 import { isDevEnv } from './env.js';
+import { initClientErrorMonitoring } from './errorLogger.js';
 import './styles/base.css';
 import './styles/sidebar.css';
 import './styles/chat.css';
 import './styles/dialogs.css';
+
+initClientErrorMonitoring();
 
 const { div, main, header, button, span, a } = van.tags;
 const systemDark = window.matchMedia('(prefers-color-scheme: dark)');

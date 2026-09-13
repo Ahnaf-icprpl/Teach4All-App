@@ -108,6 +108,10 @@ export async function handleConversationsRequest(req, res, serverEnv = {}) {
     }
 
     if (!id) {
+      logger.warn('Missing conversation id in DELETE /api/conversations', {
+        endpoint: '/api/conversations',
+        client_ip: clientIp,
+      });
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: { message: 'id is required' } }));
       return;
@@ -136,6 +140,10 @@ export async function handleConversationsRequest(req, res, serverEnv = {}) {
       const targetId = id || conversationId;
 
       if (!targetId || !title) {
+        logger.warn('Missing id or title in PATCH /api/conversations', {
+          endpoint: '/api/conversations',
+          client_ip: clientIp,
+        });
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: { message: 'id and title are required' } }));
         return;
@@ -156,13 +164,25 @@ export async function handleConversationsRequest(req, res, serverEnv = {}) {
     return;
   }
 
+  logger.warn('Method Not Allowed on /api/conversations', {
+    endpoint: '/api/conversations',
+    method,
+    client_ip: clientIp,
+  });
   res.writeHead(405, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ error: { message: 'Method Not Allowed' } }));
 }
 
 export async function handleMessagesRequest(req, res, serverEnv = {}) {
   const method = req.method || 'GET';
+  const clientIp = getClientIp(req);
+
   if (method !== 'GET') {
+    logger.warn('Method Not Allowed on /api/messages', {
+      endpoint: '/api/messages',
+      method,
+      client_ip: clientIp,
+    });
     res.writeHead(405, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: { message: 'Method Not Allowed' } }));
     return;
@@ -171,7 +191,6 @@ export async function handleMessagesRequest(req, res, serverEnv = {}) {
   const parsedUrl = new URL(req.url || '/', 'http://localhost');
   const databaseUrl = serverEnv.DATABASE_URL || process.env.DATABASE_URL;
 
-  const clientIp = getClientIp(req);
   const redisUrl = serverEnv.REDIS_URL || process.env.REDIS_URL;
   const redisClient = getRedisClient(redisUrl);
 
@@ -209,6 +228,10 @@ export async function handleMessagesRequest(req, res, serverEnv = {}) {
   const offset = parseInt(parsedUrl.searchParams.get('offset') || '0', 10);
 
   if (!conversationId) {
+    logger.warn('Missing conversationId in GET /api/messages', {
+      endpoint: '/api/messages',
+      client_ip: clientIp,
+    });
     res.writeHead(400, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: { message: 'conversationId is required' } }));
     return;
