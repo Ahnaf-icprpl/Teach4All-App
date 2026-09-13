@@ -1,8 +1,5 @@
 import { getRedisClient } from './redis.js';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-
-const execFileAsync = promisify(execFile);
+import { query } from './db.js';
 
 /**
  * In-memory fallback rate-limiter in case Redis is unavailable or unconfigured.
@@ -155,25 +152,16 @@ export async function getEndpointConfig(endpoint = '/api/chat', {
   let config = { rateLimitPerIp: 120, burstLimit: 25, windowSeconds: 60 };
   if (databaseUrl) {
     try {
-      const sanitized = endpoint.replace(/'/g, "''");
-      const query = `SELECT rate_limit_per_ip, burst_limit, window_seconds FROM endpoint_rate_limits WHERE endpoint = '${sanitized}' OR endpoint = '*' ORDER BY (endpoint = '*') ASC LIMIT 1;`;
-      const { stdout } = await execFileAsync('psql', [
-        databaseUrl,
-        '-v', 'ON_ERROR_STOP=1',
-        '-X',
-        '-q',
-        '-t',
-        '-A',
-        '-c', query,
-      ]);
-      const lines = (stdout || '').trim().split('\n').map(l => l.trim()).filter(l => l && l.includes('|'));
-      const line = lines[0];
-      if (line) {
-        const parts = line.split('|');
+      const rows = await query(
+        `SELECT rate_limit_per_ip, burst_limit, window_seconds FROM endpoint_rate_limits WHERE endpoint = $1 OR endpoint = '*' ORDER BY (endpoint = '*') ASC LIMIT 1;`,
+        [endpoint],
+        databaseUrl
+      );
+      if (rows && rows[0]) {
         config = {
-          rateLimitPerIp: Number(parts[0]) || 120,
-          burstLimit: Number(parts[1]) || 25,
-          windowSeconds: Number(parts[2]) || 60,
+          rateLimitPerIp: Number(rows[0].rate_limit_per_ip) || 120,
+          burstLimit: Number(rows[0].burst_limit) || 25,
+          windowSeconds: Number(rows[0].window_seconds) || 60,
         };
       }
     } catch {

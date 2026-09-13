@@ -48,7 +48,7 @@ test('migration files contain valid rate limit statements', () => {
   assert(m4.includes('DROP COLUMN IF EXISTS requests_per_minute'));
 });
 
-test('runMigrations connects, skips already applied migrations, and stores state in DB table', () => {
+test('runMigrations connects, skips already applied migrations, and stores state in DB table', async () => {
   if (!DB_URL) {
     return; // Skip DB integration test if no DATABASE_URL configured
   }
@@ -64,7 +64,7 @@ test('runMigrations connects, skips already applied migrations, and stores state
 
   try {
     // Run first time on dedicated test table
-    const res1 = runMigrations({
+    const res1 = await runMigrations({
       databaseUrl: DB_URL,
       tableName: testTable,
       logger: testLogger,
@@ -73,14 +73,14 @@ test('runMigrations connects, skips already applied migrations, and stores state
     assert(res1.applied.length >= 4, 'should apply migrations to test table');
 
     // Verify recorded state in database
-    const applied = getAppliedMigrations(DB_URL, testTable);
+    const applied = await getAppliedMigrations(DB_URL, testTable);
     assert(applied.has('001_initial_rate_limits.sql'));
     assert(applied.has('002_update_rate_limit_per_ip_all_endpoints.sql'));
     assert(applied.has('003_remove_unused_tables.sql'));
     assert(applied.has('004_drop_redundant_rpm_column.sql'));
 
     // Run second time on same test table -> must skip all already applied migrations
-    const res2 = runMigrations({
+    const res2 = await runMigrations({
       databaseUrl: DB_URL,
       tableName: testTable,
       logger: testLogger,
@@ -93,7 +93,7 @@ test('runMigrations connects, skips already applied migrations, and stores state
     assert(res2.skipped.includes('004_drop_redundant_rpm_column.sql'));
   } finally {
     try {
-      execSql(DB_URL, `DROP TABLE IF EXISTS ${testTable};`);
+      await execSql(DB_URL, `DROP TABLE IF EXISTS ${testTable};`);
     } catch {
       // ignore cleanup errors
     }

@@ -5,7 +5,7 @@ import { Chat } from './components/chat.js';
 import { Dialogs } from './components/dialogs.js';
 import {
   sidebarOpen, sidebarCollapsed, theme, setTheme, modal, notice,
-  online, offlineReady, updateReady, newChat, focusComposer, currentChat,
+  online, updateReady, newChat, focusComposer, currentChat,
 } from './state.js';
 import { registerOffline, applyUpdate } from './offline.js';
 import './styles/base.css';
@@ -38,18 +38,19 @@ function Topbar() {
         class: 'icon-button', 'aria-label': 'Percakapan baru', title: 'Percakapan baru',
         onclick: newChat,
       }, icon('compose')),
-      span({ class: 'topbar-divider' }),
-      div({ class: 'workspace-title' },
-        icon('spark'),
-        () => span(currentChat()?.title || 'Percakapan baru'),
-      ),
+      () => {
+        const title = currentChat()?.title;
+        return (title && title !== 'Percakapan baru') ? span({ class: 'topbar-divider' }) : null;
+      },
+      () => {
+        const title = currentChat()?.title;
+        return (title && title !== 'Percakapan baru') ? div({ class: 'workspace-title' }, span(title)) : null;
+      },
     ),
     div({ class: 'topbar-right' },
       () => !online.val
         ? span({ class: 'connection-badge offline-badge', role: 'status' }, icon('signalOff'), 'Mode luring')
-        : offlineReady.val
-          ? span({ class: 'connection-badge', role: 'status' }, icon('checkCircle'), 'Siap luring')
-          : span({ class: 'connection-badge', role: 'status' }, icon('globe'), 'Teach4All'),
+        : null,
       button({
         class: 'icon-button theme-toggle', 'aria-label': () => `Beralih ke tema ${isDark() ? 'terang' : 'gelap'}`,
         onclick: () => setTheme(isDark() ? 'light' : 'dark'),
