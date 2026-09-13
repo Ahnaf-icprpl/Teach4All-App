@@ -1,6 +1,6 @@
 import van from 'vanjs-core';
 import { loadWorkspace, saveWorkspace, emptyWorkspace, MAX_CHATS } from './storage.js';
-import { sendMessage as sendApiMessage } from './router.js';
+import { sendMessage as sendApiMessage, generateTitle, generateOfflineTitle } from './router.js';
 import { createReply } from './replies.js';
 
 let storage;
@@ -75,16 +75,18 @@ export function sendMessage() {
   const text = draft.val.trim();
   if (!text || loading.val) return;
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    toast('You appear to be offline. Reconnect to send messages.');
+    toast('Anda tampaknya sedang luring. Sambungkan kembali untuk mengirim pesan.');
     return;
   }
   const existing = currentChat();
   if (!existing && chats.val.length >= MAX_CHATS) {
-    toast('Your workspace has 100 chats. Export or delete an older chat to make room.');
+    toast('Ruang kerja Anda memiliki 100 obrolan. Ekspor atau hapus percakapan lama untuk memberi ruang.');
     return;
   }
+  const isNewConversation = !existing || existing.messages.length === 0;
+  const initialTitle = isNewConversation ? generateOfflineTitle(text) : (existing.title || generateOfflineTitle(text));
   const chat = existing || {
-    id: crypto.randomUUID(), title: text.slice(0, 60), messages: [], updatedAt: Date.now(),
+    id: crypto.randomUUID(), title: initialTitle, messages: [], updatedAt: Date.now(),
   };
   const userMessage = { id: crypto.randomUUID(), role: 'user', text };
   const assistantMessage = { id: crypto.randomUUID(), role: 'assistant', text: '' };
@@ -105,6 +107,17 @@ export function sendMessage() {
   });
 
   const messageHistory = chat.messages.concat(userMessage);
+
+  if (isNewConversation) {
+    generateTitle(messageHistory, { conversationId: chat.id })
+      .then(generatedTitle => {
+        if (generatedTitle && generatedTitle !== chat.title) {
+          chats.val = chats.val.map(c => c.id === chat.id ? { ...c, title: generatedTitle } : c);
+          persist();
+        }
+      })
+      .catch(() => {});
+  }
   
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     const replyText = createReply(text);
@@ -159,7 +172,7 @@ export function sendMessage() {
     focusComposer();
   }).catch((error) => {
     loading.val = false;
-    const errorMessage = error.message || 'Failed to send message. Try again.';
+    const errorMessage = error.message || 'Gagal mengirim pesan. Silakan coba lagi.';
 
     if (errorMessage.toLowerCase().includes('rate limit')) {
       const updatedChats = chats.val.map(c => {
@@ -214,7 +227,7 @@ export function deleteChat(id) {
   if (activeId.val === id) activeId.val = null;
   persist();
   modal.val = null;
-  toast('Conversation deleted from this device.');
+  toast('Percakapan telah dihapus dari perangkat ini.');
 }
 
 export function clearWorkspace() {
@@ -227,9 +240,9 @@ export function clearWorkspace() {
     draft.val = '';
     persist();
     modal.val = null;
-    toast('Saved conversations and draft cleared.');
+    toast('Percakapan dan draf tersimpan telah dibersihkan.');
   } catch {
-    toast('Your browser is blocking storage access. Clear site data in browser settings.');
+    toast('Peramban Anda memblokir akses penyimpanan. Bersihkan data situs di pengaturan peramban.');
   }
 }
 
@@ -241,7 +254,7 @@ export function exportWorkspace() {
   link.download = `teach4all-${new Date().toISOString().slice(0, 10)}.json`;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-  toast('Workspace export downloaded.');
+  toast('Ekspor ruang kerja berhasil diunduh.');
 }
 
 export function setTheme(value) {

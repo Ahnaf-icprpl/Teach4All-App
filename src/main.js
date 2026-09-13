@@ -30,28 +30,28 @@ function Topbar() {
   return header({ class: 'topbar' },
     div({ class: 'topbar-left' },
       button({
-        class: 'icon-button open-sidebar', 'aria-label': 'Open sidebar', 'aria-controls': 'sidebar',
+        class: 'icon-button open-sidebar', 'aria-label': 'Buka bilah samping', 'aria-controls': 'sidebar',
         'aria-expanded': () => String(sidebarOpen.val || !sidebarCollapsed.val),
         onclick: () => { sidebarOpen.val = true; sidebarCollapsed.val = false; },
       }, icon('panel')),
       button({
-        class: 'icon-button', 'aria-label': 'New conversation', title: 'New conversation (⇧ ⌘ O)',
+        class: 'icon-button', 'aria-label': 'Percakapan baru', title: 'Percakapan baru (⇧ ⌘ O)',
         onclick: newChat,
       }, icon('compose')),
       span({ class: 'topbar-divider' }),
       div({ class: 'workspace-title' },
         icon('spark'),
-        () => span(currentChat()?.title || 'New conversation'),
+        () => span(currentChat()?.title || 'Percakapan baru'),
       ),
     ),
     div({ class: 'topbar-right' },
       () => !online.val
-        ? span({ class: 'connection-badge offline-badge', role: 'status' }, icon('signalOff'), 'Offline mode')
+        ? span({ class: 'connection-badge offline-badge', role: 'status' }, icon('signalOff'), 'Mode luring')
         : offlineReady.val
-          ? span({ class: 'connection-badge', role: 'status' }, icon('checkCircle'), 'Ready offline')
+          ? span({ class: 'connection-badge', role: 'status' }, icon('checkCircle'), 'Siap luring')
           : span({ class: 'connection-badge', role: 'status' }, icon('globe'), 'Teach4All'),
       button({
-        class: 'icon-button theme-toggle', 'aria-label': () => `Switch to ${isDark() ? 'light' : 'dark'} theme`,
+        class: 'icon-button theme-toggle', 'aria-label': () => `Beralih ke tema ${isDark() ? 'terang' : 'gelap'}`,
         onclick: () => setTheme(isDark() ? 'light' : 'dark'),
       }, () => icon(isDark() ? 'sun' : 'moon')),
     ),
@@ -68,8 +68,8 @@ function Toast() {
 function UpdateBanner() {
   return () => updateReady.val
     ? div({ class: 'update-notice', role: 'status' },
-        span('A refreshed version of Teach4All is ready.'),
-        button({ class: 'text-button', onclick: applyUpdate }, 'Refresh now'),
+        span('Versi terbaru Teach4All telah siap.'),
+        button({ class: 'text-button', onclick: applyUpdate }, 'Muat ulang sekarang'),
       )
     : div();
 }
@@ -82,7 +82,7 @@ function App() {
       sidebarCollapsed.val ? 'sidebar-is-collapsed' : '',
     ].filter(Boolean).join(' '),
   },
-    a({ href: '#message-input', class: 'skip-link' }, 'Skip to message composer'),
+    a({ href: '#message-input', class: 'skip-link' }, 'Lompat ke kolom pesan'),
     Sidebar(),
     div({
       class: 'sidebar-scrim', 'aria-hidden': 'true',

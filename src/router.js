@@ -1,6 +1,9 @@
 export const DEFAULT_MODEL = 'google/gemini-2.5-flash-lite';
 export const CHAT_API_URL = './api/chat';
+export const TITLE_API_URL = './api/title';
 export const TIMEOUT_MS = 35000;
+import { cleanTitle, generateOfflineTitle, formatTitleMessages, TITLE_SYSTEM_PROMPT } from './prompts/titlePrompt.js';
+export { cleanTitle, generateOfflineTitle, formatTitleMessages, TITLE_SYSTEM_PROMPT };
 
 export function getModel() {
   return DEFAULT_MODEL;
@@ -56,7 +59,7 @@ export async function sendMessage(messages, onChunk, options = {}) {
     }
 
     if (!response.body) {
-      throw new Error('No response received from server.');
+      throw new Error('Tidak ada respons yang diterima dari server.');
     }
 
     const reader = response.body.getReader();
@@ -116,5 +119,44 @@ export async function sendMessage(messages, onChunk, options = {}) {
       throw new Error('Request timed out. Please check your connection and try again.');
     }
     throw error;
+  }
+}
+
+export async function generateTitle(messages, options = {}) {
+  const firstUserMsg = Array.isArray(messages) ? messages.find(m => m && m.role === 'user') : null;
+  const rawText = firstUserMsg ? (firstUserMsg.text || firstUserMsg.content || '') : '';
+  const fallbackTitle = generateOfflineTitle(rawText);
+
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return fallbackTitle;
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+  try {
+    const payload = {
+      messages,
+      ...(options.conversationId ? { conversationId: options.conversationId } : {}),
+      ...(options.userId ? { userId: options.userId } : {}),
+    };
+
+    const response = await fetch(TITLE_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      return fallbackTitle;
+    }
+
+    const data = await response.json();
+    return cleanTitle(data?.title, fallbackTitle);
+  } catch {
+    return fallbackTitle;
   }
 }

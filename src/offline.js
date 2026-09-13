@@ -16,7 +16,7 @@ export async function registerOffline() {
     await navigator.serviceWorker.ready;
     offlineReady.val = true;
   } catch {
-    toast('Offline setup couldn’t finish. Your chats still save locally; reconnect and reload to try again.');
+    toast('Pemasangan mode luring belum selesai. Percakapan Anda tetap tersimpan secara lokal; sambungkan kembali dan muat ulang untuk mencoba lagi.');
   }
 }
 

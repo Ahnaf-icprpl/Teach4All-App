@@ -17,7 +17,16 @@ import {
   OPENROUTER_API_URL,
 } from '../server/chatApi.js';
 import { SYSTEM_PROMPT, injectSystemPrompt } from '../prompts/systemPrompt.js';
+import {
+  TITLE_SYSTEM_PROMPT,
+  getTitleSystemPrompt,
+  formatTitleMessages,
+  cleanTitle,
+  generateOfflineTitle,
+} from '../prompts/titlePrompt.js';
+import { handleTitleRequest } from '../server/titleApi.js';
 import { ConversationStreamWriter, DEFAULT_USER_ID, runSql } from '../server/db.js';
+import { generateTitle, TITLE_API_URL } from '../src/router.js';
 
 test('router uses google/gemini-2.5-flash-lite by default', () => {
   assert.strictEqual(DEFAULT_MODEL, 'google/gemini-2.5-flash-lite');
@@ -314,5 +323,142 @@ test('ConversationStreamWriter streams conversations and messages to DB using UU
     } catch {}
   }
 });
+
+test('prompts/titlePrompt defines title system prompt, cleaners, and formatters', () => {
+  assert.ok(TITLE_SYSTEM_PROMPT.includes('Teach4All'));
+  assert.strictEqual(getTitleSystemPrompt(), TITLE_SYSTEM_PROMPT);
+
+  // Formatting messages with system prompt
+  const formatted = formatTitleMessages([{ role: 'user', text: 'Apa itu fotosintesis?' }]);
+  assert.strictEqual(formatted[0].role, 'system');
+  assert.strictEqual(formatted[0].content, TITLE_SYSTEM_PROMPT);
+  assert.strictEqual(formatted[1].role, 'user');
+  assert.strictEqual(formatted[1].content, 'Apa itu fotosintesis?');
+
+  // Title sanitization
+  assert.strictEqual(cleanTitle('"Fotosintesis Tumbuhan."'), 'Fotosintesis Tumbuhan');
+  assert.strictEqual(cleanTitle('Judul: Belajar Sains'), 'Belajar Sains');
+  assert.strictEqual(cleanTitle('Title: Creative Writing'), 'Creative Writing');
+
+  // Offline / fallback title generation
+  assert.strictEqual(
+    generateOfflineTitle('Tolong jelaskan bagaimana proses fotosintesis terjadi pada daun'),
+    'Bagaimana proses fotosintesis terjadi pada daun'
+  );
+  assert.strictEqual(
+    generateOfflineTitle('Buatkan kuis singkat 5 soal pilihan ganda tentang topik berikut: Tata Surya'),
+    'Tata Surya'
+  );
+});
+
+test('server handleTitleRequest handles title generation and DB update', async () => {
+  const originalFetch = globalThis.fetch;
+  const conversationId = crypto.randomUUID();
+
+  try {
+    // 1. Rejects non-POST
+    const reqGet = new EventEmitter();
+    reqGet.method = 'GET';
+    const resGet = {
+      statusCode: 0,
+      headers: {},
+      writeHead(code, h) { this.statusCode = code; Object.assign(this.headers, h); },
+      end(body) { this.body = body; },
+    };
+    await handleTitleRequest(reqGet, resGet, { OPENROUTER_API_KEY: 'sk-test' });
+    assert.strictEqual(resGet.statusCode, 405);
+
+    // 2. Generates title via OpenRouter mock
+    globalThis.fetch = async (url, opts) => {
+      assert.strictEqual(opts.method, 'POST');
+      assert.ok(opts.headers.Authorization.includes('sk-test-valid-key'));
+      const payload = JSON.parse(opts.body);
+      assert.strictEqual(payload.messages[0].role, 'system');
+
+      return new Response(JSON.stringify({
+        choices: [{
+          message: { content: '"Eksplorasi Fotosintesis"' },
+        }],
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    };
+
+    const reqPost = new EventEmitter();
+    reqPost.method = 'POST';
+    const resPost = {
+      statusCode: 0,
+      headers: {},
+      writeHead(code, h) { this.statusCode = code; Object.assign(this.headers, h); },
+      end(body) { this.body = body; },
+    };
+
+    const promise = handleTitleRequest(reqPost, resPost, {
+      OPENROUTER_API_KEY: 'sk-test-valid-key',
+      DATABASE_URL: process.env.DATABASE_URL,
+    });
+    reqPost.emit('data', JSON.stringify({
+      conversationId,
+      messages: [{ role: 'user', content: 'Jelaskan fotosintesis' }],
+    }));
+    reqPost.emit('end');
+    await promise;
+
+    assert.strictEqual(resPost.statusCode, 200);
+    const data = JSON.parse(resPost.body);
+    assert.strictEqual(data.title, 'Eksplorasi Fotosintesis');
+
+    // 3. Verify DB update if DATABASE_URL is set
+    if (process.env.DATABASE_URL) {
+      const stdout = await runSql(
+        `SELECT title FROM conversations WHERE id = '${conversationId}';`,
+        process.env.DATABASE_URL
+      );
+      assert.ok(stdout.includes('Eksplorasi Fotosintesis'), 'Title should be saved to database');
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (process.env.DATABASE_URL) {
+      try {
+        await runSql(`DELETE FROM conversations WHERE id = '${conversationId}';`, process.env.DATABASE_URL);
+      } catch {}
+    }
+  }
+});
+
+test('client generateTitle calls /api/title and gracefully handles fallback', async () => {
+  const originalFetch = globalThis.fetch;
+
+  // 1. Success path
+  globalThis.fetch = async (url, opts) => {
+    assert.strictEqual(url, TITLE_API_URL);
+    assert.strictEqual(opts.method, 'POST');
+    return new Response(JSON.stringify({ title: 'Rencana Belajar Fisika' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+
+  try {
+    const title = await generateTitle([{ role: 'user', text: 'Bantu saya belajar fisika' }]);
+    assert.strictEqual(title, 'Rencana Belajar Fisika');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  // 2. Fallback path on server error
+  globalThis.fetch = async () => {
+    return new Response('Internal Server Error', { status: 500 });
+  };
+
+  try {
+    const title = await generateTitle([{ role: 'user', text: 'Jelaskan cara kerja roket' }]);
+    assert.strictEqual(title, 'Cara kerja roket');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 
 

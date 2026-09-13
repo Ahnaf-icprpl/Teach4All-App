@@ -9,21 +9,21 @@ import { getModel } from '../router.js';
 
 const { div, section, h1, h2, p, span, button, textarea, form, article } = van.tags;
 const prompts = [
-  { icon: 'bulb', color: 'amber', title: 'Explain it simply', detail: 'Make a big idea click', prompt: 'Explain photosynthesis simply, with an everyday example.' },
-  { icon: 'plan', color: 'blue', title: 'Make a plan', detail: 'Small steps, real progress', prompt: 'Help me make a simple study plan for this week.' },
-  { icon: 'spark', color: 'purple', title: 'Find a little inspiration', detail: 'See where an idea takes you', prompt: 'Give me a creative story prompt to get my ideas flowing.' },
-  { icon: 'book', color: 'green', title: 'Work through it', detail: 'One question at a time', prompt: 'Show me how to solve a problem step by step.' },
+  { icon: 'bulb', color: 'amber', title: 'Jelaskan sederhana', detail: 'Pahami konsep penting', prompt: 'Jelaskan proses fotosintesis secara sederhana beserta contoh dalam kehidupan sehari-hari.' },
+  { icon: 'plan', color: 'blue', title: 'Buat rencana belajar', detail: 'Langkah kecil, hasil nyata', prompt: 'Bantu saya membuat rencana belajar sederhana untuk minggu ini.' },
+  { icon: 'spark', color: 'purple', title: 'Inspirasi ide kreatif', detail: 'Kembangkan imajinasi Anda', prompt: 'Berikan ide cerita kreatif atau topik menarik untuk memicu ide saya.' },
+  { icon: 'book', color: 'green', title: 'Pecahkan masalah', detail: 'Satu langkah demi satu langkah', prompt: 'Tunjukkan langkah demi langkah cara menyelesaikan masalah atau soal ini.' },
 ];
 
 function Welcome() {
   return section({ class: 'welcome', 'aria-labelledby': 'welcome-title' },
     div({ class: 'welcome-symbol' }, icon('mountain'), span({ class: 'symbol-dot' })),
-    div({ class: 'welcome-eyebrow' }, span(), 'A SPACE FOR CURIOSITY'),
-    h1({ id: 'welcome-title' }, 'A little curiosity.', van.tags.br(), 'A world of ', span({ class: 'accent-word' }, 'possibility.')),
+    div({ class: 'welcome-eyebrow' }, span(), 'RUANG UNTUK RASA INGIN TAHU'),
+    h1({ id: 'welcome-title' }, 'Rasa ingin tahu.', van.tags.br(), 'Dunia penuh ', span({ class: 'accent-word' }, 'kemungkinan.')),
     p({ class: 'welcome-description' },
-      'Ask a question. Untangle an idea. Learn something new.',
+      'Ajukan pertanyaan. Uraikan gagasan rumit. Pelajari hal baru.',
       van.tags.br(),
-      'Wherever you are, this is a good place to start.',
+      'Di mana pun Anda berada, ini tempat yang tepat untuk memulai.',
     ),
   );
 }
@@ -31,9 +31,9 @@ function Welcome() {
 async function copyText(text) {
   try {
     await navigator.clipboard.writeText(text);
-    toast('Response copied.');
+    toast('Tanggapan berhasil disalin.');
   } catch {
-    toast('Copy is unavailable in this browser. Select the response text to copy it.');
+    toast('Fitur salin tidak tersedia di peramban ini. Pilih teks tanggapan untuk menyalinnya.');
   }
 }
 
@@ -52,14 +52,14 @@ function Messages() {
           ? div({ class: 'assistant-label' },
               span({ class: 'assistant-mark' }, icon('mountain')),
               'Teach4All',
-              isError ? span({ class: 'demo-label error-label' }, 'Notice') : null,
+              isError ? span({ class: 'demo-label error-label' }, 'Pemberitahuan') : null,
             )
-          : h2({ class: 'sr-only' }, 'You'),
+          : h2({ class: 'sr-only' }, 'Anda'),
         div({ class: 'message-text' },
           message.text
             ? message.text
             : (isGenerating
-                ? span({ class: 'typing-indicator', 'aria-label': 'Generating response', title: 'Generating response' },
+                ? span({ class: 'typing-indicator', 'aria-label': 'Sedang mengetik tanggapan...', title: 'Sedang mengetik tanggapan...' },
                     span({ class: 'typing-dot' }),
                     span({ class: 'typing-dot' }),
                     span({ class: 'typing-dot' }),
@@ -69,8 +69,8 @@ function Messages() {
         message.role === 'assistant' && message.text && !loading.val
           ? button({
               class: 'icon-button copy-button',
-              'aria-label': 'Copy response',
-              title: 'Copy response',
+              'aria-label': 'Salin tanggapan',
+              title: 'Salin tanggapan',
               onclick: () => copyText(message.text),
             }, icon('copy'))
           : null,
@@ -90,10 +90,10 @@ function Composer() {
 
   const inputEl = textarea({
     id: 'message-input',
-    placeholder: 'What’s on your mind?',
+    placeholder: 'Apa yang sedang Anda pikirkan?',
     rows: 1,
     maxlength: MAX_INPUT,
-    'aria-label': 'Message Teach4All',
+    'aria-label': 'Pesan Teach4All',
     value: () => draft.val,
     oninput: event => setDraft(event.target.value),
     onkeydown: event => {
@@ -121,13 +121,13 @@ function Composer() {
         div({ class: 'composer-tools' },
           button({
             type: 'button', class: 'icon-button add-button',
-            'aria-label': 'Chat tools', title: 'Chat tools',
+            'aria-label': 'Alat percakapan', title: 'Alat percakapan',
             onclick: () => { modal.val = { type: 'tools' }; },
           }, icon('plus')),
         ),
         div({ class: 'send-tools' },
           () => span({ class: `input-count ${draft.val.length > MAX_INPUT - 300 ? '' : 'is-hidden'}` }, `${draft.val.length}/${MAX_INPUT}`),
-          button({ type: 'submit', class: 'send-button', 'aria-label': 'Send message', title: 'Send message', disabled: () => !draft.val.trim() || loading.val }, 
+          button({ type: 'submit', class: 'send-button', 'aria-label': 'Kirim pesan', title: 'Kirim pesan', disabled: () => !draft.val.trim() || loading.val }, 
             loading.val ? icon('settings', 'is-loading') : icon('arrow')),
         ),
       ),
@@ -136,8 +136,8 @@ function Composer() {
 }
 
 function Suggestions() {
-  return section({ class: 'suggestions', 'aria-label': 'Ideas to get started' },
-    div({ class: 'suggestions-label' }, span('A few places to begin'), span({ class: 'little-line' })),
+  return section({ class: 'suggestions', 'aria-label': 'Ide untuk memulai' },
+    div({ class: 'suggestions-label' }, span('Beberapa topik untuk memulai'), span({ class: 'little-line' })),
     div({ class: 'suggestion-grid' }, prompts.map(prompt =>
       button({ class: 'suggestion-card', onclick: () => { setDraft(prompt.prompt); focusComposer(); } },
         span({ class: `suggestion-icon ${prompt.color}` }, icon(prompt.icon)),
@@ -157,20 +157,20 @@ export function Chat() {
       : div(),
     () => !online.val && !offlineReady.val
       ? div({ class: 'connection-warning', role: 'status' },
-          'You’re offline. This tab still works, but offline reload hasn’t been prepared yet.')
+          'Anda sedang luring. Tab ini tetap berfungsi, tetapi pemuatan ulang luring belum disiapkan.')
       : div(),
     div({ class: 'chat-stage' },
       Welcome(),
       div({
         class: 'messages', id: 'messages', role: 'log',
-        'aria-label': 'Conversation', 'aria-live': 'polite', tabindex: '0',
+        'aria-label': 'Percakapan', 'aria-live': 'polite', tabindex: '0',
       }, Messages),
       Composer(),
       Suggestions(),
     ),
     div({ class: 'workspace-footer' },
       icon('mountain'),
-      span('Learning has no boundaries. Neither should you.'),
+      span('Belajar tanpa batas. Begitu pula potensi Anda.'),
     ),
   );
 }

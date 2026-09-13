@@ -8,20 +8,20 @@ export function emptyWorkspace() {
 
 export function validateWorkspace(data) {
   if (!data || data.version !== 1 || !Array.isArray(data.chats)) {
-    throw new Error('This workspace format is not supported.');
+    throw new Error('Format ruang kerja ini tidak didukung.');
   }
-  if (data.chats.length > MAX_CHATS) throw new Error('Too many conversations.');
+  if (data.chats.length > MAX_CHATS) throw new Error('Terlalu banyak percakapan.');
   const ids = new Set();
   const chats = data.chats.map(chat => {
     if (typeof chat.id !== 'string' || ids.has(chat.id) || typeof chat.title !== 'string'
       || !Array.isArray(chat.messages) || !Number.isFinite(chat.updatedAt)) {
-      throw new Error('A saved conversation is invalid.');
+      throw new Error('Percakapan yang tersimpan tidak valid.');
     }
     ids.add(chat.id);
     const messages = chat.messages.map(message => {
       if (!['user', 'assistant'].includes(message.role) || typeof message.text !== 'string'
         || message.text.length > 12000 || typeof message.id !== 'string') {
-        throw new Error('A saved message is invalid.');
+        throw new Error('Pesan yang tersimpan tidak valid.');
       }
       return { id: message.id, role: message.role, text: message.text };
     });
@@ -40,7 +40,7 @@ export function loadWorkspace(storage) {
     const raw = storage.getItem(STORAGE_KEY);
     return { data: raw ? validateWorkspace(JSON.parse(raw)) : emptyWorkspace(), error: '' };
   } catch {
-    return { data: emptyWorkspace(), error: 'Saved chats could not be read. Storage is paused to protect your existing data. Export or clear saved data in Settings to start fresh.' };
+    return { data: emptyWorkspace(), error: 'Percakapan tersimpan tidak dapat dibaca. Penyimpanan dijeda untuk melindungi data Anda. Ekspor atau bersihkan data untuk memulai kembali.' };
   }
 }
 
@@ -49,6 +49,6 @@ export function saveWorkspace(storage, workspace) {
     storage.setItem(STORAGE_KEY, JSON.stringify(workspace));
     return '';
   } catch {
-    return 'Your browser could not save these changes. Keep this tab open and export your chats from Settings.';
+    return 'Peramban Anda tidak dapat menyimpan perubahan ini. Biarkan tab ini tetap terbuka dan ekspor percakapan Anda.';
   }
 }

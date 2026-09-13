@@ -8,11 +8,12 @@ import {
 import { getRedisClient } from './redis.js';
 import { getSystemPrompt, injectSystemPrompt } from '../prompts/systemPrompt.js';
 import { ConversationStreamWriter, DEFAULT_USER_ID } from './db.js';
+import { handleTitleRequest } from './titleApi.js';
 
 export const DEFAULT_MODEL = 'google/gemini-2.5-flash-lite';
 export const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
-export { getSystemPrompt };
+export { getSystemPrompt, handleTitleRequest };
 
 export function isPlaceholderKey(key) {
   if (!key || typeof key !== 'string') return true;
@@ -266,6 +267,17 @@ export function createChatMiddleware(serverEnv = {}) {
     if (url === '/api/chat' || url === '/api/chat/') {
       try {
         await handleChatRequest(req, res, serverEnv);
+      } catch (err) {
+        if (!res.headersSent) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: { message: 'Internal server error.' } }));
+        }
+      }
+      return;
+    }
+    if (url === '/api/title' || url === '/api/title/') {
+      try {
+        await handleTitleRequest(req, res, serverEnv);
       } catch (err) {
         if (!res.headersSent) {
           res.writeHead(500, { 'Content-Type': 'application/json' });

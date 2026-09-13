@@ -2,7 +2,7 @@ import van from 'vanjs-core';
 import { icon } from '../icons.js';
 import {
   chats, activeId, newChat, selectChat, modal, sidebarOpen,
-  sidebarCollapsed, search,
+  sidebarCollapsed, search, setDraft, focusComposer,
 } from '../state.js';
 
 const { aside, div, nav, button, span, input, kbd, h2, p } = van.tags;
@@ -10,8 +10,8 @@ const { aside, div, nav, button, span, input, kbd, h2, p } = van.tags;
 function emptyHistory() {
   return div({ class: 'empty-history' },
     icon('spark'),
-    p('A fresh start'),
-    p('Your conversations will find a home here.'),
+    p('Awal yang baru'),
+    p('Percakapan Anda akan tersimpan di sini.'),
   );
 }
 
@@ -40,7 +40,7 @@ export function Sidebar() {
         ),
         button({
           class: 'icon-button chat-options',
-          'aria-label': `Options for ${chat.title}`,
+          'aria-label': `Opsi untuk ${chat.title}`,
           onclick: event => {
             event.stopPropagation();
             modal.val = { type: 'conversation', id: chat.id };
@@ -53,14 +53,14 @@ export function Sidebar() {
   return aside({
     id: 'sidebar',
     class: () => `sidebar ${sidebarOpen.val ? 'is-open' : ''} ${sidebarCollapsed.val ? 'is-collapsed' : ''}`,
-    'aria-label': 'Conversation sidebar',
+    'aria-label': 'Bilah percakapan',
   },
     div({ class: 'sidebar-brand' },
-      button({ class: 'brand', onclick: newChat, 'aria-label': 'Teach4All home' },
+      button({ class: 'brand', onclick: newChat, 'aria-label': 'Beranda Teach4All' },
         icon('mountain'), span('Teach'), span({ class: 'brand-number' }, '4'), span('All')),
       button({
         class: 'icon-button close-sidebar',
-        'aria-label': 'Close sidebar',
+        'aria-label': 'Tutup bilah samping',
         onclick: () => {
           sidebarOpen.val = false;
           sidebarCollapsed.val = true;
@@ -69,23 +69,43 @@ export function Sidebar() {
     ),
     div({ class: 'sidebar-actions' },
       button({ class: 'new-chat-button', onclick: newChat },
-        icon('plus'), span('New chat'), kbd({ 'aria-label': 'Ctrl or Command + Shift + O' }, '⇧ ⌘ O')),
+        icon('plus'), span('Obrolan baru'), kbd({ 'aria-label': 'Ctrl atau Command + Shift + O' }, '⇧ ⌘ O')),
+      div({ class: 'sidebar-quick-links' },
+        button({
+          class: 'quick-action-button',
+          'aria-label': 'Buat kuis latihan',
+          onclick: () => {
+            newChat();
+            setDraft('Buatkan kuis singkat 5 soal pilihan ganda tentang topik berikut: ');
+            focusComposer();
+          },
+        }, icon('spark'), span('Kuis')),
+        button({
+          class: 'quick-action-button',
+          'aria-label': 'Pelajari materi baru',
+          onclick: () => {
+            newChat();
+            setDraft('Jelaskan ringkasan materi pembelajaran terstruktur mengenai topik berikut: ');
+            focusComposer();
+          },
+        }, icon('book'), span('Materi')),
+      ),
       div({ class: 'search-field' }, icon('search'),
         input({
-          id: 'chat-search', type: 'search', placeholder: 'Search conversations',
-          'aria-label': 'Search conversations', value: () => search.val,
+          id: 'chat-search', type: 'search', placeholder: 'Cari percakapan',
+          'aria-label': 'Cari percakapan', value: () => search.val,
           oninput: event => { search.val = event.target.value; },
         }), kbd('⌘ K'),
       ),
     ),
-    nav({ class: 'history', 'aria-label': 'Saved conversations' },
-      div({ class: 'section-heading' }, h2('Your conversations'), () => span({ class: 'chat-count' }, chats.val.length || '')),
+    nav({ class: 'history', 'aria-label': 'Riwayat percakapan tersimpan' },
+      div({ class: 'section-heading' }, h2('Percakapan Anda'), () => span({ class: 'chat-count' }, chats.val.length || '')),
       conversationList,
     ),
     div({ class: 'sidebar-bottom' },
       div({ class: 'profile-button' },
-        span({ class: 'avatar' }, 'Y'),
-        span({ class: 'profile-copy' }, span({ class: 'profile-name' }, 'Your workspace'), span({ class: 'profile-detail' }, 'Personal · Saved locally')),
+        span({ class: 'avatar' }, 'A'),
+        span({ class: 'profile-copy' }, span({ class: 'profile-name' }, 'Ruang Kerja Anda'), span({ class: 'profile-detail' }, 'Pribadi · Tersimpan lokal')),
       ),
     ),
   );
