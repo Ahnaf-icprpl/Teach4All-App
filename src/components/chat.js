@@ -64,22 +64,35 @@ function Messages() {
               isError ? span({ class: 'demo-label error-label' }, () => t('chat_notice_label')) : null,
             )
           : h2({ class: 'sr-only' }, () => t('chat_user_aria')),
-        div({ class: 'message-text' },
-          message.text
-            ? renderMarkdown(message.text)
-            : (isGenerating
-                ? (searchingWeb.val
-                    ? span({ class: 'searching-web-indicator' },
-                        icon('globe', 'spin-slow'),
-                        () => t('chat_web_search_status'),
-                      )
-                    : span({ class: 'typing-indicator', 'aria-label': () => t('chat_typing_aria'), title: () => t('chat_typing_aria') },
-                        span({ class: 'typing-dot' }),
-                        span({ class: 'typing-dot' }),
-                        span({ class: 'typing-dot' }),
-                      ))
-                : '')
-        ),
+        message.role === 'user'
+          ? div({ class: 'user-message-bubble-wrap' },
+              div({ class: 'message-text' },
+                message.text ? renderMarkdown(message.text) : ''
+              ),
+              button({
+                type: 'button',
+                class: 'icon-button copy-button copy-prompt-button',
+                'aria-label': () => t('chat_copy_prompt_aria'),
+                title: () => t('chat_copy_prompt_aria'),
+                onclick: () => copyText(message.text),
+              }, icon('copy')),
+            )
+          : div({ class: 'message-text' },
+              message.text
+                ? renderMarkdown(message.text)
+                : (isGenerating
+                    ? (searchingWeb.val
+                        ? span({ class: 'searching-web-indicator' },
+                            icon('globe', 'spin-slow'),
+                            () => t('chat_web_search_status'),
+                          )
+                        : span({ class: 'typing-indicator', 'aria-label': () => t('chat_typing_aria'), title: () => t('chat_typing_aria') },
+                            span({ class: 'typing-dot' }),
+                            span({ class: 'typing-dot' }),
+                            span({ class: 'typing-dot' }),
+                          ))
+                    : '')
+            ),
         message.role === 'assistant' && message.text && !loading.val
           ? button({
               class: 'icon-button copy-button',

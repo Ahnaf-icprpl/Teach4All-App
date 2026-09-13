@@ -215,6 +215,20 @@ test('DevNotice component and logic adheres to environment checks and UI texts',
   appEnvState.val = 'development';
 });
 
+test('migration 017 defines copy prompt UI text without fallback', () => {
+  const filePath = resolve(process.cwd(), 'migrations/017_add_copy_prompt_ui_text.sql');
+  assert.strictEqual(existsSync(filePath), true, 'migration file 017 must exist');
+
+  const sql = readFileSync(filePath, 'utf8');
+  assert.ok(sql.includes('chat_copy_prompt_aria'), 'must define chat_copy_prompt_aria');
+});
+
+test('Chat component includes copy prompt button for user messages', () => {
+  const chatSource = readFileSync(resolve(process.cwd(), 'src/components/chat.js'), 'utf8');
+  assert.ok(chatSource.includes('copy-prompt-button'), 'must render copy-prompt-button');
+  assert.ok(chatSource.includes("t('chat_copy_prompt_aria')"), 'must reference chat_copy_prompt_aria via t()');
+});
+
 
 
 

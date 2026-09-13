@@ -1,5 +1,6 @@
 import { createQuiz, DEFAULT_USER_ID } from './db.js';
 import { logger } from './logger.js';
+import { diagnoseAndValidateQuizArgs } from './quizValidator.js';
 
 export const QUIZ_TOOL_NAME = 'create_quiz';
 
@@ -111,48 +112,20 @@ export function accumulateToolCalls(toolCallsMap = {}, deltaToolCalls = []) {
  */
 export async function parseAndExecuteQuizTool(toolCall, { userId, conversationId, databaseUrl } = {}) {
   try {
-    const rawArgs = toolCall.function?.arguments || '{}';
-    let args;
-    try {
-      args = JSON.parse(rawArgs);
-    } catch {
-      const cleaned = rawArgs.replace(/,\s*$/, '').trim();
-      args = JSON.parse(cleaned);
-    }
+    const rawArgs = toolCall?.function?.arguments || '{}';
+    const validation = diagnoseAndValidateQuizArgs(rawArgs);
 
-    const title = (args.title || 'Kuis Pembelajaran').trim();
-    const category = (args.category || 'Umum').trim();
-    const summary = (args.summary || `Kuis interaktif mengenai ${title}`).trim();
-    const difficulty = ['easy', 'medium', 'hard'].includes(args.difficulty) ? args.difficulty : 'medium';
-    const icon = ['leaf', 'globe', 'bulb', 'atom', 'book', 'spark'].includes(args.icon) ? args.icon : 'bulb';
-    const color = ['green', 'blue', 'purple', 'amber'].includes(args.color) ? args.color : 'blue';
-
-    const rawQuestions = Array.isArray(args.questions) ? args.questions : [];
-    const questions = rawQuestions.map((q, idx) => {
-      let opts = Array.isArray(q.options) ? q.options.map(o => String(o).trim()).filter(Boolean) : [];
-      if (opts.length < 2) {
-        opts = ['Opsi A', 'Opsi B', 'Opsi C', 'Opsi D'];
-      }
-      let correct = String(q.correct_answer || opts[0]).trim();
-      if (!opts.includes(correct)) {
-        const found = opts.find(o => o.toLowerCase() === correct.toLowerCase());
-        correct = found || opts[0];
-      }
+    if (!validation.valid) {
       return {
-        question_number: idx + 1,
-        question_text: String(q.question_text || `Pertanyaan ${idx + 1}`).trim(),
-        question_type: 'multiple_choice',
-        options: opts,
-        correct_answer: correct,
-        explanation: String(q.explanation || 'Penjelasan tidak tersedia.').trim(),
-        points: Number(q.points) || 10,
-        is_solved: false,
+        success: false,
+        errorType: validation.errorType,
+        diagnostic: validation.diagnostic,
+        errors: validation.errors,
+        error: validation.diagnostic,
       };
-    });
-
-    if (questions.length === 0) {
-      throw new Error('Kuis harus memiliki minimal 1 pertanyaan.');
     }
+
+    const { title, category, summary, difficulty, icon, color, questions } = validation.data;
 
     const createdQuiz = await createQuiz(
       {
@@ -188,6 +161,8 @@ export async function parseAndExecuteQuizTool(toolCall, { userId, conversationId
     logger.error('Failed to execute create_quiz tool', { error: err.message, stack: err.stack });
     return {
       success: false,
+      errorType: 'DATABASE_ERROR',
+      diagnostic: `Database error during quiz creation: ${err.message}. Ensure database is reachable.`,
       error: err.message || 'Gagal membuat kuis.',
     };
   }
@@ -206,7 +181,7 @@ export function formatQuizCardMarker(quiz) {
 
 /**
  * Handles execution of completed tool calls, database persistence,
- * stream card injection, and follow-up completion round-trip.
+ * stream card injection, algorithmic error diagnostics, and model recall loop.
  */
 export async function handleCompletedToolCalls({
   toolCallsMap = {},
@@ -222,114 +197,161 @@ export async function handleCompletedToolCalls({
   model,
   providerRouting = {},
   openRouterUrl = 'https://openrouter.ai/api/v1/chat/completions',
+  maxRetries = 2,
 }) {
   const calls = Object.values(toolCallsMap);
-  const quizCall = calls.find(c => c.function?.name === QUIZ_TOOL_NAME);
-  if (!quizCall) return;
+  let currentQuizCall = calls.find(c => c.function?.name === QUIZ_TOOL_NAME);
+  if (!currentQuizCall) return;
 
   const databaseUrl = serverEnv.DATABASE_URL || process.env.DATABASE_URL;
-  const execResult = await parseAndExecuteQuizTool(quizCall, {
-    userId: userId || DEFAULT_USER_ID,
-    conversationId,
-    databaseUrl,
-  });
+  const conversationHistory = [...formattedMessages];
 
-  if (execResult.success && execResult.quiz) {
-    const cardMarker = formatQuizCardMarker(execResult.quiz);
-    if (!res.writableEnded) {
-      res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: cardMarker } }] })}\n\n`);
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const execResult = await parseAndExecuteQuizTool(currentQuizCall, {
+      userId: userId || DEFAULT_USER_ID,
+      conversationId,
+      databaseUrl,
+    });
+
+    if (execResult.success && execResult.quiz) {
+      const cardMarker = formatQuizCardMarker(execResult.quiz);
+      if (!res.writableEnded) {
+        res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: cardMarker } }] })}\n\n`);
+      }
+      if (streamWriter) streamWriter.writeChunk(cardMarker);
+
+      const count = execResult.quiz.questions?.length || execResult.questionCount || 20;
+      const isEn = formattedMessages.some(m => m && m.role === 'user' && /\b(the|and|quiz|make|create|what|about)\b/i.test(m.content || ''));
+      const messageText = isEn
+        ? `Interactive quiz **${execResult.quiz.title}** (${count} questions) is ready! Click **Start Quiz** above to begin practicing.`
+        : `Kuis interaktif **${execResult.quiz.title}** (${count} pertanyaan) berhasil dibuat dan siap dikerjakan! Klik tombol **Mulai Kuis** di atas untuk mulai berlatih.`;
+
+      if (!res.writableEnded) {
+        res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: messageText } }] })}\n\n`);
+      }
+      if (streamWriter) streamWriter.writeChunk(messageText);
+      return;
     }
-    if (streamWriter) streamWriter.writeChunk(cardMarker);
 
-    // Make follow-up completion request to OpenRouter
-    try {
-      const secondUpstream = await fetch(openRouterUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://teach4all.local',
-          'X-Title': 'Teach4All',
-          'X-Forwarded-For': clientIp,
-          'X-Real-IP': clientIp,
-          ...(conversationId ? { 'X-Session-Id': conversationId } : {}),
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            ...formattedMessages,
-            {
-              role: 'assistant',
-              content: null,
-              tool_calls: [
-                {
-                  id: quizCall.id,
-                  type: 'function',
-                  function: {
-                    name: QUIZ_TOOL_NAME,
-                    arguments: quizCall.function.arguments,
-                  },
-                },
-              ],
-            },
-            {
-              role: 'tool',
-              tool_call_id: quizCall.id,
-              content: JSON.stringify({
-                status: 'success',
-                quiz_id: execResult.quiz.id,
-                title: execResult.quiz.title,
-                question_count: execResult.questionCount,
-              }),
-            },
-          ],
-          stream: true,
-          user: userId || clientIp,
-          ...providerRouting,
-        }),
-        signal: controller?.signal,
+    // Execution or validation failed; evaluate algorithmic recall
+    if (attempt < maxRetries && apiKey && !controller?.signal?.aborted) {
+      logger.warn('Tool execution failed, sending algorithmic diagnostic to model for recall', {
+        attempt: attempt + 1,
+        max_retries: maxRetries,
+        error_type: execResult.errorType,
+        diagnostic: execResult.diagnostic,
       });
 
-      if (secondUpstream.ok && secondUpstream.body && !res.writableEnded) {
-        const secondReader = secondUpstream.body.getReader();
-        const decoder = new TextDecoder();
-        let secondBuffer = '';
+      const callId = currentQuizCall.id || `call_quiz_${Date.now()}_${attempt}`;
+      conversationHistory.push({
+        role: 'assistant',
+        content: null,
+        tool_calls: [
+          {
+            id: callId,
+            type: 'function',
+            function: {
+              name: QUIZ_TOOL_NAME,
+              arguments: currentQuizCall.function?.arguments || '{}',
+            },
+          },
+        ],
+      });
+
+      conversationHistory.push({
+        role: 'tool',
+        tool_call_id: callId,
+        name: QUIZ_TOOL_NAME,
+        content: JSON.stringify({
+          status: 'error',
+          error_type: execResult.errorType || 'VALIDATION_ERROR',
+          diagnostic: execResult.diagnostic || execResult.error,
+          instruction: 'Fix the issues identified above and call create_quiz again with corrected arguments.',
+        }),
+      });
+
+      try {
+        const recallRes = await fetch(openRouterUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://teach4all.app',
+            'X-Title': 'Teach4All',
+            'X-Forwarded-For': clientIp,
+            'X-Real-IP': clientIp,
+            ...(conversationId ? { 'X-Session-Id': conversationId } : {}),
+          },
+          body: JSON.stringify({
+            model,
+            messages: conversationHistory,
+            stream: true,
+            user: userId || clientIp,
+            tools: [buildQuizTool(serverEnv)],
+            ...providerRouting,
+          }),
+          signal: controller?.signal,
+        });
+
+        if (!recallRes.ok || !recallRes.body) {
+          logger.error('OpenRouter recall request failed', { status: recallRes.status });
+          break;
+        }
+
+        const recallReader = recallRes.body.getReader();
+        const recallDecoder = new TextDecoder();
+        let recallSseBuffer = '';
+        const recallToolCalls = {};
+
         while (true) {
-          const { done, value } = await secondReader.read();
+          const { done, value } = await recallReader.read();
           if (done) break;
-          res.write(value);
-          secondBuffer += decoder.decode(value, { stream: true });
-          const sLines = secondBuffer.split('\n');
-          secondBuffer = sLines.pop() || '';
-          for (const sLine of sLines) {
-            const sTrimmed = sLine.trim();
-            if (!sTrimmed || !sTrimmed.startsWith('data: ')) continue;
-            const sData = sTrimmed.slice(6);
-            if (sData === '[DONE]') continue;
+
+          recallSseBuffer += recallDecoder.decode(value, { stream: true });
+          const lines = recallSseBuffer.split('\n');
+          recallSseBuffer = lines.pop() || '';
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith('data: ')) continue;
+            const data = trimmed.slice(6);
+            if (data === '[DONE]') continue;
             try {
-              const sJson = JSON.parse(sData);
-              const sDelta = sJson.choices?.[0]?.delta?.content || '';
-              if (sDelta && streamWriter) {
-                streamWriter.writeChunk(sDelta);
+              const json = JSON.parse(data);
+              const delta = json.choices?.[0]?.delta?.content || '';
+              if (delta) {
+                if (!res.writableEnded) {
+                  res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: delta } }] })}\n\n`);
+                }
+                if (streamWriter) streamWriter.writeChunk(delta);
+              }
+              const tcDelta = json.choices?.[0]?.delta?.tool_calls;
+              if (tcDelta) {
+                accumulateToolCalls(recallToolCalls, tcDelta);
               }
             } catch {}
           }
         }
-      } else if (!res.writableEnded) {
-        const fallbackMsg = '\n\nKuis interaktif telah dibuat dan siap dikerjakan! Klik tombol "Mulai Kuis" di atas untuk mulai berlatih.';
-        res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: fallbackMsg } }] })}\n\n`);
-        if (streamWriter) streamWriter.writeChunk(fallbackMsg);
+
+        const newCalls = Object.values(recallToolCalls);
+        const nextQuizCall = newCalls.find(c => c.function?.name === QUIZ_TOOL_NAME);
+        if (nextQuizCall) {
+          currentQuizCall = nextQuizCall;
+          continue;
+        } else {
+          return;
+        }
+      } catch (err) {
+        logger.error('Error during tool recall turn', { error: err.message });
+        break;
       }
-    } catch {
+    } else {
       if (!res.writableEnded) {
-        const fallbackMsg = '\n\nKuis interaktif telah dibuat dan siap dikerjakan! Klik tombol "Mulai Kuis" di atas untuk mulai berlatih.';
-        res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: fallbackMsg } }] })}\n\n`);
-        if (streamWriter) streamWriter.writeChunk(fallbackMsg);
+        const errorMsg = `\n\nMaaf, terjadi kendala saat membuat kuis: ${execResult.error || 'kesalahan format'}. Silakan coba minta kuis kembali.`;
+        res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: errorMsg } }] })}\n\n`);
+        if (streamWriter) streamWriter.writeChunk(errorMsg);
       }
+      return;
     }
-  } else if (!res.writableEnded) {
-    const errorMsg = `\n\nMaaf, terjadi kendala saat membuat kuis: ${execResult.error || 'kesalahan internal'}.`;
-    res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: errorMsg } }] })}\n\n`);
-    if (streamWriter) streamWriter.writeChunk(errorMsg);
   }
 }

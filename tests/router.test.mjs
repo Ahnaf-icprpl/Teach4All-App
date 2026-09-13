@@ -234,7 +234,7 @@ test('server handleChatRequest sends Bearer key to OpenRouter on server and stre
 
     const sseData = [
       'data: {"choices":[{"delta":{"content":"Server"}}]}\n\n',
-      'data: {"choices":[{"delta":{"content":" streaming"}}]}\\n\\n',
+      'data: {"choices":[{"delta":{"content":" streaming"}}]}\n\n',
       'data: [DONE]\n\n',
     ].join('');
 

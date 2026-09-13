@@ -327,7 +327,6 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
         if (done) break;
         chunkCount++;
         if (value) bytesStreamed += value.length;
-        res.write(value);
 
         // Stream text deltas to DB asynchronously
         sseBuffer += decoder.decode(value, { stream: true });
@@ -350,6 +349,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
             const delta = json.choices?.[0]?.delta?.content || '';
             if (delta) {
               accumulatedText += delta;
+              res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: delta } }] })}\n\n`);
               streamWriter.writeChunk(delta);
             }
             const toolCallsDelta = json.choices?.[0]?.delta?.tool_calls;
@@ -376,6 +376,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
             const delta = json.choices?.[0]?.delta?.content || '';
             if (delta) {
               accumulatedText += delta;
+              res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: delta } }] })}\n\n`);
               streamWriter.writeChunk(delta);
             }
             const toolCallsDelta = json.choices?.[0]?.delta?.tool_calls;
@@ -416,6 +417,10 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
         accumulatedText += sourcesBlock;
         res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: sourcesBlock } }] })}\n\n`);
         streamWriter.writeChunk(sourcesBlock);
+      }
+
+      if (!res.writableEnded) {
+        res.write('data: [DONE]\n\n');
       }
 
       await streamWriter.finish();

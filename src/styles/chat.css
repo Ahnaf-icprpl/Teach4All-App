@@ -53,9 +53,12 @@
   .message-content { max-width: 800px; margin: auto; padding: 24px 40px 16px; }
   .message { margin-bottom: 30px; font-size: 14px; line-height: 1.85; }
   .message-user { display: flex; justify-content: flex-end; margin-bottom: 32px; }
-  .message-user .message-text { max-width: 85%; padding: 12px 19px; border-radius: 19px 19px 5px 19px; background: var(--off-white); border: 0; color: var(--near-black); box-shadow: 0 1px 3px rgba(34, 46, 60, 0.04); }
+  .user-message-bubble-wrap { display: inline-flex; align-items: flex-end; justify-content: flex-end; gap: 8px; max-width: 85%; }
+  .user-message-bubble-wrap .message-text { max-width: 100%; padding: 12px 19px; border-radius: 19px 19px 5px 19px; background: var(--off-white); border: 0; color: var(--near-black); box-shadow: 0 1px 3px rgba(34, 46, 60, 0.04); white-space: pre-wrap; }
+  .copy-prompt-button { order: -1; opacity: 0; transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease; flex-shrink: 0; margin-bottom: 4px; }
+  .message-user:hover .copy-prompt-button, .copy-prompt-button:focus-visible { opacity: 1; }
+  @media (hover: none) { .copy-prompt-button { opacity: 0.65; } }
   .message-text { overflow-wrap: anywhere; color: var(--near-black); }
-  .message-user .message-text { white-space: pre-wrap; }
   .markdown-body { display: flex; flex-direction: column; gap: 9px; }
   .markdown-p { margin: 0; line-height: 1.75; }
   .markdown-heading { font-weight: 600; line-height: 1.35; color: inherit; margin: 6px 0 2px; }
