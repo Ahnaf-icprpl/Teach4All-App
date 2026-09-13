@@ -242,6 +242,7 @@ test('Chat component includes animated building-quiz-indicator with bulb icon an
   assert.ok(chatSource.includes('building-quiz-indicator'), 'must render building-quiz-indicator');
   assert.ok(chatSource.includes("t('chat_quiz_building_status')"), 'must reference chat_quiz_building_status via t()');
   assert.ok(chatSource.includes("icon('bulb', 'spin-slow')"), 'must render spinning bulb icon');
+  assert.ok(chatSource.includes("icon('globe', 'spin-slow')"), 'must render spinning globe icon for web grounding');
 });
 
 

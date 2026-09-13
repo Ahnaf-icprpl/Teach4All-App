@@ -70,12 +70,14 @@ export async function loadMessagesForChat(id) {
   try {
     const data = await fetchMessages(id, { userId: TEST_USER_ID });
     if (Array.isArray(data?.messages)) {
-      const loadedMessages = data.messages.map(m => ({
-        id: m.id,
-        role: m.role,
-        text: m.content || '',
-        createdAt: m.created_at ? new Date(m.created_at).getTime() : Date.now(),
-      }));
+      const loadedMessages = data.messages
+        .filter(m => m && (m.role === 'user' || (m.content && m.content.trim().length > 0)))
+        .map(m => ({
+          id: m.id,
+          role: m.role,
+          text: m.content || '',
+          createdAt: m.created_at ? new Date(m.created_at).getTime() : Date.now(),
+        }));
       chats.val = chats.val.map(c =>
         c.id === id ? { ...c, messages: loadedMessages, messagesLoaded: true } : c
       );

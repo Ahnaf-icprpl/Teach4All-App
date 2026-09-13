@@ -204,7 +204,10 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
   const cachedProvider = conversationId ? await getConversationProvider(conversationId, { redisClient }) : null;
   const providerRouting = buildProviderRoutingPayload(conversationId, cachedProvider);
 
-  const enableSearch = isWebSearchRequested(webSearch);
+  const isQuizRequest = (promptText && /\b(kuis|quiz|soal|latihan|evaluasi|test me)\b/i.test(promptText)) ||
+    (Array.isArray(messages) && messages.some(m => m && m.role === 'user' && /\b(kuis|quiz|soal|latihan|evaluasi|test me)\b/i.test(m.text || m.content || '')));
+
+  const enableSearch = isWebSearchRequested(webSearch, { isQuiz: isQuizRequest });
   const webPlugin = enableSearch ? buildWebSearchPlugin(serverEnv) : null;
   const quizTool = buildQuizTool(serverEnv);
 
@@ -248,6 +251,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
         stream: true,
         user: userId || clientIp,
         tools: [quizTool],
+        ...(isQuizRequest ? { tool_choice: { type: 'function', function: { name: 'create_quiz' } } } : {}),
         ...(webPlugin ? { plugins: [webPlugin] } : {}),
         ...providerRouting,
       }),
@@ -376,8 +380,10 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
             const delta = json.choices?.[0]?.delta?.content || '';
             if (delta) {
               accumulatedText += delta;
-              res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: delta } }] })}\n\n`);
-              streamWriter.writeChunk(delta);
+              if (!isQuizRequest) {
+                res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: delta } }] })}\n\n`);
+                streamWriter.writeChunk(delta);
+              }
             }
             const toolCallsDelta = json.choices?.[0]?.delta?.tool_calls;
             if (toolCallsDelta) {
@@ -406,6 +412,34 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
           clientIp,
           conversationId,
           formattedMessages,
+          streamWriter,
+          res,
+          controller,
+          apiKey,
+          model,
+          providerRouting,
+        });
+      } else if (isQuizRequest && apiKey && !controller.signal.aborted) {
+        if (!res.writableEnded) {
+          res.write('data: {"type":"quiz_status","status":"building"}\n\n');
+        }
+        await handleCompletedToolCalls({
+          toolCallsMap: {
+            0: {
+              id: `call_quiz_${Date.now()}_init`,
+              type: 'function',
+              function: { name: 'create_quiz', arguments: '{}' },
+            },
+          },
+          serverEnv,
+          userId,
+          clientIp,
+          conversationId,
+          formattedMessages: [
+            ...formattedMessages,
+            { role: 'assistant', content: accumulatedText || 'Attempted to respond in text.' },
+            { role: 'user', content: 'CRITICAL INSTRUCTION: You must NOT answer in plain conversational text or apologies. You MUST call the create_quiz function immediately with arguments: title, category, summary, difficulty, icon, color, and questions.' },
+          ],
           streamWriter,
           res,
           controller,

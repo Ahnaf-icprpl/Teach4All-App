@@ -83,6 +83,7 @@ function Messages() {
                 : (isGenerating
                     ? (buildingQuiz.val
                         ? span({ class: 'searching-web-indicator building-quiz-indicator' },
+                            icon('globe', 'spin-slow'),
                             icon('bulb', 'spin-slow'),
                             () => t('chat_quiz_building_status'),
                           )
@@ -225,7 +226,6 @@ export function Chat() {
       Suggestions(),
     ),
     div({ class: 'workspace-footer' },
-      icon('mountain'),
       span(() => t('chat_footer_text')),
     ),
   );

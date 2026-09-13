@@ -186,9 +186,6 @@ export function renderSsrHtml({ htmlTemplate, texts, prompts = [] }) {
           </section>
         </div>
         <div class="workspace-footer">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon">
-            <path d="M3 17 10 5l11 16H3l4-7 5 7"/><path d="m8 9 3 3 3-2"/><path d="M19 3v5m-2.5-2.5h5"/>
-          </svg>
           <span>${escapeHtml(texts.chat_footer_text || '')}</span>
         </div>
       </div>

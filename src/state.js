@@ -47,6 +47,33 @@ export const offlineReady = van.state(false);
 export const updateReady = van.state(false);
 export const modal = van.state(null);
 let toastTimer;
+let activeChatAbortController = null;
+let activeGeneratingChatId = null;
+
+export function abortActiveGeneration() {
+  if (activeChatAbortController) {
+    try {
+      activeChatAbortController.abort();
+    } catch {}
+    activeChatAbortController = null;
+  }
+  if (activeGeneratingChatId) {
+    const genChatId = activeGeneratingChatId;
+    activeGeneratingChatId = null;
+    chats.val = chats.val.map(c => {
+      if (c.id === genChatId) {
+        return {
+          ...c,
+          messages: c.messages.filter(m => m.role !== 'assistant' || (m.text && m.text.trim().length > 0)),
+        };
+      }
+      return c;
+    });
+  }
+  loading.val = false;
+  searchingWeb.val = false;
+  buildingQuiz.val = false;
+}
 
 export const currentChat = () => chats.val.find(chat => chat.id === activeId.val);
 export const hasMessages = () => Boolean(activeId.val || currentChat()?.messages?.length);
@@ -86,6 +113,9 @@ export function focusComposer() {
 }
 
 export function newChat() {
+  if (activeGeneratingChatId) {
+    abortActiveGeneration();
+  }
   activeId.val = null;
   draft.val = '';
   search.val = '';
@@ -96,7 +126,9 @@ export function newChat() {
 }
 
 export function startTopicChat(type, topicOrPrompt) {
-  if (loading.val) return;
+  if (activeGeneratingChatId) {
+    abortActiveGeneration();
+  }
   if (chats.val.length >= MAX_CHATS) {
     toast(t('state_max_chats_notice'));
     return;
@@ -128,6 +160,9 @@ export function openQuickChat(type) {
 }
 
 export async function selectChat(id) {
+  if (activeGeneratingChatId && activeGeneratingChatId !== id) {
+    abortActiveGeneration();
+  }
   activeId.val = id;
   draft.val = '';
   sidebarOpen.val = false;
@@ -156,6 +191,11 @@ export function sendMessage() {
     toast(t('state_max_chats_notice'));
     return;
   }
+
+  if (activeGeneratingChatId) {
+    abortActiveGeneration();
+  }
+
   const isNewConversation = !existing || existing.messages.length === 0;
   const initialTitle = isNewConversation ? generateOfflineTitle(text) : (existing.title || generateOfflineTitle(text));
   const chat = existing || {
@@ -219,8 +259,14 @@ export function sendMessage() {
 
   const isQuizIntent = /\b(kuis|quiz|soal|latihan|evaluasi|test me)\b/i.test(userMessage.text || '');
   buildingQuiz.val = Boolean(isQuizIntent);
-  searchingWeb.val = Boolean(webSearchEnabled.val && online.val && !isQuizIntent);
+  searchingWeb.val = Boolean(online.val && (webSearchEnabled.val || isQuizIntent));
+
+  const abortController = new AbortController();
+  activeChatAbortController = abortController;
+  activeGeneratingChatId = chat.id;
+
   sendApiMessage(messageHistory, (chunkText) => {
+    if (activeGeneratingChatId !== chat.id) return;
     if (buildingQuiz.val) buildingQuiz.val = false;
     if (searchingWeb.val) searchingWeb.val = false;
     const updatedChats = chats.val.map(c => {
@@ -238,7 +284,7 @@ export function sendMessage() {
     chats.val = updatedChats;
     requestAnimationFrame(() => {
       const pane = document.getElementById('messages');
-      if (pane) pane.scrollTop = pane.scrollHeight;
+      if (pane && activeId.val === chat.id) pane.scrollTop = pane.scrollHeight;
     });
   }, {
     conversationId: chat.id,
@@ -246,23 +292,38 @@ export function sendMessage() {
     userMessageId: userMessage.id,
     assistantMessageId: assistantMessage.id,
     userId: TEST_USER_ID,
-    webSearch: webSearchEnabled.val && online.val,
+    webSearch: isQuizIntent ? Boolean(online.val) : (webSearchEnabled.val && online.val),
+    signal: abortController.signal,
     onStatus: (status) => {
+      if (activeGeneratingChatId !== chat.id) return;
       if (status === 'building_quiz') {
         buildingQuiz.val = true;
         searchingWeb.val = false;
       }
     },
   }).then(() => {
-    buildingQuiz.val = false;
-    searchingWeb.val = false;
-    loading.val = false;
-    persist();
-    focusComposer();
+    if (activeGeneratingChatId === chat.id) {
+      activeChatAbortController = null;
+      activeGeneratingChatId = null;
+      buildingQuiz.val = false;
+      searchingWeb.val = false;
+      loading.val = false;
+      persist();
+      focusComposer();
+    }
   }).catch((error) => {
-    buildingQuiz.val = false;
-    searchingWeb.val = false;
-    loading.val = false;
+    if (activeGeneratingChatId === chat.id) {
+      activeChatAbortController = null;
+      activeGeneratingChatId = null;
+      buildingQuiz.val = false;
+      searchingWeb.val = false;
+      loading.val = false;
+    }
+
+    if (error.message === 'Request was cancelled.') {
+      return;
+    }
+
     const errorMessage = error.message || t('state_send_failed');
 
     if (errorMessage.toLowerCase().includes('rate limit')) {
@@ -301,7 +362,7 @@ export function sendMessage() {
     focusComposer();
     requestAnimationFrame(() => {
       const pane = document.getElementById('messages');
-      if (pane) pane.scrollTop = pane.scrollHeight;
+      if (pane && activeId.val === chat.id) pane.scrollTop = pane.scrollHeight;
     });
   });
 }
@@ -316,6 +377,9 @@ export function renameChat(id, title) {
 }
 
 export function deleteChat(id) {
+  if (activeGeneratingChatId === id) {
+    abortActiveGeneration();
+  }
   chats.val = chats.val.filter(chat => chat.id !== id);
   if (activeId.val === id) activeId.val = null;
   modal.val = null;
@@ -324,6 +388,7 @@ export function deleteChat(id) {
 }
 
 export function clearWorkspace() {
+  abortActiveGeneration();
   chats.val = [];
   activeId.val = null;
   draft.val = '';
@@ -350,6 +415,20 @@ export function setTheme(value) {
 if (typeof window !== 'undefined') {
   window.addEventListener('online', () => { online.val = true; });
   window.addEventListener('offline', () => { online.val = false; });
+  window.addEventListener('beforeunload', () => {
+    if (activeChatAbortController) {
+      try {
+        activeChatAbortController.abort();
+      } catch {}
+    }
+  });
+  window.addEventListener('pagehide', () => {
+    if (activeChatAbortController) {
+      try {
+        activeChatAbortController.abort();
+      } catch {}
+    }
+  });
   loadThemeFromLocalDb().then(dbTheme => {
     if (dbTheme && dbTheme !== theme.val) {
       theme.val = dbTheme;

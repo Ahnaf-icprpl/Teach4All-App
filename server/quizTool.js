@@ -1,6 +1,7 @@
 import { createQuiz, DEFAULT_USER_ID } from './db.js';
 import { logger } from './logger.js';
 import { diagnoseAndValidateQuizArgs } from './quizValidator.js';
+import { buildWebSearchPlugin } from './webSearch.js';
 
 export const QUIZ_TOOL_NAME = 'create_quiz';
 
@@ -12,7 +13,7 @@ export function buildQuizTool(serverEnv = {}) {
     type: 'function',
     function: {
       name: QUIZ_TOOL_NAME,
-      description: 'Buat kuis pilihan ganda interaktif baru untuk pengguna dengan pertanyaan, 4 pilihan jawaban, kunci jawaban yang tepat, dan penjelasan edukatif. Ikuti instruksi pengguna mengenai jumlah soal dan topik/materi spesifik yang diminta. Jika pengguna tidak menentukan jumlah soal, buatlah sekitar 20 pertanyaan secara default (default around 20 questions).',
+      description: 'Buat kuis pilihan ganda interaktif baru untuk pengguna dengan pertanyaan yang diverifikasi melalui riset pencarian web terkini, 4 pilihan jawaban, kunci jawaban yang tepat, dan penjelasan edukatif. Ikuti instruksi pengguna mengenai jumlah soal dan topik/materi spesifik yang diminta. Jika pengguna tidak menentukan jumlah soal, buatlah sekitar 20 pertanyaan secara default (default around 20 questions).',
       parameters: {
         type: 'object',
         properties: {
@@ -197,7 +198,7 @@ export async function handleCompletedToolCalls({
   model,
   providerRouting = {},
   openRouterUrl = 'https://openrouter.ai/api/v1/chat/completions',
-  maxRetries = 2,
+  maxRetries = 10,
 }) {
   const calls = Object.values(toolCallsMap);
   let currentQuizCall = calls.find(c => c.function?.name === QUIZ_TOOL_NAME);
@@ -266,7 +267,8 @@ export async function handleCompletedToolCalls({
           status: 'error',
           error_type: execResult.errorType || 'VALIDATION_ERROR',
           diagnostic: execResult.diagnostic || execResult.error,
-          instruction: 'Fix the issues identified above and call create_quiz again with corrected arguments.',
+          detailed_errors: execResult.errors || [],
+          instruction: 'You MUST call create_quiz again immediately with all errors fixed. Do NOT apologize or respond in conversational plain text.',
         }),
       });
 
@@ -288,6 +290,8 @@ export async function handleCompletedToolCalls({
             stream: true,
             user: userId || clientIp,
             tools: [buildQuizTool(serverEnv)],
+            tool_choice: { type: 'function', function: { name: QUIZ_TOOL_NAME } },
+            plugins: [buildWebSearchPlugin(serverEnv)],
             ...providerRouting,
           }),
           signal: controller?.signal,
@@ -302,6 +306,7 @@ export async function handleCompletedToolCalls({
         const recallDecoder = new TextDecoder();
         let recallSseBuffer = '';
         const recallToolCalls = {};
+        let recallText = '';
 
         while (true) {
           const { done, value } = await recallReader.read();
@@ -320,10 +325,8 @@ export async function handleCompletedToolCalls({
               const json = JSON.parse(data);
               const delta = json.choices?.[0]?.delta?.content || '';
               if (delta) {
-                if (!res.writableEnded) {
-                  res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: delta } }] })}\n\n`);
-                }
-                if (streamWriter) streamWriter.writeChunk(delta);
+                // Buffer text internally; NEVER stream intermediate excuses or apologies to the user!
+                recallText += delta;
               }
               const tcDelta = json.choices?.[0]?.delta?.tool_calls;
               if (tcDelta) {
@@ -339,7 +342,28 @@ export async function handleCompletedToolCalls({
           currentQuizCall = nextQuizCall;
           continue;
         } else {
-          return;
+          // Model output plain text or apology instead of invoking create_quiz
+          logger.warn('Model output text instead of calling create_quiz during recall, forcing tool recall', {
+            attempt: attempt + 1,
+            text_snippet: recallText.slice(0, 100),
+          });
+          conversationHistory.push({
+            role: 'assistant',
+            content: recallText || 'Error attempting to construct quiz.',
+          });
+          conversationHistory.push({
+            role: 'user',
+            content: 'CRITICAL INSTRUCTION: Do NOT apologize or respond with plain conversational text. You MUST call the create_quiz function immediately with title, category, summary, difficulty, icon, color, and questions array.',
+          });
+          currentQuizCall = {
+            id: `call_quiz_${Date.now()}_retry`,
+            type: 'function',
+            function: {
+              name: QUIZ_TOOL_NAME,
+              arguments: '{}',
+            },
+          };
+          continue;
         }
       } catch (err) {
         logger.error('Error during tool recall turn', { error: err.message });
@@ -347,7 +371,7 @@ export async function handleCompletedToolCalls({
       }
     } else {
       if (!res.writableEnded) {
-        const errorMsg = `\n\nMaaf, terjadi kendala saat membuat kuis: ${execResult.error || 'kesalahan format'}. Silakan coba minta kuis kembali.`;
+        const errorMsg = `\n\nMaaf, terjadi kendala saat menyusun kuis setelah ${attempt + 1} percobaan: ${execResult.error || 'kesalahan format'}. Silakan coba minta kuis kembali.`;
         res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: errorMsg } }] })}\n\n`);
         if (streamWriter) streamWriter.writeChunk(errorMsg);
       }

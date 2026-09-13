@@ -446,6 +446,34 @@ export async function updateConversationTitle({
 }
 
 /**
+ * Delete a specific message by ID from database and memory.
+ */
+export async function deleteMessage(id, { databaseUrl = process.env.DATABASE_URL } = {}) {
+  const msgId = toUuid(id);
+  if (!msgId) return { success: false };
+
+  for (const convMap of inMemoryMessages.values()) {
+    if (convMap.has(msgId)) {
+      convMap.delete(msgId);
+      break;
+    }
+  }
+
+  if (databaseUrl) {
+    try {
+      const sql = `DELETE FROM messages WHERE id = $1;`;
+      const pool = getPool(databaseUrl);
+      if (pool) {
+        await pool.query(sql, [msgId]);
+      }
+    } catch (err) {
+      logger.error('Failed to delete message from DB', { message_id: msgId, error: err.message });
+    }
+  }
+  return { success: true };
+}
+
+/**
  * Manages streaming conversation persistence to PostgreSQL.
  *
  * Characteristics:
@@ -595,17 +623,21 @@ export class ConversationStreamWriter {
    */
   async abort() {
     this.finished = true;
-    if (!this.databaseUrl || !this.accumulatedContent) return;
+    if (!this.databaseUrl) return;
 
     try {
-      await saveMessage({
-        id: this.assistantMessageId,
-        conversationId: this.conversationId,
-        userId: this.userId,
-        role: 'assistant',
-        content: this.accumulatedContent,
-        databaseUrl: this.databaseUrl,
-      });
+      if (this.accumulatedContent) {
+        await saveMessage({
+          id: this.assistantMessageId,
+          conversationId: this.conversationId,
+          userId: this.userId,
+          role: 'assistant',
+          content: this.accumulatedContent,
+          databaseUrl: this.databaseUrl,
+        });
+      } else {
+        await deleteMessage(this.assistantMessageId, { databaseUrl: this.databaseUrl });
+      }
     } catch {}
   }
 }

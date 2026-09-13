@@ -21,7 +21,7 @@ import {
   OPENROUTER_API_URL,
 } from '../server/chatApi.js';
 import { buildWebSearchPlugin, buildWebSearchTool, isWebSearchRequested, DEFAULT_SEARCH_ENGINE } from '../server/webSearch.js';
-import { QUIZ_TOOL_NAME, buildQuizTool, accumulateToolCalls, formatQuizCardMarker } from '../server/quizTool.js';
+import { QUIZ_TOOL_NAME, buildQuizTool, accumulateToolCalls, formatQuizCardMarker, handleCompletedToolCalls } from '../server/quizTool.js';
 import { SYSTEM_PROMPT, QUIZ_TOOL_SYSTEM_PROMPT, getQuizToolSystemPrompt, injectSystemPrompt } from '../prompts/systemPrompt.js';
 import {
   TITLE_SYSTEM_PROMPT,
@@ -1665,6 +1665,7 @@ test('QUIZ_TOOL_SYSTEM_PROMPT defines specific guidelines for tool calling workf
   assert.strictEqual(quizPrompt, QUIZ_TOOL_SYSTEM_PROMPT);
   assert.ok(quizPrompt.includes('create_quiz'), 'must specify create_quiz');
   assert.ok(quizPrompt.includes('TRIGGER CONDITIONS'), 'must specify trigger conditions');
+  assert.ok(quizPrompt.includes('MANDATORY WEB SEARCH GROUNDING'), 'must specify mandatory web search grounding');
   assert.ok(quizPrompt.includes('TOPIC ADHERENCE & QUESTION COUNT'), 'must specify topic adherence and count');
   assert.ok(quizPrompt.includes('SCHEMA CONSTRAINTS'), 'must specify schema constraints');
   assert.ok(quizPrompt.includes('WORKFLOW & USER EXPERIENCE'), 'must specify workflow and UI card');
@@ -1781,6 +1782,293 @@ test('chatStore loadMoreChats paginates and appends unique items to chats state'
     assert.strictEqual(chats.val[2].id, 'lazy-batch-2');
     assert.strictEqual(hasMoreChats.val, true);
     assert.strictEqual(historyLoadingMore.val, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('isWebSearchRequested forces true on quiz requests regardless of client webSearch toggle', () => {
+  assert.strictEqual(isWebSearchRequested(false, { isQuiz: true }), true);
+  assert.strictEqual(isWebSearchRequested('false', { isQuiz: true }), true);
+  assert.strictEqual(isWebSearchRequested(0, { isQuiz: true }), true);
+  assert.strictEqual(isWebSearchRequested(false, { isQuiz: false }), false);
+});
+
+test('server handleChatRequest attaches web search plugin on quiz requests even when client passed webSearch: false', async () => {
+  const originalFetch = globalThis.fetch;
+  let sentPayload = null;
+
+  globalThis.fetch = async (url, options) => {
+    sentPayload = JSON.parse(options.body);
+    return {
+      ok: true,
+      body: new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
+          controller.close();
+        },
+      }),
+    };
+  };
+
+  try {
+    const req = {
+      method: 'POST',
+      headers: { 'x-forwarded-for': '127.0.0.1' },
+      body: {
+        messages: [{ role: 'user', content: 'buatkan kuis tentang fotosintesis' }],
+        webSearch: false,
+      },
+      on: () => {},
+    };
+
+    let responseData = '';
+    const res = {
+      writeHead: () => {},
+      write: (chunk) => { responseData += chunk; },
+      end: () => {},
+    };
+
+    await handleChatRequest(req, res, { OPENROUTER_API_KEY: 'test-key' });
+
+    assert.ok(sentPayload, 'must have sent payload to OpenRouter');
+    assert.ok(Array.isArray(sentPayload.plugins), 'must include plugins array');
+    const webPlugin = sentPayload.plugins.find(p => p.id === 'web');
+    assert.ok(webPlugin, 'must include web search plugin even when webSearch was false');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('deleteMessage removes message from database and memory', async () => {
+  const { saveConversation, saveMessage, getMessages, deleteMessage } = await import('../server/db.js');
+  const dbUrl = process.env.DATABASE_URL;
+  const convId = crypto.randomUUID();
+  const msgId = crypto.randomUUID();
+
+  try {
+    await saveConversation({ id: convId, userId: TEST_USER_ID, title: 'Delete Msg Test', databaseUrl: dbUrl });
+    await saveMessage({ id: msgId, conversationId: convId, userId: TEST_USER_ID, role: 'assistant', content: 'Temp msg', databaseUrl: dbUrl });
+
+    let msgs = await getMessages({ conversationId: convId, userId: TEST_USER_ID, databaseUrl: dbUrl });
+    assert.strictEqual(msgs.some(m => m.id === msgId), true, 'message should exist before deletion');
+
+    await deleteMessage(msgId, { databaseUrl: dbUrl });
+
+    msgs = await getMessages({ conversationId: convId, userId: TEST_USER_ID, databaseUrl: dbUrl });
+    assert.strictEqual(msgs.some(m => m.id === msgId), false, 'message should be deleted');
+  } finally {
+    const { deleteConversation } = await import('../server/db.js');
+    await deleteConversation({ conversationId: convId, userId: TEST_USER_ID, databaseUrl: dbUrl });
+  }
+});
+
+test('ConversationStreamWriter abort() cleans up empty placeholder message when no content was accumulated', async () => {
+  const { ConversationStreamWriter, getMessages, deleteConversation } = await import('../server/db.js');
+  const dbUrl = process.env.DATABASE_URL;
+  const convId = crypto.randomUUID();
+  const userMsgId = crypto.randomUUID();
+  const assistantMsgId = crypto.randomUUID();
+
+  try {
+    const writer = new ConversationStreamWriter({
+      conversationId: convId,
+      userId: TEST_USER_ID,
+      title: 'Abort Stream Test',
+      userMessage: { id: userMsgId, role: 'user', text: 'Prompt without reply' },
+      assistantMessageId: assistantMsgId,
+      databaseUrl: dbUrl,
+    });
+
+    await writer.init();
+
+    // Verify placeholder was created initially
+    let msgs = await getMessages({ conversationId: convId, userId: TEST_USER_ID, databaseUrl: dbUrl });
+    assert.strictEqual(msgs.length, 2, 'both user and placeholder assistant messages created');
+
+    // Abort stream before any chunks accumulated (e.g. client reload mid web search / quiz generation)
+    await writer.abort();
+
+    // Verify empty placeholder was removed cleanly
+    msgs = await getMessages({ conversationId: convId, userId: TEST_USER_ID, databaseUrl: dbUrl });
+    assert.strictEqual(msgs.length, 1, 'empty placeholder should be deleted on abort');
+    assert.strictEqual(msgs[0].id, userMsgId, 'only user message should remain');
+  } finally {
+    await deleteConversation({ conversationId: convId, userId: TEST_USER_ID, databaseUrl: dbUrl });
+  }
+});
+
+test('sendMessage in router.js supports options.signal and throws Request was cancelled on abort', async () => {
+  const originalFetch = globalThis.fetch;
+  const abortCtrl = new AbortController();
+
+  globalThis.fetch = async (url, options) => {
+    return new Promise((resolve, reject) => {
+      options.signal?.addEventListener('abort', () => {
+        const err = new Error('The user aborted a request.');
+        err.name = 'AbortError';
+        reject(err);
+      });
+    });
+  };
+
+  try {
+    const sendPromise = sendMessage(
+      [{ role: 'user', content: 'hello' }],
+      () => {},
+      { signal: abortCtrl.signal }
+    );
+
+    // Trigger abort mid-flight
+    abortCtrl.abort();
+
+    await assert.rejects(sendPromise, (err) => {
+      assert.strictEqual(err.message, 'Request was cancelled.');
+      return true;
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('abortActiveGeneration cleanly cancels in-flight state and cleans up empty assistant messages in memory', async () => {
+  const { abortActiveGeneration, loading, searchingWeb, buildingQuiz, chats, activeId } = await import('../src/state.js');
+
+  const testConvId = 'test-mid-generation-conv';
+  chats.val = [
+    {
+      id: testConvId,
+      title: 'Mid Generation Chat',
+      messages: [
+        { id: 'u-1', role: 'user', text: 'buat kuis fotosintesis' },
+        { id: 'a-1', role: 'assistant', text: '' },
+      ],
+      messagesLoaded: true,
+      updatedAt: Date.now(),
+    },
+  ];
+  activeId.val = testConvId;
+  loading.val = true;
+  buildingQuiz.val = true;
+  searchingWeb.val = true;
+
+  abortActiveGeneration();
+
+  assert.strictEqual(loading.val, false, 'loading should be reset to false');
+  assert.strictEqual(buildingQuiz.val, false, 'buildingQuiz should be reset to false');
+  assert.strictEqual(searchingWeb.val, false, 'searchingWeb should be reset to false');
+
+  const currentChat = chats.val.find(c => c.id === testConvId);
+  assert.strictEqual(currentChat.messages.length, 1, 'empty assistant placeholder should be cleaned up');
+  assert.strictEqual(currentChat.messages[0].id, 'u-1', 'user message preserved');
+});
+
+test('server handleChatRequest attaches tool_choice for create_quiz when isQuizRequest is true', async () => {
+  const originalFetch = globalThis.fetch;
+  let sentPayload = null;
+
+  globalThis.fetch = async (url, options) => {
+    sentPayload = JSON.parse(options.body);
+    return {
+      ok: true,
+      body: new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
+          controller.close();
+        },
+      }),
+    };
+  };
+
+  try {
+    const req = {
+      method: 'POST',
+      headers: { 'x-forwarded-for': '127.0.0.1' },
+      body: {
+        messages: [{ role: 'user', content: 'buat soal kuis biologi' }],
+      },
+      on: () => {},
+    };
+
+    const res = {
+      writeHead: () => {},
+      write: () => {},
+      end: () => {},
+    };
+
+    await handleChatRequest(req, res, { OPENROUTER_API_KEY: 'test-key' });
+
+    assert.ok(sentPayload, 'must send payload');
+    assert.deepStrictEqual(
+      sentPayload.tool_choice,
+      { type: 'function', function: { name: 'create_quiz' } },
+      'must force tool_choice for create_quiz on quiz request'
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('handleCompletedToolCalls never streams conversational apology text during recall and supports 10 retries', async () => {
+  const originalFetch = globalThis.fetch;
+  const streamedChunks = [];
+  let recallCallCount = 0;
+  let lastRequestBody = null;
+
+  globalThis.fetch = async (url, options) => {
+    recallCallCount++;
+    lastRequestBody = JSON.parse(options.body);
+
+    const streamContent = (recallCallCount === 1)
+      ? 'data: {"choices":[{"delta":{"content":"I\'m sorry, but I encountered an error while trying to create the quiz."}}]}\n\ndata: [DONE]\n\n'
+      : 'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_quiz_success","type":"function","function":{"name":"create_quiz","arguments":"{\\"title\\":\\"Kuis Biologi Sel\\",\\"category\\":\\"Biologi\\",\\"summary\\":\\"Kuis sel\\",\\"questions\\":[{\\"question_text\\":\\"Organel respirasi?\\",\\"options\\":[\\"Mitokondria\\",\\"Ribosom\\",\\"Nukleus\\",\\"Vakuola\\"],\\"correct_answer\\":0,\\"explanation\\":\\"Mitokondria menghasilkan ATP\\"}]}"}}]}}]}\n\ndata: [DONE]\n\n';
+
+    return {
+      ok: true,
+      body: new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(streamContent));
+          controller.close();
+        },
+      }),
+    };
+  };
+
+  try {
+    const res = {
+      writableEnded: false,
+      write: (data) => {
+        streamedChunks.push(data);
+      },
+    };
+
+    await handleCompletedToolCalls({
+      toolCallsMap: {
+        0: {
+          id: 'call_initial',
+          type: 'function',
+          function: {
+            name: 'create_quiz',
+            arguments: '{invalid_json',
+          },
+        },
+      },
+      serverEnv: { DATABASE_URL: process.env.DATABASE_URL },
+      userId: TEST_USER_ID,
+      clientIp: '127.0.0.1',
+      conversationId: crypto.randomUUID(),
+      formattedMessages: [{ role: 'user', content: 'buatkan kuis biologi' }],
+      res,
+      apiKey: 'test-api-key',
+      model: 'google/gemini-2.5-flash-lite',
+      maxRetries: 10,
+    });
+
+    const allStreamed = streamedChunks.join('');
+    assert.ok(!allStreamed.includes("I'm sorry, but I encountered an error"), 'must NOT stream apology text to user');
+    assert.ok(allStreamed.includes(':::quiz-card{'), 'must stream quiz-card marker on successful creation');
+    assert.ok(allStreamed.includes('Kuis Biologi Sel'), 'must include quiz title');
+    assert.deepStrictEqual(lastRequestBody.tool_choice, { type: 'function', function: { name: 'create_quiz' } });
   } finally {
     globalThis.fetch = originalFetch;
   }

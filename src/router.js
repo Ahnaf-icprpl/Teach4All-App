@@ -26,6 +26,14 @@ export async function sendMessage(messages, onChunk, options = {}) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
+  if (options.signal) {
+    if (options.signal.aborted) {
+      controller.abort();
+    } else {
+      options.signal.addEventListener('abort', () => controller.abort(), { once: true });
+    }
+  }
+
   try {
     const payload = {
       messages,
@@ -127,6 +135,9 @@ export async function sendMessage(messages, onChunk, options = {}) {
   } catch (error) {
     clearTimeout(timeoutId);
     if (error.name === 'AbortError') {
+      if (options.signal?.aborted) {
+        throw new Error('Request was cancelled.');
+      }
       throw new Error('Request timed out. Please check your connection and try again.');
     }
     throw error;
