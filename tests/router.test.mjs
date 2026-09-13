@@ -20,7 +20,7 @@ import {
 } from '../server/chatApi.js';
 import { buildWebSearchPlugin, buildWebSearchTool, isWebSearchRequested, DEFAULT_SEARCH_ENGINE } from '../server/webSearch.js';
 import { QUIZ_TOOL_NAME, buildQuizTool, accumulateToolCalls, formatQuizCardMarker } from '../server/quizTool.js';
-import { SYSTEM_PROMPT, injectSystemPrompt } from '../prompts/systemPrompt.js';
+import { SYSTEM_PROMPT, QUIZ_TOOL_SYSTEM_PROMPT, getQuizToolSystemPrompt, injectSystemPrompt } from '../prompts/systemPrompt.js';
 import {
   TITLE_SYSTEM_PROMPT,
   getTitleSystemPrompt,
@@ -1612,6 +1612,18 @@ test('SYSTEM_PROMPT instructs the model on create_quiz, user topics, and 20 ques
   assert.ok(prompt.includes('create_quiz'), 'must mention create_quiz');
   assert.ok(prompt.includes('20 pertanyaan') || prompt.includes('20 questions'), 'must mention 20 questions default');
   assert.ok(prompt.includes('topik') || prompt.includes('jumlah'), 'must mention following topic and count instructions');
+});
+
+test('QUIZ_TOOL_SYSTEM_PROMPT defines specific guidelines for tool calling workflow, schema, and error recall', () => {
+  const quizPrompt = getQuizToolSystemPrompt();
+  assert.strictEqual(quizPrompt, QUIZ_TOOL_SYSTEM_PROMPT);
+  assert.ok(quizPrompt.includes('create_quiz'), 'must specify create_quiz');
+  assert.ok(quizPrompt.includes('TRIGGER CONDITIONS'), 'must specify trigger conditions');
+  assert.ok(quizPrompt.includes('TOPIC ADHERENCE & QUESTION COUNT'), 'must specify topic adherence and count');
+  assert.ok(quizPrompt.includes('SCHEMA CONSTRAINTS'), 'must specify schema constraints');
+  assert.ok(quizPrompt.includes('WORKFLOW & USER EXPERIENCE'), 'must specify workflow and UI card');
+  assert.ok(quizPrompt.includes('ALGORITHMIC ERROR RECOVERY & RECALL'), 'must specify algorithmic error recovery');
+  assert.ok(SYSTEM_PROMPT.includes(QUIZ_TOOL_SYSTEM_PROMPT), 'SYSTEM_PROMPT must incorporate QUIZ_TOOL_SYSTEM_PROMPT');
 });
 
 
