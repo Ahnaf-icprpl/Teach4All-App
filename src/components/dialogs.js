@@ -150,18 +150,6 @@ function formatMeta(isQuiz, item) {
 function TopicList(type) {
   const isQuiz = type === 'quiz';
   const items = isQuiz ? MOCK_QUIZZES : MOCK_MATERIALS;
-  const customInput = input({
-    type: 'text',
-    class: 'topic-custom-input',
-    placeholder: () => isQuiz ? t('dialogs_topic_custom_quiz') : t('dialogs_topic_custom_material'),
-    'aria-label': () => isQuiz ? t('dialogs_topic_custom_quiz') : t('dialogs_topic_custom_material'),
-  });
-
-  const onCustomSubmit = event => {
-    event.preventDefault();
-    const val = customInput.value.trim();
-    if (val) startTopicChat(type, val);
-  };
 
   return div({ class: 'topic-dialog-content' },
     p({ class: 'topic-dialog-desc' },
@@ -190,11 +178,6 @@ function TopicList(type) {
           }, span(() => isQuiz ? t('dialogs_quiz_start_button') : t('dialogs_material_open_button')), icon('arrowRight')),
         ),
       )),
-    ),
-    form({ class: 'topic-custom-form', onsubmit: onCustomSubmit },
-      customInput,
-      button({ type: 'submit', class: 'primary-button topic-submit-btn' },
-        icon('plus'), span(() => isQuiz ? t('dialogs_quiz_create_new') : t('dialogs_material_create_new'))),
     ),
   );
 }
