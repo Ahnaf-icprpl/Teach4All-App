@@ -4,6 +4,7 @@ import {
   chats, activeId, newChat, selectChat, modal, sidebarOpen,
   sidebarCollapsed, search, searchResults, searchLoading,
   onSearchInput, openQuickChat, historyLoading,
+  historyLoadingMore, hasMoreChats, loadMoreChats,
 } from '../state.js';
 import { t } from '../uiTexts.js';
 
@@ -29,6 +30,31 @@ export function Sidebar() {
     );
   };
 
+  const loadMoreSection = () => {
+    if (search.val.trim() || (!hasMoreChats.val && !historyLoadingMore.val) || !chats.val.length) {
+      return null;
+    }
+    if (historyLoadingMore.val) {
+      return div({ class: 'chat-list-load-more', 'aria-live': 'polite' },
+        div({ class: 'history-loading-more' },
+          span({ class: 'typing-indicator', 'aria-label': () => t('sidebar_loading_more'), title: () => t('sidebar_loading_more') },
+            span({ class: 'typing-dot' }),
+            span({ class: 'typing-dot' }),
+            span({ class: 'typing-dot' }),
+          ),
+          span({ class: 'loading-more-text' }, () => t('sidebar_loading_more')),
+        ),
+      );
+    }
+    return div({ class: 'chat-list-load-more' },
+      button({
+        class: 'load-more-button',
+        onclick: () => loadMoreChats(),
+        'aria-label': () => t('sidebar_load_more'),
+      }, () => t('sidebar_load_more')),
+    );
+  };
+
   const conversationList = () => {
     if ((historyLoading.val && !chats.val.length) || (searchLoading.val && searchResults.val === null)) {
       return div({ class: 'empty-history' },
@@ -42,26 +68,29 @@ export function Sidebar() {
     }
     const list = filtered();
     if (!list.length) return emptyHistory();
-    return div({ class: 'chat-list' }, list.map(chat =>
-      div({ class: () => `chat-item ${chat.id === activeId.val ? 'is-active' : ''}` },
-        button({
-          class: 'chat-select',
-          onclick: () => selectChat(chat.id),
-          'aria-current': () => chat.id === activeId.val ? 'page' : null,
-        },
-        icon('chat'),
-        span(chat.title),
-        ),
-        button({
-          class: 'icon-button chat-options',
-          'aria-label': () => `${t('sidebar_chat_options_aria_prefix')}${chat.title}`,
-          onclick: event => {
-            event.stopPropagation();
-            modal.val = { type: 'conversation', id: chat.id };
+    return div({ class: 'chat-list' },
+      list.map(chat =>
+        div({ class: () => `chat-item ${chat.id === activeId.val ? 'is-active' : ''}` },
+          button({
+            class: 'chat-select',
+            onclick: () => selectChat(chat.id),
+            'aria-current': () => chat.id === activeId.val ? 'page' : null,
           },
-        }, icon('more')),
+          icon('chat'),
+          span(chat.title),
+          ),
+          button({
+            class: 'icon-button chat-options',
+            'aria-label': () => `${t('sidebar_chat_options_aria_prefix')}${chat.title}`,
+            onclick: event => {
+              event.stopPropagation();
+              modal.val = { type: 'conversation', id: chat.id };
+            },
+          }, icon('more')),
+        ),
       ),
-    ));
+      loadMoreSection,
+    );
   };
 
   return aside({
@@ -104,7 +133,18 @@ export function Sidebar() {
         }),
       ),
     ),
-    nav({ class: 'history', 'aria-label': () => t('sidebar_history_aria') },
+    nav({
+      class: 'history',
+      'aria-label': () => t('sidebar_history_aria'),
+      onscroll: (event) => {
+        const el = event.currentTarget;
+        if (!search.val.trim() && hasMoreChats.val && !historyLoadingMore.val && !historyLoading.val) {
+          if (el.scrollHeight - el.scrollTop - el.clientHeight < 80) {
+            loadMoreChats();
+          }
+        }
+      },
+    },
       div({ class: 'section-heading' }, h2(() => t('sidebar_history_heading')), () => span({ class: 'chat-count' }, chats.val.length || '')),
       conversationList,
     ),

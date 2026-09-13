@@ -172,7 +172,7 @@ export async function generateTitle(messages, options = {}) {
   }
 }
 
-export async function fetchConversations({ userId = TEST_USER_ID, limit = 50, offset = 0, query = '' } = {}) {
+export async function fetchConversations({ userId = TEST_USER_ID, limit = 20, offset = 0, query = '' } = {}) {
   let url = `${CONVERSATIONS_API_URL}?userId=${encodeURIComponent(userId)}&limit=${limit}&offset=${offset}`;
   if (query && typeof query === 'string' && query.trim()) {
     url += `&q=${encodeURIComponent(query.trim())}`;

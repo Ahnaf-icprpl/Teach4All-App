@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import { EventEmitter } from 'node:events';
+import { resolve } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
 
 process.env.NODE_ENV = 'test';
 import {
@@ -1669,6 +1671,121 @@ test('QUIZ_TOOL_SYSTEM_PROMPT defines specific guidelines for tool calling workf
   assert.ok(quizPrompt.includes('ALGORITHMIC ERROR RECOVERY & RECALL'), 'must specify algorithmic error recovery');
   assert.ok(SYSTEM_PROMPT.includes(QUIZ_TOOL_SYSTEM_PROMPT), 'SYSTEM_PROMPT must incorporate QUIZ_TOOL_SYSTEM_PROMPT');
 });
+
+test('migration 020 defines sidebar lazy loading UI texts without fallback', async () => {
+  const filePath = resolve(process.cwd(), 'migrations/020_add_sidebar_lazy_load_ui_texts.sql');
+  assert.ok(existsSync(filePath), 'migration 020 file must exist');
+  const sql = readFileSync(filePath, 'utf8');
+  assert.ok(sql.includes('sidebar_load_more'), 'must define sidebar_load_more');
+  assert.ok(sql.includes('sidebar_loading_more'), 'must define sidebar_loading_more');
+
+  const dbUrl = process.env.DATABASE_URL;
+  if (dbUrl) {
+    const { query } = await import('../server/db.js');
+    const rows = await query("SELECT key, value FROM ui_texts WHERE key IN ('sidebar_load_more', 'sidebar_loading_more');", [], dbUrl);
+    assert.strictEqual(rows.length, 2, 'both UI text keys must exist in live database');
+  }
+});
+
+test('getConversations strictly sorts by latest interacted with timestamp', async () => {
+  const { saveConversation, saveMessage, getConversations, deleteConversation } = await import('../server/db.js');
+  const dbUrl = process.env.DATABASE_URL;
+  const convId1 = crypto.randomUUID();
+  const convId2 = crypto.randomUUID();
+
+  try {
+    // 1. Create conversation 1
+    await saveConversation({ id: convId1, userId: TEST_USER_ID, title: 'Interaction Test 1', databaseUrl: dbUrl });
+    await saveMessage({ id: crypto.randomUUID(), conversationId: convId1, userId: TEST_USER_ID, content: 'First conv first msg', databaseUrl: dbUrl });
+
+    // Slight delay to ensure distinct timestamp
+    await new Promise(r => setTimeout(r, 200));
+
+    // 2. Create conversation 2 with a newer message
+    await saveConversation({ id: convId2, userId: TEST_USER_ID, title: 'Interaction Test 2', databaseUrl: dbUrl });
+    await saveMessage({ id: crypto.randomUUID(), conversationId: convId2, userId: TEST_USER_ID, content: 'Second conv first msg', databaseUrl: dbUrl });
+
+    // Conv 2 should be first
+    let convs = await getConversations({ userId: TEST_USER_ID, limit: 10, databaseUrl: dbUrl });
+    const idxConv1Before = convs.findIndex(c => c.id === convId1);
+    const idxConv2Before = convs.findIndex(c => c.id === convId2);
+    assert.ok(idxConv2Before < idxConv1Before, 'Conversation 2 should appear before Conversation 1');
+
+    await new Promise(r => setTimeout(r, 200));
+
+    // 3. Send a new message to conversation 1 -> now conv 1 has latest interaction
+    await saveMessage({ id: crypto.randomUUID(), conversationId: convId1, userId: TEST_USER_ID, content: 'First conv latest reply', databaseUrl: dbUrl });
+
+    convs = await getConversations({ userId: TEST_USER_ID, limit: 10, databaseUrl: dbUrl });
+    const idxConv1After = convs.findIndex(c => c.id === convId1);
+    const idxConv2After = convs.findIndex(c => c.id === convId2);
+    assert.ok(idxConv1After < idxConv2After, 'Conversation 1 should now appear first after receiving the latest message');
+  } finally {
+    await deleteConversation({ conversationId: convId1, userId: TEST_USER_ID, databaseUrl: dbUrl });
+    await deleteConversation({ conversationId: convId2, userId: TEST_USER_ID, databaseUrl: dbUrl });
+  }
+});
+
+test('handleConversationsRequest returns pagination metadata with hasMore', async () => {
+  const req = new EventEmitter();
+  req.method = 'GET';
+  req.url = `/api/conversations?userId=${TEST_USER_ID}&limit=2&offset=0`;
+  req.headers = { 'x-forwarded-for': '127.0.0.1' };
+
+  let statusCode = 0;
+  let responseData = '';
+  const res = {
+    writeHead: (code) => { statusCode = code; },
+    end: (str) => { responseData = str; },
+    setHeader: () => {},
+  };
+
+  await handleConversationsRequest(req, res, { RATE_LIMIT: 1000 });
+  assert.strictEqual(statusCode, 200);
+  const parsed = JSON.parse(responseData);
+  assert.ok(Array.isArray(parsed.conversations));
+  assert.strictEqual(parsed.limit, 2);
+  assert.strictEqual(parsed.offset, 0);
+  assert.strictEqual(typeof parsed.hasMore, 'boolean');
+});
+
+test('chatStore loadMoreChats paginates and appends unique items to chats state', async () => {
+  const { chats, hasMoreChats, historyLoadingMore, loadMoreChats } = await import('../src/chatStore.js');
+
+  const originalFetch = globalThis.fetch;
+  let requestedOffset = null;
+  globalThis.fetch = async (url) => {
+    const parsed = new URL(url, 'http://localhost');
+    requestedOffset = parseInt(parsed.searchParams.get('offset') || '0', 10);
+    return new Response(JSON.stringify({
+      conversations: [
+        { id: 'lazy-batch-1', title: 'Lazy Convo 1', updated_at: new Date().toISOString() },
+        { id: 'lazy-batch-2', title: 'Lazy Convo 2', updated_at: new Date().toISOString() },
+      ],
+      hasMore: true,
+      limit: 2,
+      offset: requestedOffset,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+
+  try {
+    chats.val = [{ id: 'existing-1', title: 'Existing Convo', messages: [], messagesLoaded: true, updatedAt: Date.now() }];
+    hasMoreChats.val = true;
+    historyLoadingMore.val = false;
+
+    await loadMoreChats();
+
+    assert.strictEqual(requestedOffset, 1, 'offset must equal current chats count');
+    assert.strictEqual(chats.val.length, 3, 'new batch items should be appended');
+    assert.strictEqual(chats.val[1].id, 'lazy-batch-1');
+    assert.strictEqual(chats.val[2].id, 'lazy-batch-2');
+    assert.strictEqual(hasMoreChats.val, true);
+    assert.strictEqual(historyLoadingMore.val, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 
 
 

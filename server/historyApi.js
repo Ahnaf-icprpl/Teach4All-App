@@ -85,7 +85,12 @@ export async function handleConversationsRequest(req, res, serverEnv = {}) {
         ...(query ? { query } : {}),
       });
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ conversations }));
+      res.end(JSON.stringify({
+        conversations,
+        hasMore: conversations.length === limit,
+        limit,
+        offset,
+      }));
     } catch (err) {
       logger.error('Failed to fetch conversations from DB', {
         endpoint: '/api/conversations',
