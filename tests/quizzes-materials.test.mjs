@@ -601,3 +601,23 @@ test('UI text keys from migration 013 exist in live database', async () => {
   assert.strictEqual(rows.length, 6, 'All 6 interactive study UI text keys must exist in database');
 });
 
+test('migration 014 defines DELETE statement for unused mock texts', () => {
+  const filePath = resolve(process.cwd(), 'migrations/014_remove_unused_mock_ui_texts.sql');
+  assert.strictEqual(existsSync(filePath), true, 'migration file 014 must exist');
+
+  const sql = readFileSync(filePath, 'utf8');
+  assert.ok(sql.includes('DELETE FROM ui_texts'), 'Must delete from ui_texts');
+  assert.ok(sql.includes("key LIKE 'dialogs_mock_%'"), 'Must target dialogs_mock_% keys');
+});
+
+test('ui_texts in live database contains zero unused mock keys', async () => {
+  if (!DB_URL) return;
+  const rows = await query(
+    "SELECT key FROM ui_texts WHERE key LIKE 'dialogs_mock_%';",
+    [],
+    DB_URL
+  );
+  assert.strictEqual(rows.length, 0, 'No mock keys should remain in ui_texts table');
+});
+
+
