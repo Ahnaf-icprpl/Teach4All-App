@@ -84,6 +84,57 @@
   .markdown-link { color: var(--terracotta); text-decoration: underline; text-underline-offset: 2px; }
   .markdown-link:hover { opacity: 0.85; }
   .strikethrough { text-decoration: line-through; opacity: 0.75; }
+  .chat-quiz-card {
+    margin: 14px 0;
+    padding: 16px 18px;
+    background: var(--off-white);
+    border: 1px solid var(--muted-gray);
+    border-left: 4px solid var(--terracotta);
+    border-radius: 14px;
+    box-shadow: 0 2px 6px rgba(34, 46, 60, 0.04);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .chat-quiz-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .chat-quiz-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 9px;
+    background: rgba(184, 80, 66, 0.08);
+    color: var(--terracotta);
+    border-radius: 9999px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .chat-quiz-badge .icon { width: 13px; height: 13px; }
+  .chat-quiz-count { font-size: 11px; color: var(--medium-gray); font-weight: 500; }
+  .chat-quiz-title { margin: 2px 0 0; font-size: 15px; font-weight: 650; color: var(--near-black); line-height: 1.35; }
+  .chat-quiz-start-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    margin-top: 4px;
+    padding: 8px 16px;
+    background: var(--terracotta);
+    color: #ffffff;
+    border: 0;
+    border-radius: 9px;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    align-self: flex-start;
+    transition: background 0.15s, transform 0.15s;
+  }
+  .chat-quiz-start-btn:hover { background: var(--terracotta-hover); transform: translateY(-1px); }
+  .chat-quiz-start-btn .icon { width: 15px; height: 15px; }
   .message-error .message-text { color: var(--terracotta); background: rgba(159, 81, 58, 0.08); padding: 12px 16px; border-radius: 12px; border: 0; }
   .assistant-label { display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 12px; margin-bottom: 13px; color: var(--near-black); }
   .assistant-mark { display: inline-flex; align-items: center; justify-content: center; width: 29px; height: 29px; border-radius: 9px; background: var(--gold-amber); color: var(--off-white); }

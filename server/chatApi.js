@@ -24,6 +24,7 @@ import { handleMaterialsRequest } from './materialsApi.js';
 import { logger, logDevRequest } from './logger.js';
 import { metrics } from './metrics.js';
 import { buildWebSearchPlugin, buildWebSearchTool, isWebSearchRequested } from './webSearch.js';
+import { buildQuizTool, accumulateToolCalls, handleCompletedToolCalls } from './quizTool.js';
 import { createChatMiddleware, dispatchApi } from './chatMiddleware.js';
 
 export const DEFAULT_MODEL = 'google/gemini-2.5-flash-lite';
@@ -205,6 +206,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
 
   const enableSearch = isWebSearchRequested(webSearch);
   const webPlugin = enableSearch ? buildWebSearchPlugin(serverEnv) : null;
+  const quizTool = buildQuizTool(serverEnv);
 
   const clientLoc = getClientLocation(req);
   logger.info('Chat stream requested', {
@@ -218,6 +220,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
     messages_count: messages.length,
     cached_provider: cachedProvider || 'none',
     web_search: enableSearch ? (webPlugin?.engine || 'parallel') : 'disabled',
+    tools_count: 1,
   });
 
   const formattedMessages = formatMessages(messages);
@@ -244,6 +247,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
         messages: formattedMessages,
         stream: true,
         user: userId || clientIp,
+        tools: [quizTool],
         ...(webPlugin ? { plugins: [webPlugin] } : {}),
         ...providerRouting,
       }),
@@ -314,6 +318,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
     let chunkCount = 0;
     let bytesStreamed = 0;
     let accumulatedText = '';
+    const accumulatedToolCalls = {};
     const citations = [];
 
     try {
@@ -347,6 +352,10 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
               accumulatedText += delta;
               streamWriter.writeChunk(delta);
             }
+            const toolCallsDelta = json.choices?.[0]?.delta?.tool_calls;
+            if (toolCallsDelta) {
+              accumulateToolCalls(accumulatedToolCalls, toolCallsDelta);
+            }
             const anns = json.choices?.[0]?.delta?.annotations || [];
             for (const ann of anns) {
               if (ann?.type === 'url_citation' && ann.url_citation?.url) {
@@ -369,6 +378,10 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
               accumulatedText += delta;
               streamWriter.writeChunk(delta);
             }
+            const toolCallsDelta = json.choices?.[0]?.delta?.tool_calls;
+            if (toolCallsDelta) {
+              accumulateToolCalls(accumulatedToolCalls, toolCallsDelta);
+            }
             const anns = json.choices?.[0]?.delta?.annotations || [];
             for (const ann of anns) {
               if (ann?.type === 'url_citation' && ann.url_citation?.url) {
@@ -379,6 +392,23 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
             }
           } catch {}
         }
+      }
+
+      if (Object.keys(accumulatedToolCalls).length > 0) {
+        await handleCompletedToolCalls({
+          toolCallsMap: accumulatedToolCalls,
+          serverEnv,
+          userId,
+          clientIp,
+          conversationId,
+          formattedMessages,
+          streamWriter,
+          res,
+          controller,
+          apiKey,
+          model,
+          providerRouting,
+        });
       }
 
       if (citations.length > 0 && !accumulatedText.includes('http')) {

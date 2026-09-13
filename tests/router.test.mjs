@@ -19,6 +19,7 @@ import {
   OPENROUTER_API_URL,
 } from '../server/chatApi.js';
 import { buildWebSearchPlugin, buildWebSearchTool, isWebSearchRequested, DEFAULT_SEARCH_ENGINE } from '../server/webSearch.js';
+import { QUIZ_TOOL_NAME, buildQuizTool, accumulateToolCalls, formatQuizCardMarker } from '../server/quizTool.js';
 import { SYSTEM_PROMPT, injectSystemPrompt } from '../prompts/systemPrompt.js';
 import {
   TITLE_SYSTEM_PROMPT,
@@ -1513,6 +1514,104 @@ test('server handleChatRequest omits plugins when webSearch is explicitly false'
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test('buildQuizTool provides valid OpenAI-compatible schema with 20 questions default and topic instructions', () => {
+  const tool = buildQuizTool();
+  assert.strictEqual(tool.type, 'function');
+  assert.strictEqual(tool.function.name, QUIZ_TOOL_NAME);
+  assert.strictEqual(tool.function.name, 'create_quiz');
+
+  // Verify parameters
+  const params = tool.function.parameters;
+  assert.strictEqual(params.type, 'object');
+  assert.deepStrictEqual(params.required, ['title', 'category', 'summary', 'questions']);
+  assert.ok(params.properties.title);
+  assert.ok(params.properties.category);
+  assert.ok(params.properties.questions);
+
+  // Verify questions schema
+  const qItem = params.properties.questions.items;
+  assert.deepStrictEqual(qItem.required, ['question_text', 'options', 'correct_answer', 'explanation']);
+
+  // Verify explicit instructions for ~20 questions default and following user topic
+  const desc = tool.function.description.toLowerCase();
+  assert.ok(desc.includes('20 pertanyaan') || desc.includes('20 questions'));
+  assert.ok(desc.includes('instruksi') || desc.includes('topik'));
+});
+
+test('accumulateToolCalls merges streamed function arguments delta correctly', () => {
+  let map = {};
+  map = accumulateToolCalls(map, [
+    { index: 0, id: 'call_1', function: { name: 'create_quiz', arguments: '{"title":' } },
+  ]);
+  map = accumulateToolCalls(map, [
+    { index: 0, function: { arguments: '"Fotosintesis",' } },
+  ]);
+  map = accumulateToolCalls(map, [
+    { index: 0, function: { arguments: '"questions":[]}' } },
+  ]);
+
+  assert.strictEqual(map[0].id, 'call_1');
+  assert.strictEqual(map[0].function.name, 'create_quiz');
+  assert.strictEqual(map[0].function.arguments, '{"title":"Fotosintesis","questions":[]}');
+});
+
+test('formatQuizCardMarker creates valid markdown marker with escaped attributes', () => {
+  const marker = formatQuizCardMarker({
+    id: '123e4567-e89b-12d3-a456-426614174000',
+    title: 'Kuis "Biologi" Sel',
+    category: 'Biologi',
+    questions: new Array(20).fill({}),
+    difficulty: 'medium',
+  });
+
+  assert.ok(marker.includes(':::quiz-card{'));
+  assert.ok(marker.includes('id="123e4567-e89b-12d3-a456-426614174000"'));
+  assert.ok(marker.includes('count="20"'));
+  assert.ok(marker.includes('&quot;Biologi&quot;'));
+});
+
+test('server handleChatRequest provides create_quiz tool in OpenRouter payload', async () => {
+  const originalFetch = globalThis.fetch;
+  let interceptedPayload = null;
+
+  globalThis.fetch = async (url, options) => {
+    interceptedPayload = JSON.parse(options.body);
+    const sseData = 'data: {"choices":[{"delta":{"content":"Halo"}}]}\n\ndata: [DONE]\n\n';
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(sseData));
+        controller.close();
+      },
+    });
+    return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+  };
+
+  try {
+    const { req, res } = createMockReqRes({
+      body: { messages: [{ role: 'user', text: 'Buatkan kuis' }] },
+    });
+
+    await handleChatRequest(req, res, {
+      OPENROUTER_API_KEY: 'sk-or-valid-test-key-1234',
+    });
+
+    assert.ok(interceptedPayload);
+    assert.ok(Array.isArray(interceptedPayload.tools));
+    const hasQuizTool = interceptedPayload.tools.some(t => t.function?.name === 'create_quiz');
+    assert.strictEqual(hasQuizTool, true, 'must include create_quiz tool in tools array');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('SYSTEM_PROMPT instructs the model on create_quiz, user topics, and 20 questions default', () => {
+  const prompt = SYSTEM_PROMPT.toLowerCase();
+  assert.ok(prompt.includes('create_quiz'), 'must mention create_quiz');
+  assert.ok(prompt.includes('20 pertanyaan') || prompt.includes('20 questions'), 'must mention 20 questions default');
+  assert.ok(prompt.includes('topik') || prompt.includes('jumlah'), 'must mention following topic and count instructions');
 });
 
 
