@@ -1,6 +1,9 @@
 export const DEFAULT_MODEL = 'google/gemini-2.5-flash-lite';
 export const CHAT_API_URL = './api/chat';
 export const TITLE_API_URL = './api/title';
+export const CONVERSATIONS_API_URL = './api/conversations';
+export const MESSAGES_API_URL = './api/messages';
+export const TEST_USER_ID = '00000000-0000-0000-0000-000000000001';
 export const TIMEOUT_MS = 35000;
 import { cleanTitle, generateOfflineTitle, formatTitleMessages, TITLE_SYSTEM_PROMPT } from './prompts/titlePrompt.js';
 export { cleanTitle, generateOfflineTitle, formatTitleMessages, TITLE_SYSTEM_PROMPT };
@@ -26,6 +29,7 @@ export async function sendMessage(messages, onChunk, options = {}) {
   try {
     const payload = {
       messages,
+      userId: options.userId || TEST_USER_ID,
       ...(options.conversationId ? { conversationId: options.conversationId } : {}),
       ...(options.conversationTitle ? { conversationTitle: options.conversationTitle } : {}),
       ...(options.userMessageId ? { userMessageId: options.userMessageId } : {}),
@@ -137,8 +141,8 @@ export async function generateTitle(messages, options = {}) {
   try {
     const payload = {
       messages,
+      userId: options.userId || TEST_USER_ID,
       ...(options.conversationId ? { conversationId: options.conversationId } : {}),
-      ...(options.userId ? { userId: options.userId } : {}),
     };
 
     const response = await fetch(TITLE_API_URL, {
@@ -159,4 +163,43 @@ export async function generateTitle(messages, options = {}) {
   } catch {
     return fallbackTitle;
   }
+}
+
+export async function fetchConversations({ userId = TEST_USER_ID, limit = 50, offset = 0 } = {}) {
+  const url = `${CONVERSATIONS_API_URL}?userId=${encodeURIComponent(userId)}&limit=${limit}&offset=${offset}`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch conversations (${response.status})`);
+  }
+  return response.json();
+}
+
+export async function fetchMessages(conversationId, { userId = TEST_USER_ID, limit = 100, offset = 0 } = {}) {
+  const url = `${MESSAGES_API_URL}?conversationId=${encodeURIComponent(conversationId)}&userId=${encodeURIComponent(userId)}&limit=${limit}&offset=${offset}`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch messages (${response.status})`);
+  }
+  return response.json();
+}
+
+export async function deleteConversationApi(conversationId, { userId = TEST_USER_ID } = {}) {
+  const url = `${CONVERSATIONS_API_URL}?id=${encodeURIComponent(conversationId)}&userId=${encodeURIComponent(userId)}`;
+  const response = await fetch(url, { method: 'DELETE' });
+  if (!response.ok) {
+    throw new Error(`Failed to delete conversation (${response.status})`);
+  }
+  return response.json();
+}
+
+export async function renameConversationApi(conversationId, title, { userId = TEST_USER_ID } = {}) {
+  const response = await fetch(CONVERSATIONS_API_URL, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: conversationId, title, userId }),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to rename conversation (${response.status})`);
+  }
+  return response.json();
 }

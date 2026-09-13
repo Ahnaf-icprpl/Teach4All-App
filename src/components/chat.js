@@ -3,7 +3,7 @@ import { icon } from '../icons.js';
 import { MAX_INPUT } from '../storage.js';
 import {
   currentChat, hasMessages, draft, setDraft, sendMessage, focusComposer,
-  modal, toast, online, offlineReady, storageError, loading,
+  modal, toast, online, offlineReady, storageError, loading, messagesLoading,
 } from '../state.js';
 import { getModel } from '../router.js';
 import { renderMarkdown } from '../markdown.js';
@@ -41,6 +41,19 @@ async function copyText(text) {
 function Messages() {
   const chat = currentChat();
   const messagesList = chat?.messages || [];
+
+  if (messagesLoading.val && !messagesList.length) {
+    return div({ class: 'message-content' },
+      div({ class: 'message-history-loader' },
+        span({ class: 'typing-indicator', 'aria-label': 'Memuat percakapan...', title: 'Memuat percakapan...' },
+          span({ class: 'typing-dot' }),
+          span({ class: 'typing-dot' }),
+          span({ class: 'typing-dot' }),
+        ),
+        span('Memuat pesan...'),
+      ),
+    );
+  }
 
   return div({ class: 'message-content' },
     ...messagesList.map((message, idx) => {

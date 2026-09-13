@@ -3,8 +3,14 @@ import {
   loadWorkspace, saveWorkspace, emptyWorkspace, MAX_CHATS,
   loadThemeFromLocalDb, saveTheme,
 } from './storage.js';
-import { sendMessage as sendApiMessage, generateTitle, generateOfflineTitle } from './router.js';
+import {
+  sendMessage as sendApiMessage, generateTitle, generateOfflineTitle,
+  fetchConversations, fetchMessages, deleteConversationApi,
+  renameConversationApi, TEST_USER_ID,
+} from './router.js';
 import { createReply } from './replies.js';
+
+export { TEST_USER_ID };
 
 let storage;
 try {
@@ -19,6 +25,8 @@ export const activeId = van.state(null);
 export const draft = van.state('');
 export const theme = van.state(initialTheme);
 export const loading = van.state(false);
+export const historyLoading = van.state(false);
+export const messagesLoading = van.state(false);
 export const sidebarOpen = van.state(false);
 export const sidebarCollapsed = van.state(false);
 export const search = van.state('');
@@ -31,7 +39,7 @@ export const modal = van.state(null);
 let toastTimer;
 
 export const currentChat = () => chats.val.find(chat => chat.id === activeId.val);
-export const hasMessages = () => Boolean(currentChat()?.messages.length);
+export const hasMessages = () => Boolean(activeId.val || currentChat()?.messages?.length);
 export const workspace = () => ({
   version: 1, chats: chats.val, activeId: activeId.val, draft: draft.val, theme: theme.val,
 });
@@ -63,12 +71,70 @@ export function newChat() {
   focusComposer();
 }
 
-export function selectChat(id) {
+export async function loadMessagesForChat(id) {
+  if (messagesLoading.val) return;
+  messagesLoading.val = true;
+  try {
+    const data = await fetchMessages(id, { userId: TEST_USER_ID });
+    if (Array.isArray(data?.messages)) {
+      const loadedMessages = data.messages.map(m => ({
+        id: m.id,
+        role: m.role,
+        text: m.content || '',
+        createdAt: m.created_at ? new Date(m.created_at).getTime() : Date.now(),
+      }));
+      chats.val = chats.val.map(c =>
+        c.id === id ? { ...c, messages: loadedMessages, messagesLoaded: true } : c
+      );
+      requestAnimationFrame(() => {
+        const pane = document.getElementById('messages');
+        if (pane) pane.scrollTop = pane.scrollHeight;
+      });
+    }
+  } catch (err) {
+    console.warn('Failed to lazy load messages:', err.message);
+  } finally {
+    messagesLoading.val = false;
+  }
+}
+
+export async function selectChat(id) {
   activeId.val = id;
   draft.val = '';
   sidebarOpen.val = false;
   persist();
   focusComposer();
+
+  const chat = chats.val.find(c => c.id === id);
+  if (chat && !chat.messagesLoaded) {
+    await loadMessagesForChat(id);
+  }
+}
+
+export async function loadChatHistory() {
+  historyLoading.val = true;
+  try {
+    const data = await fetchConversations({ userId: TEST_USER_ID });
+    if (Array.isArray(data?.conversations)) {
+      const dbChats = data.conversations.map(c => ({
+        id: c.id,
+        title: c.title || 'Percakapan baru',
+        messages: [],
+        messagesLoaded: false,
+        updatedAt: c.updated_at ? new Date(c.updated_at).getTime() : Date.now(),
+      }));
+      const existing = currentChat();
+      if (existing && !dbChats.some(c => c.id === existing.id)) {
+        chats.val = [existing, ...dbChats];
+      } else {
+        chats.val = dbChats;
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to load chat history:', err.message);
+  } finally {
+    historyLoading.val = false;
+  }
 }
 
 export function sendMessage() {
@@ -86,7 +152,7 @@ export function sendMessage() {
   const isNewConversation = !existing || existing.messages.length === 0;
   const initialTitle = isNewConversation ? generateOfflineTitle(text) : (existing.title || generateOfflineTitle(text));
   const chat = existing || {
-    id: crypto.randomUUID(), title: initialTitle, messages: [], updatedAt: Date.now(),
+    id: crypto.randomUUID(), title: initialTitle, messages: [], messagesLoaded: true, updatedAt: Date.now(),
   };
   const userMessage = { id: crypto.randomUUID(), role: 'user', text };
   const assistantMessage = { id: crypto.randomUUID(), role: 'assistant', text: '' };
@@ -94,6 +160,7 @@ export function sendMessage() {
   chats.val = [{ 
     ...chat, 
     messages: [...chat.messages, userMessage, assistantMessage], 
+    messagesLoaded: true,
     updatedAt: Date.now() 
   }, ...chats.val.filter(c => c.id !== chat.id)];
   activeId.val = chat.id;
@@ -109,7 +176,7 @@ export function sendMessage() {
   const messageHistory = chat.messages.concat(userMessage);
 
   if (isNewConversation) {
-    generateTitle(messageHistory, { conversationId: chat.id })
+    generateTitle(messageHistory, { conversationId: chat.id, userId: TEST_USER_ID })
       .then(generatedTitle => {
         if (generatedTitle && generatedTitle !== chat.title) {
           chats.val = chats.val.map(c => c.id === chat.id ? { ...c, title: generatedTitle } : c);
@@ -166,6 +233,7 @@ export function sendMessage() {
     conversationTitle: chat.title,
     userMessageId: userMessage.id,
     assistantMessageId: assistantMessage.id,
+    userId: TEST_USER_ID,
   }).then(() => {
     loading.val = false;
     persist();
@@ -216,10 +284,12 @@ export function sendMessage() {
 }
 
 export function renameChat(id, title) {
-  if (!title.trim()) return;
-  chats.val = chats.val.map(chat => chat.id === id ? { ...chat, title: title.trim().slice(0, 100) } : chat);
+  const trimmed = title.trim().slice(0, 100);
+  if (!trimmed) return;
+  chats.val = chats.val.map(chat => chat.id === id ? { ...chat, title: trimmed } : chat);
   persist();
   modal.val = null;
+  renameConversationApi(id, trimmed, { userId: TEST_USER_ID }).catch(() => {});
 }
 
 export function deleteChat(id) {
@@ -227,6 +297,7 @@ export function deleteChat(id) {
   if (activeId.val === id) activeId.val = null;
   modal.val = null;
   toast('Percakapan telah dihapus.');
+  deleteConversationApi(id, { userId: TEST_USER_ID }).catch(() => {});
 }
 
 export function clearWorkspace() {
@@ -262,4 +333,5 @@ if (typeof window !== 'undefined') {
       saveTheme(storage, dbTheme);
     }
   }).catch(() => {});
+  loadChatHistory().catch(() => {});
 }

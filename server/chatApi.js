@@ -9,11 +9,12 @@ import { getRedisClient } from './redis.js';
 import { getSystemPrompt, injectSystemPrompt } from '../prompts/systemPrompt.js';
 import { ConversationStreamWriter, DEFAULT_USER_ID } from './db.js';
 import { handleTitleRequest } from './titleApi.js';
+import { handleConversationsRequest, handleMessagesRequest } from './historyApi.js';
 
 export const DEFAULT_MODEL = 'google/gemini-2.5-flash-lite';
 export const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
-export { getSystemPrompt, handleTitleRequest };
+export { getSystemPrompt, handleTitleRequest, handleConversationsRequest, handleMessagesRequest };
 
 export function isPlaceholderKey(key) {
   if (!key || typeof key !== 'string') return true;
@@ -278,6 +279,28 @@ export function createChatMiddleware(serverEnv = {}) {
     if (url === '/api/title' || url === '/api/title/') {
       try {
         await handleTitleRequest(req, res, serverEnv);
+      } catch (err) {
+        if (!res.headersSent) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: { message: 'Internal server error.' } }));
+        }
+      }
+      return;
+    }
+    if (url === '/api/conversations' || url === '/api/conversations/') {
+      try {
+        await handleConversationsRequest(req, res, serverEnv);
+      } catch (err) {
+        if (!res.headersSent) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: { message: 'Internal server error.' } }));
+        }
+      }
+      return;
+    }
+    if (url === '/api/messages' || url === '/api/messages/') {
+      try {
+        await handleMessagesRequest(req, res, serverEnv);
       } catch (err) {
         if (!res.headersSent) {
           res.writeHead(500, { 'Content-Type': 'application/json' });

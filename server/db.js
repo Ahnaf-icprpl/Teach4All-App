@@ -64,6 +64,38 @@ function toUuid(id) {
   return crypto.randomUUID();
 }
 
+export const inMemoryConversations = new Map();
+export const inMemoryMessages = new Map();
+
+/**
+ * Query JSON array from PostgreSQL safely via psql.
+ */
+export async function queryJson(sql, databaseUrl = process.env.DATABASE_URL) {
+  if (!databaseUrl) return null;
+  return new Promise(resolve => {
+    const child = spawn('psql', [databaseUrl, '-v', 'ON_ERROR_STOP=1', '-X', '-q', '-t', '-A'], {
+      env: process.env,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    child.stdout.on('data', chunk => { stdout += chunk; });
+    child.on('error', () => resolve(null));
+    child.on('close', code => {
+      if (code !== 0 || !stdout.trim()) {
+        resolve(null);
+      } else {
+        try {
+          resolve(JSON.parse(stdout.trim()));
+        } catch {
+          resolve(null);
+        }
+      }
+    });
+    child.stdin.write(sql);
+    child.stdin.end();
+  });
+}
+
 /**
  * Upsert conversation record into database.
  */
@@ -75,7 +107,18 @@ export async function saveConversation({
 } = {}) {
   const convId = toUuid(id);
   const uId = toUuid(userId);
-  const safeTitle = escapeSqlString((title || 'New Conversation').slice(0, 255));
+  const cleanTitle = (title || 'New Conversation').slice(0, 255);
+  const safeTitle = escapeSqlString(cleanTitle);
+
+  // Sync to in-memory store
+  const existing = inMemoryConversations.get(convId);
+  inMemoryConversations.set(convId, {
+    id: convId,
+    user_id: uId,
+    title: cleanTitle,
+    created_at: existing?.created_at || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  });
 
   const sql = `
     INSERT INTO conversations (id, user_id, title, updated_at)
@@ -88,7 +131,6 @@ export async function saveConversation({
     await runSql(sql, databaseUrl);
     return { id: convId, userId: uId };
   } catch (err) {
-    // Non-fatal: log and return
     console.error('Failed to save conversation to DB:', err.message);
     return { id: convId, userId: uId, error: err.message };
   }
@@ -111,6 +153,18 @@ export async function saveMessage({
   const safeRole = ['user', 'assistant', 'system'].includes(role) ? role : 'user';
   const safeContent = escapeSqlString(content || '');
 
+  // Sync to in-memory store
+  if (!inMemoryMessages.has(convId)) inMemoryMessages.set(convId, new Map());
+  const existing = inMemoryMessages.get(convId).get(msgId);
+  inMemoryMessages.get(convId).set(msgId, {
+    id: msgId,
+    conversation_id: convId,
+    user_id: uId,
+    role: safeRole,
+    content: content || '',
+    created_at: existing?.created_at || new Date().toISOString(),
+  });
+
   const sql = `
     INSERT INTO messages (id, conversation_id, user_id, role, content, created_at)
     VALUES ('${msgId}', '${convId}', '${uId}', '${safeRole}', ${safeContent}, CURRENT_TIMESTAMP)
@@ -125,6 +179,146 @@ export async function saveMessage({
     console.error(`Failed to save ${safeRole} message to DB:`, err.message);
     return { id: msgId, conversationId: convId, error: err.message };
   }
+}
+
+/**
+ * Fetch list of conversations for a user (lazy loading metadata).
+ */
+export async function getConversations({
+  userId = DEFAULT_USER_ID,
+  limit = 50,
+  offset = 0,
+  databaseUrl = process.env.DATABASE_URL,
+} = {}) {
+  const uId = toUuid(userId);
+  const numLimit = Math.max(1, Math.min(100, Number(limit) || 50));
+  const numOffset = Math.max(0, Number(offset) || 0);
+
+  if (databaseUrl) {
+    const sql = `
+      SELECT COALESCE(json_agg(c), '[]'::json)
+      FROM (
+        SELECT id, user_id, title, updated_at, created_at
+        FROM conversations
+        WHERE user_id = '${uId}'
+        ORDER BY updated_at DESC
+        LIMIT ${numLimit} OFFSET ${numOffset}
+      ) c;
+    `;
+    const dbResult = await queryJson(sql, databaseUrl);
+    if (Array.isArray(dbResult)) {
+      for (const item of dbResult) {
+        inMemoryConversations.set(item.id, item);
+      }
+      return dbResult;
+    }
+  }
+
+  // In-memory fallback
+  return Array.from(inMemoryConversations.values())
+    .filter(c => c.user_id === uId)
+    .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+    .slice(numOffset, numOffset + numLimit);
+}
+
+/**
+ * Fetch messages for a single conversation on demand (lazy loading chat history).
+ */
+export async function getMessages({
+  conversationId,
+  userId = DEFAULT_USER_ID,
+  limit = 100,
+  offset = 0,
+  databaseUrl = process.env.DATABASE_URL,
+} = {}) {
+  const convId = toUuid(conversationId);
+  const uId = toUuid(userId);
+  const numLimit = Math.max(1, Math.min(200, Number(limit) || 100));
+  const numOffset = Math.max(0, Number(offset) || 0);
+
+  if (databaseUrl) {
+    const sql = `
+      SELECT COALESCE(json_agg(m), '[]'::json)
+      FROM (
+        SELECT id, conversation_id, user_id, role, content, created_at
+        FROM messages
+        WHERE conversation_id = '${convId}' AND user_id = '${uId}'
+        ORDER BY created_at ASC
+        LIMIT ${numLimit} OFFSET ${numOffset}
+      ) m;
+    `;
+    const dbResult = await queryJson(sql, databaseUrl);
+    if (Array.isArray(dbResult)) {
+      if (!inMemoryMessages.has(convId)) inMemoryMessages.set(convId, new Map());
+      for (const msg of dbResult) {
+        inMemoryMessages.get(convId).set(msg.id, msg);
+      }
+      return dbResult;
+    }
+  }
+
+  // In-memory fallback
+  const convMap = inMemoryMessages.get(convId);
+  if (!convMap) return [];
+  return Array.from(convMap.values())
+    .filter(m => m.user_id === uId)
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+    .slice(numOffset, numOffset + numLimit);
+}
+
+/**
+ * Delete a conversation and its messages.
+ */
+export async function deleteConversation({
+  conversationId,
+  userId = DEFAULT_USER_ID,
+  databaseUrl = process.env.DATABASE_URL,
+} = {}) {
+  const convId = toUuid(conversationId);
+  const uId = toUuid(userId);
+
+  inMemoryConversations.delete(convId);
+  inMemoryMessages.delete(convId);
+
+  if (databaseUrl) {
+    const sql = `DELETE FROM conversations WHERE id = '${convId}' AND user_id = '${uId}';`;
+    try {
+      await runSql(sql, databaseUrl);
+    } catch (err) {
+      console.error('Failed to delete conversation from DB:', err.message);
+    }
+  }
+  return { success: true };
+}
+
+/**
+ * Update conversation title in database.
+ */
+export async function updateConversationTitle({
+  conversationId,
+  userId = DEFAULT_USER_ID,
+  title,
+  databaseUrl = process.env.DATABASE_URL,
+} = {}) {
+  const convId = toUuid(conversationId);
+  const uId = toUuid(userId);
+  const cleanTitle = (title || 'New Conversation').slice(0, 255);
+
+  const existing = inMemoryConversations.get(convId);
+  if (existing) {
+    existing.title = cleanTitle;
+    existing.updated_at = new Date().toISOString();
+  }
+
+  if (databaseUrl) {
+    const sql = `UPDATE conversations SET title = ${escapeSqlString(cleanTitle)}, updated_at = CURRENT_TIMESTAMP WHERE id = '${convId}' AND user_id = '${uId}';`;
+    try {
+      await runSql(sql, databaseUrl);
+    } catch (err) {
+      console.error('Failed to update conversation title in DB:', err.message);
+    }
+  }
+  return { success: true, title: cleanTitle };
 }
 
 /**

@@ -99,6 +99,7 @@
   }
   .copy-button { margin-top: 9px; width: 28px; height: 28px; color: var(--slate-gray); }
   .copy-button .icon { width: 14px; height: 14px; }
+  .message-history-loader { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 48px 0; color: var(--medium-gray); font-size: 12.5px; }
   .has-messages .composer-wrap { margin-top: 10px; width: calc(100% - 80px); }
   .has-messages .workspace-footer { padding-top: 14px; padding-bottom: 17px; }
   [data-theme="dark"] .composer { border-color: var(--line); background: var(--surface); }

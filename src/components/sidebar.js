@@ -2,7 +2,7 @@ import van from 'vanjs-core';
 import { icon } from '../icons.js';
 import {
   chats, activeId, newChat, selectChat, modal, sidebarOpen,
-  sidebarCollapsed, search, setDraft, focusComposer,
+  sidebarCollapsed, search, setDraft, focusComposer, historyLoading,
 } from '../state.js';
 
 const { aside, div, nav, button, span, input, kbd, h2, p } = van.tags;
@@ -21,11 +21,21 @@ export function Sidebar() {
     if (!term) return chats.val;
     return chats.val.filter(chat =>
       chat.title.toLowerCase().includes(term) ||
-      chat.messages.some(message => message.text.toLowerCase().includes(term)),
+      (chat.messages && chat.messages.some(message => message.text?.toLowerCase().includes(term))),
     );
   };
 
   const conversationList = () => {
+    if (historyLoading.val && !chats.val.length) {
+      return div({ class: 'empty-history' },
+        span({ class: 'typing-indicator', 'aria-label': 'Memuat riwayat...', title: 'Memuat riwayat...' },
+          span({ class: 'typing-dot' }),
+          span({ class: 'typing-dot' }),
+          span({ class: 'typing-dot' }),
+        ),
+        p('Memuat riwayat...'),
+      );
+    }
     const list = filtered();
     if (!list.length) return emptyHistory();
     return div({ class: 'chat-list' }, list.map(chat =>

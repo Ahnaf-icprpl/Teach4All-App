@@ -25,8 +25,18 @@ import {
   generateOfflineTitle,
 } from '../prompts/titlePrompt.js';
 import { handleTitleRequest } from '../server/titleApi.js';
-import { ConversationStreamWriter, DEFAULT_USER_ID, runSql } from '../server/db.js';
-import { generateTitle, TITLE_API_URL } from '../src/router.js';
+import { handleConversationsRequest, handleMessagesRequest } from '../server/historyApi.js';
+import {
+  ConversationStreamWriter, DEFAULT_USER_ID, runSql,
+  getConversations, getMessages, deleteConversation,
+  updateConversationTitle, saveConversation, saveMessage,
+} from '../server/db.js';
+import {
+  generateTitle, TITLE_API_URL,
+  fetchConversations, fetchMessages, deleteConversationApi,
+  renameConversationApi, CONVERSATIONS_API_URL, MESSAGES_API_URL,
+  TEST_USER_ID,
+} from '../src/router.js';
 
 test('router uses google/gemini-2.5-flash-lite by default', () => {
   assert.strictEqual(DEFAULT_MODEL, 'google/gemini-2.5-flash-lite');
@@ -445,6 +455,137 @@ test('client generateTitle calls /api/title and gracefully handles fallback', as
     globalThis.fetch = originalFetch;
   }
 });
+
+test('TEST_USER_ID is hardcoded and matches backend DEFAULT_USER_ID', () => {
+  assert.strictEqual(TEST_USER_ID, '00000000-0000-0000-0000-000000000001');
+  assert.strictEqual(TEST_USER_ID, DEFAULT_USER_ID);
+});
+
+test('server db operations persist, retrieve, rename, and delete conversations and messages', async () => {
+  const convId = '11111111-1111-1111-1111-111111111111';
+  const uId = TEST_USER_ID;
+
+  await saveConversation({ id: convId, userId: uId, title: 'Pembelajaran Sains' });
+  await saveMessage({
+    id: '22222222-2222-2222-2222-222222222222',
+    conversationId: convId,
+    userId: uId,
+    role: 'user',
+    content: 'Apa itu gravitasi?',
+  });
+  await saveMessage({
+    id: '33333333-3333-3333-3333-333333333333',
+    conversationId: convId,
+    userId: uId,
+    role: 'assistant',
+    content: 'Gravitasi adalah gaya tarik antar materi.',
+  });
+
+  const convList = await getConversations({ userId: uId });
+  assert.ok(convList.some(c => c.id === convId && c.title === 'Pembelajaran Sains'));
+
+  const msgList = await getMessages({ conversationId: convId, userId: uId });
+  assert.strictEqual(msgList.length, 2);
+  assert.strictEqual(msgList[0].content, 'Apa itu gravitasi?');
+  assert.strictEqual(msgList[1].content, 'Gravitasi adalah gaya tarik antar materi.');
+
+  await updateConversationTitle({ conversationId: convId, userId: uId, title: 'Fisika Dasar' });
+  const updatedConvList = await getConversations({ userId: uId });
+  assert.ok(updatedConvList.some(c => c.id === convId && c.title === 'Fisika Dasar'));
+
+  await deleteConversation({ conversationId: convId, userId: uId });
+  const afterDeleteList = await getConversations({ userId: uId });
+  assert.ok(!afterDeleteList.some(c => c.id === convId));
+});
+
+test('server handleConversationsRequest and handleMessagesRequest handle HTTP lifecycle', async () => {
+  const testConvId = '44444444-4444-4444-4444-444444444444';
+  await saveConversation({ id: testConvId, userId: TEST_USER_ID, title: 'Biologi Sel' });
+  await saveMessage({
+    id: '55555555-5555-5555-5555-555555555555',
+    conversationId: testConvId,
+    userId: TEST_USER_ID,
+    role: 'user',
+    content: 'Apa itu mitokondria?',
+  });
+
+  // 1. GET /api/conversations
+  const getReq = new EventEmitter();
+  getReq.method = 'GET';
+  getReq.url = `/api/conversations?userId=${TEST_USER_ID}`;
+  getReq.headers = { 'x-forwarded-for': '127.0.0.1' };
+
+  let convStatusCode = 0;
+  let convData = '';
+  const getRes = {
+    writeHead: (code, headers) => { convStatusCode = code; },
+    end: (str) => { convData = str; },
+    setHeader: () => {},
+  };
+
+  await handleConversationsRequest(getReq, getRes, { RATE_LIMIT: 1000 });
+  assert.strictEqual(convStatusCode, 200);
+  const parsedConvs = JSON.parse(convData);
+  assert.ok(Array.isArray(parsedConvs.conversations));
+  assert.ok(parsedConvs.conversations.some(c => c.id === testConvId));
+
+  // 2. GET /api/messages?conversationId=...
+  const msgReq = new EventEmitter();
+  msgReq.method = 'GET';
+  msgReq.url = `/api/messages?conversationId=${testConvId}&userId=${TEST_USER_ID}`;
+  msgReq.headers = { 'x-forwarded-for': '127.0.0.1' };
+
+  let msgStatusCode = 0;
+  let msgData = '';
+  const msgRes = {
+    writeHead: (code) => { msgStatusCode = code; },
+    end: (str) => { msgData = str; },
+    setHeader: () => {},
+  };
+
+  await handleMessagesRequest(msgReq, msgRes, { RATE_LIMIT: 1000 });
+  assert.strictEqual(msgStatusCode, 200);
+  const parsedMsgs = JSON.parse(msgData);
+  assert.ok(Array.isArray(parsedMsgs.messages));
+  assert.strictEqual(parsedMsgs.messages.length, 1);
+  assert.strictEqual(parsedMsgs.messages[0].content, 'Apa itu mitokondria?');
+
+  // Clean up
+  await deleteConversation({ conversationId: testConvId, userId: TEST_USER_ID });
+});
+
+test('client fetchConversations and fetchMessages call endpoints with query parameters', async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchedUrl = '';
+
+  globalThis.fetch = async (url) => {
+    fetchedUrl = url;
+    if (url.includes('/api/conversations')) {
+      return new Response(JSON.stringify({
+        conversations: [{ id: 'conv-1', title: 'Belajar Kimia', updated_at: new Date().toISOString() }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (url.includes('/api/messages')) {
+      return new Response(JSON.stringify({
+        messages: [{ id: 'msg-1', role: 'user', content: 'Halo', created_at: new Date().toISOString() }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return new Response('Not found', { status: 404 });
+  };
+
+  try {
+    const convData = await fetchConversations({ userId: TEST_USER_ID });
+    assert.ok(fetchedUrl.includes('userId=00000000-0000-0000-0000-000000000001'));
+    assert.strictEqual(convData.conversations[0].title, 'Belajar Kimia');
+
+    const msgData = await fetchMessages('conv-1', { userId: TEST_USER_ID });
+    assert.ok(fetchedUrl.includes('conversationId=conv-1'));
+    assert.strictEqual(msgData.messages[0].content, 'Halo');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 
 
 
