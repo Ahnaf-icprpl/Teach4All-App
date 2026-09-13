@@ -2,7 +2,7 @@
 
 @layer base {
   :root {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     color: #1D1C1D;
     background: #F2EEE1;
     font-synthesis: none;

@@ -3,6 +3,15 @@ import { createChatMiddleware } from './server/chatApi.js';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
+  if (env.REDIS_URL && !process.env.REDIS_URL) {
+    process.env.REDIS_URL = env.REDIS_URL;
+  }
+  if (env.DATABASE_URL && !process.env.DATABASE_URL) {
+    process.env.DATABASE_URL = env.DATABASE_URL;
+  }
+  if (env.OPENROUTER_API_KEY && !process.env.OPENROUTER_API_KEY) {
+    process.env.OPENROUTER_API_KEY = env.OPENROUTER_API_KEY;
+  }
 
   return {
     base: './',

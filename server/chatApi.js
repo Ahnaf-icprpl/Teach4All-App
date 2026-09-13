@@ -1,3 +1,11 @@
+import {
+  checkRateLimit,
+  getClientIp,
+  applyRateLimitHeaders,
+  recordRequestMetric,
+} from './rateLimiter.js';
+import { getRedisClient } from './redis.js';
+
 export const DEFAULT_MODEL = 'google/gemini-2.5-flash-lite';
 export const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -29,6 +37,39 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
     res.end(JSON.stringify({ error: { message: 'Method Not Allowed' } }));
     return;
   }
+
+  // Check rate limit via Redis (high-throughput in-memory check without touching PostgreSQL)
+  const clientIp = getClientIp(req);
+  const rateLimit = serverEnv.RATE_LIMIT !== undefined ? serverEnv.RATE_LIMIT : 120;
+  const redisUrl = serverEnv.REDIS_URL || process.env.REDIS_URL;
+  const redisClient = getRedisClient(redisUrl);
+
+  const rateInfo = await checkRateLimit({
+    endpoint: '/api/chat',
+    clientIp,
+    limit: rateLimit,
+    windowSeconds: 60,
+    redisClient,
+  });
+
+  applyRateLimitHeaders(res, rateInfo);
+
+  if (!rateInfo.allowed) {
+    res.writeHead(429, {
+      'Content-Type': 'application/json',
+      'Retry-After': String(rateInfo.resetSeconds),
+    });
+    res.end(JSON.stringify({
+      error: {
+        message: `Rate limit exceeded. Too many requests. Please wait ${rateInfo.resetSeconds}s before retrying.`,
+        retryAfter: rateInfo.resetSeconds,
+      },
+    }));
+    return;
+  }
+
+  // Record ephemeral request metric into Redis (zero DB writes)
+  recordRequestMetric(clientIp, '/api/chat', { redisClient });
 
   const apiKey = (process.env.OPENROUTER_API_KEY || serverEnv.OPENROUTER_API_KEY || '').trim();
   const model = (process.env.OPENROUTER_MODEL || serverEnv.OPENROUTER_MODEL || DEFAULT_MODEL).trim();
@@ -150,21 +191,26 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
       res.end();
     }
   } catch (err) {
-    if (err.name === 'AbortError') return;
+    if (controller.signal.aborted) return;
     if (!res.headersSent) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: { message: 'Internal server error while connecting to OpenRouter' } }));
-    } else {
-      res.end();
+      res.end(JSON.stringify({ error: { message: 'Server proxy error communicating with OpenRouter.' } }));
     }
   }
 }
 
 export function createChatMiddleware(serverEnv = {}) {
-  return (req, res, next) => {
-    const url = req.originalUrl || req.url || '';
-    if (url === '/api/chat' || url.startsWith('/api/chat?') || url === '/api/chat/') {
-      handleChatRequest(req, res, serverEnv);
+  return async (req, res, next) => {
+    const url = req.url ? req.url.split('?')[0] : '';
+    if (url === '/api/chat' || url === '/api/chat/') {
+      try {
+        await handleChatRequest(req, res, serverEnv);
+      } catch (err) {
+        if (!res.headersSent) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: { message: 'Internal server error.' } }));
+        }
+      }
       return;
     }
     if (next) next();
