@@ -166,5 +166,24 @@ test('migration 009 defines quiz and material list dialog texts', () => {
   assert.ok(sql.includes('dialogs_material_desc'), 'must define dialogs_material_desc');
 });
 
+test('migration 010 defines all UI suffixes, buttons, categories, and mock texts with zero fallback', () => {
+  const sql = readFileSync('migrations/010_add_mock_quiz_material_ui_texts.sql', 'utf8');
+  assert.ok(sql.includes('dialogs_meta_parts_suffix'), 'must define dialogs_meta_parts_suffix');
+  assert.ok(sql.includes('dialogs_meta_read_time_suffix'), 'must define dialogs_meta_read_time_suffix');
+  assert.ok(sql.includes('dialogs_meta_questions_suffix'), 'must define dialogs_meta_questions_suffix');
+  assert.ok(sql.includes('dialogs_modules_count_suffix'), 'must define dialogs_modules_count_suffix');
+  assert.ok(sql.includes('dialogs_quiz_start_button'), 'must define dialogs_quiz_start_button');
+  assert.ok(sql.includes('dialogs_material_open_button'), 'must define dialogs_material_open_button');
+  assert.ok(sql.includes('dialogs_quiz_create_new'), 'must define dialogs_quiz_create_new');
+  assert.ok(sql.includes('dialogs_material_create_new'), 'must define dialogs_material_create_new');
+  assert.ok(sql.includes('dialogs_time_today'), 'must define dialogs_time_today');
+  assert.ok(sql.includes('dialogs_time_yesterday'), 'must define dialogs_time_yesterday');
+  assert.ok(sql.includes('dialogs_time_days_ago_suffix'), 'must define dialogs_time_days_ago_suffix');
+  assert.ok(sql.includes('dialogs_cat_biology'), 'must define dialogs_cat_biology');
+  assert.ok(sql.includes('dialogs_mock_quiz_1_title'), 'must define mock quiz titles');
+  assert.ok(sql.includes('dialogs_mock_mat_1_title'), 'must define mock material titles');
+});
+
+
 
 
