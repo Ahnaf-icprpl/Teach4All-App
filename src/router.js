@@ -18,7 +18,7 @@ export const STORAGE_KEY = 'teach4all.openrouter-key.v1';
 export const TIMEOUT_MS = 35000;
 
 export function getModel() {
-  return getEnv('VITE_OPENROUTER_MODEL') || getEnv('OPENROUTER_MODEL') || DEFAULT_MODEL;
+  return getEnv('OPENROUTER_MODEL') || DEFAULT_MODEL;
 }
 
 export function isPlaceholderKey(key) {
@@ -32,7 +32,7 @@ export function getApiKey(storage) {
     const storedKey = storage?.getItem(STORAGE_KEY) || '';
     if (storedKey.trim()) return storedKey.trim();
   } catch {}
-  return getEnv('VITE_OPENROUTER_API_KEY') || getEnv('OPENROUTER_API_KEY') || '';
+  return getEnv('OPENROUTER_API_KEY') || '';
 }
 
 export function setApiKey(storage, key) {
