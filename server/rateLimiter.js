@@ -166,7 +166,8 @@ export async function getEndpointConfig(endpoint = '/api/chat', {
         '-A',
         '-c', query,
       ]);
-      const line = (stdout || '').trim();
+      const lines = (stdout || '').trim().split('\n').map(l => l.trim()).filter(l => l && l.includes('|'));
+      const line = lines[0];
       if (line) {
         const parts = line.split('|');
         config = {

@@ -1,6 +1,7 @@
 import van from 'vanjs-core';
 import { loadWorkspace, saveWorkspace, emptyWorkspace, MAX_CHATS } from './storage.js';
 import { sendMessage as sendApiMessage } from './router.js';
+import { createReply } from './replies.js';
 
 let storage;
 try {
@@ -105,6 +106,30 @@ export function sendMessage() {
 
   const messageHistory = chat.messages.concat(userMessage);
   
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    const replyText = createReply(text);
+    chats.val = chats.val.map(c => {
+      if (c.id === chat.id) {
+        return {
+          ...c,
+          messages: c.messages.map(m => 
+            m.id === assistantMessage.id ? { ...m, text: replyText } : m
+          ),
+          updatedAt: Date.now(),
+        };
+      }
+      return c;
+    });
+    loading.val = false;
+    persist();
+    focusComposer();
+    requestAnimationFrame(() => {
+      const pane = document.getElementById('messages');
+      if (pane) pane.scrollTop = pane.scrollHeight;
+    });
+    return;
+  }
+
   sendApiMessage(messageHistory, (chunkText) => {
     const updatedChats = chats.val.map(c => {
       if (c.id === chat.id) {
@@ -130,20 +155,45 @@ export function sendMessage() {
   }).catch((error) => {
     loading.val = false;
     const errorMessage = error.message || 'Failed to send message. Try again.';
+
+    if (errorMessage.toLowerCase().includes('rate limit')) {
+      const updatedChats = chats.val.map(c => {
+        if (c.id === chat.id) {
+          return {
+            ...c,
+            messages: c.messages.map(m => 
+              m.id === assistantMessage.id ? { ...m, text: `Error: ${errorMessage}` } : m
+            ),
+          };
+        }
+        return c;
+      });
+      chats.val = updatedChats;
+      toast(errorMessage);
+      persist();
+      return;
+    }
+
+    const replyText = createReply(text);
     const updatedChats = chats.val.map(c => {
       if (c.id === chat.id) {
         return {
           ...c,
           messages: c.messages.map(m => 
-            m.id === assistantMessage.id ? { ...m, text: `Error: ${errorMessage}` } : m
+            m.id === assistantMessage.id ? { ...m, text: replyText } : m
           ),
+          updatedAt: Date.now(),
         };
       }
       return c;
     });
     chats.val = updatedChats;
-    toast(errorMessage);
     persist();
+    focusComposer();
+    requestAnimationFrame(() => {
+      const pane = document.getElementById('messages');
+      if (pane) pane.scrollTop = pane.scrollHeight;
+    });
   });
 }
 

@@ -55,7 +55,17 @@ function Messages() {
               isError ? span({ class: 'demo-label error-label' }, 'Notice') : null,
             )
           : h2({ class: 'sr-only' }, 'You'),
-        div({ class: 'message-text' }, message.text || (isGenerating ? '...' : '')),
+        div({ class: 'message-text' },
+          message.text
+            ? message.text
+            : (isGenerating
+                ? span({ class: 'typing-indicator', 'aria-label': 'Generating response', title: 'Generating response' },
+                    span({ class: 'typing-dot' }),
+                    span({ class: 'typing-dot' }),
+                    span({ class: 'typing-dot' }),
+                  )
+                : '')
+        ),
         message.role === 'assistant' && message.text && !loading.val
           ? button({
               class: 'icon-button copy-button',
@@ -116,7 +126,9 @@ function Composer() {
             onclick: () => { modal.val = { type: 'tools' }; },
           }, icon('plus')),
           span({ class: 'toolbar-divider' }),
-          span({ class: 'companion-button' }, icon('globe'), 'OpenRouter companion'),
+          () => online.val
+            ? span({ class: 'companion-button' }, icon('globe'), 'OpenRouter companion')
+            : span({ class: 'companion-button' }, icon('leaf'), 'Standalone companion'),
         ),
         div({ class: 'send-tools' },
           () => span({ class: `input-count ${draft.val.length > MAX_INPUT - 300 ? '' : 'is-hidden'}` }, `${draft.val.length}/${MAX_INPUT}`),
@@ -127,7 +139,7 @@ function Composer() {
     ),
     div({ class: 'composer-note', id: 'composer-note' },
       icon('leaf'), span('Light on data. Big on possibility.'), span({ class: 'note-dot' }, '·'),
-      span(`OpenRouter (${getModel()})`),
+      () => span(online.val ? `OpenRouter (${getModel()})` : 'Standalone mode (no connection needed)'),
     ),
   );
 }

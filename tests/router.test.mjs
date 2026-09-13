@@ -12,9 +12,11 @@ import {
   handleChatRequest,
   createChatMiddleware,
   formatMessages,
+  getSystemPrompt,
   DEFAULT_MODEL as SERVER_DEFAULT_MODEL,
   OPENROUTER_API_URL,
 } from '../server/chatApi.js';
+import { SYSTEM_PROMPT, injectSystemPrompt } from '../prompts/systemPrompt.js';
 
 test('router uses google/gemini-2.5-flash-lite by default', () => {
   assert.strictEqual(DEFAULT_MODEL, 'google/gemini-2.5-flash-lite');
@@ -244,3 +246,24 @@ test('server handleChatRequest masks upstream 401 error without exposing server 
     globalThis.fetch = originalFetch;
   }
 });
+
+test('prompts/systemPrompt defines Teach4All agent system prompt and injects before user message', () => {
+  const prompt = getSystemPrompt();
+  assert.ok(prompt.toLowerCase().includes('an agent for teach4all'));
+  assert.strictEqual(prompt, SYSTEM_PROMPT);
+
+  const input = [{ role: 'user', text: 'Hello' }];
+  const formatted = formatMessages(input);
+  assert.strictEqual(formatted.length, 2);
+  assert.strictEqual(formatted[0].role, 'system');
+  assert.strictEqual(formatted[0].content, prompt);
+  assert.strictEqual(formatted[1].role, 'user');
+  assert.strictEqual(formatted[1].content, 'Hello');
+
+  // Verify injection before user message handles injected structure without duplicating
+  const reinjected = injectSystemPrompt(formatted);
+  assert.strictEqual(reinjected.length, 2);
+  assert.strictEqual(reinjected[0].role, 'system');
+  assert.strictEqual(reinjected[0].content, prompt);
+});
+

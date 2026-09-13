@@ -3,11 +3,15 @@ import {
   getClientIp,
   applyRateLimitHeaders,
   recordRequestMetric,
+  getEndpointConfig,
 } from './rateLimiter.js';
 import { getRedisClient } from './redis.js';
+import { getSystemPrompt, injectSystemPrompt } from '../prompts/systemPrompt.js';
 
 export const DEFAULT_MODEL = 'google/gemini-2.5-flash-lite';
 export const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+
+export { getSystemPrompt };
 
 export function isPlaceholderKey(key) {
   if (!key || typeof key !== 'string') return true;
@@ -15,20 +19,8 @@ export function isPlaceholderKey(key) {
   return !trimmed || trimmed.toLowerCase().includes('placeholder');
 }
 
-export function getSystemPrompt() {
-  return 'You are Teach4All, an encouraging, accessible learning companion. Explain ideas clearly, provide intuitive examples, and help users learn step by step.';
-}
-
 export function formatMessages(messages) {
-  return [
-    { role: 'system', content: getSystemPrompt() },
-    ...messages
-      .filter(m => m && m.text && m.text.trim())
-      .map(m => ({
-        role: m.role === 'assistant' ? 'assistant' : 'user',
-        content: m.text.trim(),
-      })),
-  ];
+  return injectSystemPrompt(messages);
 }
 
 export async function handleChatRequest(req, res, serverEnv = {}) {
@@ -40,15 +32,17 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
 
   // Check rate limit via Redis (high-throughput in-memory check without touching PostgreSQL)
   const clientIp = getClientIp(req);
-  const rateLimit = serverEnv.RATE_LIMIT !== undefined ? serverEnv.RATE_LIMIT : 120;
   const redisUrl = serverEnv.REDIS_URL || process.env.REDIS_URL;
   const redisClient = getRedisClient(redisUrl);
+  const config = await getEndpointConfig('/api/chat', { redisClient });
+  const rateLimit = serverEnv.RATE_LIMIT !== undefined ? serverEnv.RATE_LIMIT : config.rateLimitPerIp;
+  const windowSeconds = serverEnv.WINDOW_SECONDS !== undefined ? serverEnv.WINDOW_SECONDS : config.windowSeconds;
 
   const rateInfo = await checkRateLimit({
     endpoint: '/api/chat',
     clientIp,
     limit: rateLimit,
-    windowSeconds: 60,
+    windowSeconds,
     redisClient,
   });
 
