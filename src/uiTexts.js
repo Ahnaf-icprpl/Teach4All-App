@@ -1,6 +1,8 @@
 import van from 'vanjs-core';
 
 export const uiTexts = van.state({});
+export const allChatPrompts = van.state([]);
+export const activePrompts = van.state([]);
 export const isLoaded = van.state(false);
 
 /**
@@ -12,7 +14,28 @@ export function t(key) {
 }
 
 /**
- * Fetch all UI texts from the database.
+ * Rotate prompts randomly across items from the database table.
+ */
+export function rotatePrompts() {
+  const all = allChatPrompts.val;
+  if (!all.length) {
+    activePrompts.val = [];
+    return;
+  }
+  if (all.length <= 4) {
+    activePrompts.val = all;
+    return;
+  }
+  const shuffled = [...all];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  activePrompts.val = shuffled.slice(0, 4);
+}
+
+/**
+ * Fetch all UI texts and premade prompts from the database.
  * If there is nothing on the database or fetch fails, return false so the app does not load.
  */
 export async function initUiTexts() {
@@ -29,6 +52,26 @@ export async function initUiTexts() {
       return false;
     }
     uiTexts.val = data.texts;
+
+    // Load prompts from response or fallback to dedicated endpoint
+    let prompts = Array.isArray(data.prompts) ? data.prompts : [];
+    if (!prompts.length) {
+      const pRes = await fetch('./api/chat-prompts').catch(() => null);
+      if (pRes && pRes.ok) {
+        const pData = await pRes.json();
+        if (Array.isArray(pData?.prompts)) {
+          prompts = pData.prompts;
+        }
+      }
+    }
+
+    if (!prompts.length) {
+      // If there is nothing on db for prompts, do not load
+      return false;
+    }
+
+    allChatPrompts.val = prompts;
+    rotatePrompts();
     isLoaded.val = true;
     return true;
   } catch {

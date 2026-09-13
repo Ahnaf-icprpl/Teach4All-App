@@ -1151,7 +1151,7 @@ test('UI texts module strictly references DB without any fallback and does not l
     const loadedFail = await initUiTexts();
     assert.strictEqual(loadedFail, false, 'app must not load if db fetch fails');
 
-    // 3. When DB returns valid texts, it loads and t(key) returns strictly from DB
+    // 3. When DB returns valid texts and prompts, it loads and t(key) returns strictly from DB
     globalThis.fetch = async () => ({
       ok: true,
       json: async () => ({
@@ -1159,6 +1159,9 @@ test('UI texts module strictly references DB without any fallback and does not l
           topbar_new_chat: 'Percakapan baru dari DB',
           topbar_open_nav: 'Buka navigasi dari DB',
         },
+        prompts: [
+          { id: 1, title: 'Prompt 1', detail: 'Detail 1', prompt: 'P1', icon: 'bulb', color: 'amber' },
+        ],
       }),
     });
     const loadedSuccess = await initUiTexts();
@@ -1171,6 +1174,69 @@ test('UI texts module strictly references DB without any fallback and does not l
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test('handleChatPromptsRequest rejects non-GET and returns 200 with prompts list', async () => {
+  const { handleChatPromptsRequest } = await import('../server/uiTextsApi.js');
+
+  // Test 405 on POST
+  let postStatusCode = 0;
+  let postBody = '';
+  const postReq = { method: 'POST', url: '/api/chat-prompts' };
+  const postRes = {
+    writeHead(status) { postStatusCode = status; },
+    end(body) { postBody = body; },
+  };
+  await handleChatPromptsRequest(postReq, postRes);
+  assert.strictEqual(postStatusCode, 405);
+  assert.ok(JSON.parse(postBody).error);
+
+  // Test GET
+  let getStatusCode = 0;
+  let getHeaders = {};
+  let getBody = '';
+  const getReq = { method: 'GET', url: '/api/chat-prompts' };
+  const getRes = {
+    writeHead(status, headers) {
+      getStatusCode = status;
+      getHeaders = headers;
+    },
+    end(body) { getBody = body; },
+  };
+  await handleChatPromptsRequest(getReq, getRes);
+  assert.strictEqual(getStatusCode, 200);
+  assert.strictEqual(getHeaders['Content-Type'], 'application/json');
+  const data = JSON.parse(getBody);
+  assert.ok(Array.isArray(data.prompts));
+});
+
+test('chat prompts rotate randomly across items from table without fallback', async () => {
+  const { allChatPrompts, activePrompts, rotatePrompts, initUiTexts } = await import('../src/uiTexts.js');
+
+  const mockPrompts = Array.from({ length: 10 }, (_, i) => ({
+    id: i + 1,
+    title: `Title ${i + 1}`,
+    detail: `Detail ${i + 1}`,
+    prompt: `Prompt text ${i + 1}`,
+    icon: i % 2 === 0 ? 'bulb' : 'plan',
+    color: i % 2 === 0 ? 'amber' : 'blue',
+  }));
+
+  allChatPrompts.val = mockPrompts;
+  rotatePrompts();
+
+  assert.strictEqual(activePrompts.val.length, 4);
+  for (const p of activePrompts.val) {
+    assert.ok(p.title);
+    assert.ok(p.detail);
+    assert.ok(p.prompt);
+    assert.ok(p.icon);
+    assert.ok(p.color);
+  }
+
+  // Rotating prompts retains 4 items from the pool
+  rotatePrompts();
+  assert.strictEqual(activePrompts.val.length, 4);
 });
 
 

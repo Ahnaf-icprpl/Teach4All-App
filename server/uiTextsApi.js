@@ -15,6 +15,18 @@ export async function getUiTextsFromDb(databaseUrl = process.env.DATABASE_URL) {
   return texts;
 }
 
+export async function getChatPromptsFromDb(databaseUrl = process.env.DATABASE_URL) {
+  const rows = await query('SELECT id, title, detail, prompt, icon, color FROM chat_prompts ORDER BY id ASC;', [], databaseUrl);
+  return Array.isArray(rows) ? rows.map(r => ({
+    id: r.id,
+    title: r.title,
+    detail: r.detail,
+    prompt: r.prompt,
+    icon: r.icon,
+    color: r.color,
+  })) : [];
+}
+
 export async function handleUiTextsRequest(req, res, env = {}) {
   const clientIp = getClientIp(req);
   if (req.method !== 'GET') {
@@ -26,15 +38,40 @@ export async function handleUiTextsRequest(req, res, env = {}) {
   try {
     const dbUrl = env.DATABASE_URL || process.env.DATABASE_URL;
     const texts = await getUiTextsFromDb(dbUrl);
+    const prompts = await getChatPromptsFromDb(dbUrl);
 
     res.writeHead(200, {
       'Content-Type': 'application/json',
       'Cache-Control': 'no-cache',
     });
-    res.end(JSON.stringify({ texts }));
+    res.end(JSON.stringify({ texts, prompts }));
   } catch (err) {
-    logger.error('Failed to load UI texts from database', { error: err.message, client_ip: clientIp });
+    logger.error('Failed to load UI texts and prompts from database', { error: err.message, client_ip: clientIp });
     res.writeHead(500, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: { message: 'Failed to load UI texts from database.' } }));
+    res.end(JSON.stringify({ error: { message: 'Failed to load UI texts and prompts from database.' } }));
+  }
+}
+
+export async function handleChatPromptsRequest(req, res, env = {}) {
+  const clientIp = getClientIp(req);
+  if (req.method !== 'GET') {
+    res.writeHead(405, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: { message: 'Method not allowed' } }));
+    return;
+  }
+
+  try {
+    const dbUrl = env.DATABASE_URL || process.env.DATABASE_URL;
+    const prompts = await getChatPromptsFromDb(dbUrl);
+
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache',
+    });
+    res.end(JSON.stringify({ prompts }));
+  } catch (err) {
+    logger.error('Failed to load chat prompts from database', { error: err.message, client_ip: clientIp });
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: { message: 'Failed to load chat prompts from database.' } }));
   }
 }

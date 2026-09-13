@@ -7,15 +7,9 @@ import {
 } from '../state.js';
 import { getModel } from '../router.js';
 import { renderMarkdown } from '../markdown.js';
-import { t } from '../uiTexts.js';
+import { t, activePrompts, rotatePrompts } from '../uiTexts.js';
 
 const { div, section, h1, h2, p, span, button, textarea, form, article } = van.tags;
-const getPrompts = () => [
-  { icon: 'bulb', color: 'amber', title: t('chat_prompt1_title'), detail: t('chat_prompt1_detail'), prompt: t('chat_prompt1_prompt') },
-  { icon: 'plan', color: 'blue', title: t('chat_prompt2_title'), detail: t('chat_prompt2_detail'), prompt: t('chat_prompt2_prompt') },
-  { icon: 'spark', color: 'purple', title: t('chat_prompt3_title'), detail: t('chat_prompt3_detail'), prompt: t('chat_prompt3_prompt') },
-  { icon: 'book', color: 'green', title: t('chat_prompt4_title'), detail: t('chat_prompt4_detail'), prompt: t('chat_prompt4_prompt') },
-];
 
 function Welcome() {
   return section({ class: 'welcome', 'aria-labelledby': 'welcome-title' },
@@ -153,10 +147,20 @@ function Composer() {
 
 function Suggestions() {
   return section({ class: 'suggestions', 'aria-label': () => t('chat_suggestions_aria') },
-    div({ class: 'suggestions-label' }, span(() => t('chat_suggestions_heading')), span({ class: 'little-line' })),
-    div({ class: 'suggestion-grid' }, () => getPrompts().map(prompt =>
+    div({ class: 'suggestions-label' },
+      span(() => t('chat_suggestions_heading')),
+      span({ class: 'little-line' }),
+      button({
+        type: 'button',
+        class: 'icon-button rotate-prompts-btn',
+        'aria-label': () => t('chat_suggestions_aria'),
+        title: () => t('chat_suggestions_aria'),
+        onclick: rotatePrompts,
+      }, icon('spark')),
+    ),
+    div({ class: 'suggestion-grid' }, () => activePrompts.val.map(prompt =>
       button({ class: 'suggestion-card', onclick: () => { setDraft(prompt.prompt); focusComposer(); } },
-        span({ class: `suggestion-icon ${prompt.color}` }, icon(prompt.icon)),
+        span({ class: `suggestion-icon ${prompt.color || 'amber'}` }, icon(prompt.icon || 'bulb')),
         span({ class: 'suggestion-title' }, prompt.title),
         span({ class: 'suggestion-detail' }, prompt.detail),
         icon('arrowRight', 'suggestion-arrow'),

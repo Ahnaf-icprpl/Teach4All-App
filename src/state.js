@@ -11,7 +11,7 @@ import {
 import { createReply } from './replies.js';
 import { isDevEnv } from './env.js';
 import { reportClientError } from './errorLogger.js';
-import { t } from './uiTexts.js';
+import { t, rotatePrompts } from './uiTexts.js';
 
 export { TEST_USER_ID };
 
@@ -78,6 +78,7 @@ export function newChat() {
   draft.val = '';
   search.val = '';
   sidebarOpen.val = false;
+  rotatePrompts();
   persist();
   focusComposer();
 }
