@@ -1,8 +1,8 @@
 {
   "id": "./",
-  "name": "Teach4All — A space for curiosity",
+  "name": "Teach4All — Ruang untuk Rasa Ingin Tahu",
   "short_name": "Teach4All",
-  "description": "Your lightweight, offline-first learning companion.",
+  "description": "Pendamping belajar luring yang ringan dan mudah diakses.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

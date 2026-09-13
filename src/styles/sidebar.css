@@ -11,6 +11,10 @@
   .new-chat-button:hover { border-color: var(--dusty-terracotta); background: #354350; }
   .new-chat-button .icon { width: 16px; height: 16px; color: var(--dusty-terracotta); }
   .new-chat-button kbd { font-size: 10px; color: var(--sidebar-muted); border: 1px solid var(--slate-gray); padding: 1px 5px; border-radius: 4px; font-family: inherit; background: rgba(0, 0, 0, .2); }
+  .sidebar-quick-links { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .quick-action-button { display: flex; align-items: center; justify-content: center; gap: 7px; padding: 8px 10px; border: 1px solid var(--slate-gray); border-radius: 8px; font-size: 12px; font-weight: 550; background: var(--sidebar-card); color: var(--sidebar-text); transition: border-color .15s, background .15s; }
+  .quick-action-button:hover { border-color: var(--dusty-terracotta); background: #354350; }
+  .quick-action-button .icon { width: 15px; height: 15px; color: var(--gold-amber); }
   .search-field { display: flex; align-items: center; gap: 8px; border: 1px solid var(--slate-gray); border-radius: 8px; padding: 0 8px; background: var(--sidebar-card); }
   .search-field:focus-within { border-color: var(--dusty-terracotta); }
   .search-field .icon { width: 14px; height: 14px; color: var(--sidebar-muted); flex-shrink: 0; }
