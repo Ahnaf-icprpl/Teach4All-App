@@ -37,8 +37,8 @@ function Conversation(id) {
 function Confirm(type, id) {
   return div(
     p(type === 'clear'
-      ? 'Tindakan ini akan menghapus semua percakapan dan draf tersimpan di peramban ini secara permanen. Ekspor data terlebih dahulu jika Anda ingin menyimpannya.'
-      : 'Percakapan ini akan dihapus secara permanen dari peramban ini.'),
+      ? 'Tindakan ini akan membersihkan semua percakapan dan draf pada sesi ini. Ekspor data terlebih dahulu jika Anda ingin menyimpannya.'
+      : 'Percakapan ini akan dihapus.'),
     div({ class: 'dialog-actions' },
       button({ class: 'secondary-button', onclick: () => { modal.val = null; } }, 'Batal'),
       button({ class: 'danger-button', onclick: () => type === 'clear' ? clearWorkspace() : deleteChat(id) }, type === 'clear' ? 'Hapus semua data' : 'Hapus percakapan'),

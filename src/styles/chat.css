@@ -51,7 +51,36 @@
   .message { margin-bottom: 30px; font-size: 14px; line-height: 1.85; }
   .message-user { display: flex; justify-content: flex-end; margin-bottom: 32px; }
   .message-user .message-text { max-width: 85%; padding: 12px 19px; border-radius: 19px 19px 5px 19px; background: var(--off-white); border: 1px solid var(--soft-beige); color: var(--near-black); box-shadow: 0 1px 3px rgba(34, 46, 60, 0.04); }
-  .message-text { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--near-black); }
+  .message-text { overflow-wrap: anywhere; color: var(--near-black); }
+  .message-user .message-text { white-space: pre-wrap; }
+  .markdown-body { display: flex; flex-direction: column; gap: 9px; }
+  .markdown-p { margin: 0; line-height: 1.75; }
+  .markdown-heading { font-weight: 600; line-height: 1.35; color: inherit; margin: 6px 0 2px; }
+  .markdown-h1 { font-size: 1.35em; }
+  .markdown-h2 { font-size: 1.2em; }
+  .markdown-h3 { font-size: 1.08em; }
+  .markdown-h4 { font-size: 1em; }
+  .markdown-list { margin: 0 0 4px; padding-left: 22px; }
+  .markdown-list li { margin-bottom: 5px; line-height: 1.65; }
+  .markdown-list li:last-child { margin-bottom: 0; }
+  .markdown-blockquote { margin: 4px 0; padding: 6px 14px; border-left: 3px solid var(--terracotta); background: rgba(0, 0, 0, 0.02); border-radius: 0 6px 6px 0; color: var(--medium-gray); font-style: italic; }
+  .markdown-divider { border: 0; border-top: 1px solid var(--line); margin: 12px 0; }
+  .inline-code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.88em; padding: 2px 5px; border-radius: 4px; background: rgba(34, 46, 60, 0.07); color: var(--near-black); border: 1px solid rgba(34, 46, 60, 0.08); }
+  .code-block { margin: 8px 0; border-radius: 8px; overflow: hidden; background: #1c2632; border: 1px solid var(--slate-gray); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12); }
+  .code-header { display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; background: rgba(0, 0, 0, 0.28); font-size: 11px; color: #9bb0c1; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+  .code-lang { font-family: ui-monospace, SFMono-Regular, monospace; text-transform: lowercase; font-weight: 500; }
+  .code-copy-btn { display: inline-flex; align-items: center; gap: 5px; background: transparent; border: 1px solid transparent; color: #9bb0c1; cursor: pointer; font-size: 11px; padding: 2px 6px; border-radius: 4px; transition: all .15s ease; }
+  .code-copy-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.1); }
+  .code-copy-btn .icon { width: 13px; height: 13px; }
+  .code-block pre { margin: 0; padding: 12px 14px; overflow-x: auto; white-space: pre; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12.5px; line-height: 1.55; color: #f2eee1; }
+  .code-block code { font-family: inherit; }
+  .table-wrap { overflow-x: auto; margin: 8px 0; }
+  .markdown-table { width: 100%; border-collapse: collapse; font-size: 13px; line-height: 1.5; }
+  .markdown-table th, .markdown-table td { border: 1px solid var(--line); padding: 7px 11px; text-align: left; }
+  .markdown-table th { background: rgba(0, 0, 0, 0.04); font-weight: 600; }
+  .markdown-link { color: var(--terracotta); text-decoration: underline; text-underline-offset: 2px; }
+  .markdown-link:hover { opacity: 0.85; }
+  .strikethrough { text-decoration: line-through; opacity: 0.75; }
   .message-error .message-text { color: var(--terracotta); background: rgba(159, 81, 58, 0.08); padding: 12px 16px; border-radius: 12px; border: 1px solid rgba(159, 81, 58, 0.25); }
   .assistant-label { display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 12px; margin-bottom: 13px; color: var(--near-black); }
   .assistant-mark { display: inline-flex; align-items: center; justify-content: center; width: 29px; height: 29px; border-radius: 9px; background: var(--gold-amber); color: var(--off-white); }
@@ -84,6 +113,10 @@
   [data-theme="dark"] .suggestion-card:hover { border-color: var(--dusty-terracotta); background: var(--surface); }
   [data-theme="dark"] .suggestion-title { color: var(--text); }
   [data-theme="dark"] .suggestion-detail { color: var(--muted); }
+  [data-theme="dark"] .inline-code { background: rgba(255, 255, 255, 0.09); color: var(--text); border-color: rgba(255, 255, 255, 0.12); }
+  [data-theme="dark"] .markdown-blockquote { background: rgba(255, 255, 255, 0.03); color: var(--muted); }
+  [data-theme="dark"] .markdown-table th { background: rgba(255, 255, 255, 0.05); }
+  [data-theme="dark"] .markdown-link { color: var(--accent); }
 }
 
 @layer responsive {

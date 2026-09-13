@@ -357,14 +357,7 @@ test('server handleTitleRequest handles title generation and DB update', async (
 
   try {
     // 1. Rejects non-POST
-    const reqGet = new EventEmitter();
-    reqGet.method = 'GET';
-    const resGet = {
-      statusCode: 0,
-      headers: {},
-      writeHead(code, h) { this.statusCode = code; Object.assign(this.headers, h); },
-      end(body) { this.body = body; },
-    };
+    const { req: reqGet, res: resGet } = createMockReqRes({ method: 'GET' });
     await handleTitleRequest(reqGet, resGet, { OPENROUTER_API_KEY: 'sk-test' });
     assert.strictEqual(resGet.statusCode, 405);
 
@@ -385,25 +378,18 @@ test('server handleTitleRequest handles title generation and DB update', async (
       });
     };
 
-    const reqPost = new EventEmitter();
-    reqPost.method = 'POST';
-    const resPost = {
-      statusCode: 0,
-      headers: {},
-      writeHead(code, h) { this.statusCode = code; Object.assign(this.headers, h); },
-      end(body) { this.body = body; },
-    };
+    const { req: reqPost, res: resPost } = createMockReqRes({
+      method: 'POST',
+      body: {
+        conversationId,
+        messages: [{ role: 'user', content: 'Jelaskan fotosintesis' }],
+      },
+    });
 
-    const promise = handleTitleRequest(reqPost, resPost, {
+    await handleTitleRequest(reqPost, resPost, {
       OPENROUTER_API_KEY: 'sk-test-valid-key',
       DATABASE_URL: process.env.DATABASE_URL,
     });
-    reqPost.emit('data', JSON.stringify({
-      conversationId,
-      messages: [{ role: 'user', content: 'Jelaskan fotosintesis' }],
-    }));
-    reqPost.emit('end');
-    await promise;
 
     assert.strictEqual(resPost.statusCode, 200);
     const data = JSON.parse(resPost.body);

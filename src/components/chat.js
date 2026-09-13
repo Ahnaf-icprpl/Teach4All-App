@@ -6,6 +6,7 @@ import {
   modal, toast, online, offlineReady, storageError, loading,
 } from '../state.js';
 import { getModel } from '../router.js';
+import { renderMarkdown } from '../markdown.js';
 
 const { div, section, h1, h2, p, span, button, textarea, form, article } = van.tags;
 const prompts = [
@@ -57,7 +58,7 @@ function Messages() {
           : h2({ class: 'sr-only' }, 'Anda'),
         div({ class: 'message-text' },
           message.text
-            ? message.text
+            ? renderMarkdown(message.text)
             : (isGenerating
                 ? span({ class: 'typing-indicator', 'aria-label': 'Sedang mengetik tanggapan...', title: 'Sedang mengetik tanggapan...' },
                     span({ class: 'typing-dot' }),

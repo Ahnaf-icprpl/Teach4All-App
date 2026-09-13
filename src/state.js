@@ -6,25 +6,25 @@ import { createReply } from './replies.js';
 let storage;
 try {
   storage = window.localStorage;
+  storage?.removeItem('teach4all.workspace.v1');
   storage?.removeItem('teach4all.openrouter-key.v1');
-} catch { /* The UI reports unavailable storage. */ }
-const loaded = loadWorkspace(storage);
-let storagePaused = Boolean(loaded.error);
-export const chats = van.state(loaded.data.chats);
-export const activeId = van.state(loaded.data.activeId);
-export const draft = van.state(loaded.data.draft);
-export const theme = van.state(loaded.data.theme);
+} catch { /* Storage unavailable */ }
+
+const initialTheme = loadWorkspace(storage).data.theme;
+export const chats = van.state([]);
+export const activeId = van.state(null);
+export const draft = van.state('');
+export const theme = van.state(initialTheme);
 export const loading = van.state(false);
 export const sidebarOpen = van.state(false);
 export const sidebarCollapsed = van.state(false);
 export const search = van.state('');
-export const storageError = van.state(loaded.error);
+export const storageError = van.state('');
 export const notice = van.state('');
 export const online = van.state(typeof navigator !== 'undefined' ? navigator.onLine : true);
 export const offlineReady = van.state(false);
 export const updateReady = van.state(false);
 export const modal = van.state(null);
-let saveTimer;
 let toastTimer;
 
 export const currentChat = () => chats.val.find(chat => chat.id === activeId.val);
@@ -34,14 +34,11 @@ export const workspace = () => ({
 });
 
 export function persist() {
-  clearTimeout(saveTimer);
-  if (!storagePaused) storageError.val = saveWorkspace(storage, workspace());
+  saveWorkspace(storage, workspace());
 }
 
 export function setDraft(value) {
   draft.val = value;
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(persist, 250);
 }
 
 export function toast(message) {
@@ -225,25 +222,16 @@ export function renameChat(id, title) {
 export function deleteChat(id) {
   chats.val = chats.val.filter(chat => chat.id !== id);
   if (activeId.val === id) activeId.val = null;
-  persist();
   modal.val = null;
-  toast('Percakapan telah dihapus dari perangkat ini.');
+  toast('Percakapan telah dihapus.');
 }
 
 export function clearWorkspace() {
-  try {
-    storage.removeItem('teach4all.workspace.v1');
-    storagePaused = false;
-    storageError.val = '';
-    chats.val = emptyWorkspace().chats;
-    activeId.val = null;
-    draft.val = '';
-    persist();
-    modal.val = null;
-    toast('Percakapan dan draf tersimpan telah dibersihkan.');
-  } catch {
-    toast('Peramban Anda memblokir akses penyimpanan. Bersihkan data situs di pengaturan peramban.');
-  }
+  chats.val = [];
+  activeId.val = null;
+  draft.val = '';
+  modal.val = null;
+  toast('Percakapan dan draf telah dibersihkan.');
 }
 
 export function exportWorkspace() {
@@ -265,6 +253,4 @@ export function setTheme(value) {
 if (typeof window !== 'undefined') {
   window.addEventListener('online', () => { online.val = true; });
   window.addEventListener('offline', () => { online.val = false; });
-  window.addEventListener('pagehide', persist);
-  document.addEventListener('visibilitychange', () => { if (document.hidden) persist(); });
 }

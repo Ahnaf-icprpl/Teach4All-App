@@ -32,6 +32,17 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
     return;
   }
 
+  // Attach stream listeners immediately so events are not missed during async rate-limiting
+  const bodyPromise = new Promise((resolve, reject) => {
+    let data = '';
+    req.on('data', chunk => {
+      data += chunk;
+      if (data.length > 5e5) reject(new Error('Payload Too Large'));
+    });
+    req.on('end', () => resolve(data));
+    req.on('error', reject);
+  });
+
   // Rate limiting check via Redis
   const clientIp = getClientIp(req);
   const redisUrl = serverEnv.REDIS_URL || process.env.REDIS_URL;
@@ -68,15 +79,7 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
 
   let bodyStr = '';
   try {
-    bodyStr = await new Promise((resolve, reject) => {
-      let data = '';
-      req.on('data', chunk => {
-        data += chunk;
-        if (data.length > 5e5) reject(new Error('Payload Too Large'));
-      });
-      req.on('end', () => resolve(data));
-      req.on('error', reject);
-    });
+    bodyStr = await bodyPromise;
   } catch (err) {
     res.writeHead(err.message === 'Payload Too Large' ? 413 : 400, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: { message: err.message || 'Invalid request' } }));

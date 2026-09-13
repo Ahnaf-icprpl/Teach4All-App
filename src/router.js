@@ -59,7 +59,7 @@ export async function sendMessage(messages, onChunk, options = {}) {
     }
 
     if (!response.body) {
-      throw new Error('Tidak ada respons yang diterima dari server.');
+      throw new Error('No response received from server.');
     }
 
     const reader = response.body.getReader();
@@ -127,7 +127,7 @@ export async function generateTitle(messages, options = {}) {
   const rawText = firstUserMsg ? (firstUserMsg.text || firstUserMsg.content || '') : '';
   const fallbackTitle = generateOfflineTitle(rawText);
 
-  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+  if (typeof window !== 'undefined' && typeof navigator !== 'undefined' && navigator.onLine === false) {
     return fallbackTitle;
   }
 

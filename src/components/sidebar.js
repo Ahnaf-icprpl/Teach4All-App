@@ -105,7 +105,7 @@ export function Sidebar() {
     div({ class: 'sidebar-bottom' },
       div({ class: 'profile-button' },
         span({ class: 'avatar' }, 'A'),
-        span({ class: 'profile-copy' }, span({ class: 'profile-name' }, 'Ruang Kerja Anda'), span({ class: 'profile-detail' }, 'Pribadi · Tersimpan lokal')),
+        span({ class: 'profile-copy' }, span({ class: 'profile-name' }, 'Ruang Kerja Anda'), span({ class: 'profile-detail' }, 'Pribadi · Tersimpan di server')),
       ),
     ),
   );

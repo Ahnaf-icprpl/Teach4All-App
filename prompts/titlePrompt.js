@@ -48,7 +48,7 @@ export function generateOfflineTitle(text, fallback = 'Percakapan baru') {
   if (!text || typeof text !== 'string') return fallback;
   let cleaned = text.trim();
   cleaned = cleaned
-    .replace(/^(tolong|mohon|bisa bantu|bantu saya|bisakah anda|coba|tolong jelaskan|jelaskan ringkasan materi pembelajaran terstruktur mengenai topik berikut:\s*|buatkan kuis singkat 5 soal pilihan ganda tentang topik berikut:\s*|jelaskan proses|jelaskan)/i, '')
+    .replace(/^(buatkan kuis singkat 5 soal pilihan ganda tentang topik berikut:\s*|jelaskan ringkasan materi pembelajaran terstruktur mengenai topik berikut:\s*|tolong jelaskan proses|tolong jelaskan|jelaskan proses|jelaskan|bisa bantu saya|bantu saya|bisakah anda|tolong|mohon|coba)\s*/i, '')
     .trim();
   if (!cleaned) cleaned = text.trim();
   cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
