@@ -243,24 +243,45 @@ export async function getConversations({
   userId = DEFAULT_USER_ID,
   limit = 50,
   offset = 0,
+  query = '',
   databaseUrl = process.env.DATABASE_URL,
 } = {}) {
   const uId = toUuid(userId);
   const numLimit = Math.max(1, Math.min(100, Number(limit) || 50));
   const numOffset = Math.max(0, Number(offset) || 0);
+  const trimmedQuery = typeof query === 'string' ? query.trim() : '';
 
   if (databaseUrl) {
     try {
-      const sql = `
-        SELECT id, user_id, title, updated_at, created_at
-        FROM conversations
-        WHERE user_id = $1
-        ORDER BY updated_at DESC
-        LIMIT $2 OFFSET $3;
-      `;
       const pool = getPool(databaseUrl);
       if (pool) {
-        const res = await pool.query(sql, [uId, numLimit, numOffset]);
+        let sql;
+        let params;
+        if (trimmedQuery) {
+          sql = `
+            SELECT DISTINCT c.id, c.user_id, c.title, c.updated_at, c.created_at
+            FROM conversations c
+            LEFT JOIN messages m ON m.conversation_id = c.id
+            WHERE c.user_id = $1
+              AND (
+                c.title ILIKE $2
+                OR m.content ILIKE $2
+              )
+            ORDER BY c.updated_at DESC
+            LIMIT $3 OFFSET $4;
+          `;
+          params = [uId, `%${trimmedQuery}%`, numLimit, numOffset];
+        } else {
+          sql = `
+            SELECT id, user_id, title, updated_at, created_at
+            FROM conversations
+            WHERE user_id = $1
+            ORDER BY updated_at DESC
+            LIMIT $2 OFFSET $3;
+          `;
+          params = [uId, numLimit, numOffset];
+        }
+        const res = await pool.query(sql, params);
         const rows = res.rows || [];
         for (const item of rows) {
           inMemoryConversations.set(item.id, item);
@@ -268,13 +289,27 @@ export async function getConversations({
         return rows;
       }
     } catch (err) {
-      logger.error('Failed to get conversations from DB', { error: err.message });
+      logger.error('Failed to get conversations from DB', { error: err.message, query: trimmedQuery });
     }
   }
 
   // In-memory fallback
-  return Array.from(inMemoryConversations.values())
-    .filter(c => c.user_id === uId)
+  let list = Array.from(inMemoryConversations.values()).filter(c => c.user_id === uId);
+  if (trimmedQuery) {
+    const qLower = trimmedQuery.toLowerCase();
+    list = list.filter(c => {
+      if (c.title && c.title.toLowerCase().includes(qLower)) return true;
+      const msgs = inMemoryMessages.get(c.id);
+      if (msgs) {
+        for (const m of msgs.values()) {
+          if (m.content && m.content.toLowerCase().includes(qLower)) return true;
+        }
+      }
+      return false;
+    });
+  }
+
+  return list
     .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
     .slice(numOffset, numOffset + numLimit);
 }

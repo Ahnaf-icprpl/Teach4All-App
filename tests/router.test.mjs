@@ -37,7 +37,7 @@ import {
 import {
   generateTitle, TITLE_API_URL,
   fetchConversations, fetchMessages, deleteConversationApi,
-  renameConversationApi, CONVERSATIONS_API_URL, MESSAGES_API_URL,
+  renameConversationApi, searchConversationsApi, CONVERSATIONS_API_URL, MESSAGES_API_URL,
   TEST_USER_ID,
 } from '../src/router.js';
 import {
@@ -1292,6 +1292,70 @@ test('initUiTexts hydrates instantly from window.__INITIAL_UI_DATA__', async () 
 
   delete globalThis.window;
 });
+
+test('getConversations and handleConversationsRequest search database by title and message content', async () => {
+  const searchConvId = '77777777-7777-7777-7777-777777777777';
+  await saveConversation({ id: searchConvId, userId: TEST_USER_ID, title: 'Fisika Kuantum' });
+  await saveMessage({
+    id: '88888888-8888-8888-8888-888888888888',
+    conversationId: searchConvId,
+    userId: TEST_USER_ID,
+    role: 'user',
+    content: 'Jelaskan prinsip ketidakpastian Heisenberg secara mendalam.',
+  });
+
+  // 1. Search by title match
+  const titleResults = await getConversations({ userId: TEST_USER_ID, query: 'Kuantum' });
+  assert.ok(titleResults.some(c => c.id === searchConvId));
+
+  // 2. Search by message content match
+  const contentResults = await getConversations({ userId: TEST_USER_ID, query: 'Heisenberg' });
+  assert.ok(contentResults.some(c => c.id === searchConvId));
+
+  // 3. Search with non-matching term returns empty
+  const noMatchResults = await getConversations({ userId: TEST_USER_ID, query: 'NonExistentTermXYZ123' });
+  assert.strictEqual(noMatchResults.some(c => c.id === searchConvId), false);
+
+  // 4. HTTP API search via ?q=
+  const searchReq = new EventEmitter();
+  searchReq.method = 'GET';
+  searchReq.url = `/api/conversations?userId=${TEST_USER_ID}&q=Heisenberg`;
+  searchReq.headers = { 'x-forwarded-for': '127.0.0.1' };
+
+  let statusCode = 0;
+  let responseData = '';
+  const searchRes = {
+    writeHead: (code) => { statusCode = code; },
+    end: (str) => { responseData = str; },
+    setHeader: () => {},
+  };
+
+  await handleConversationsRequest(searchReq, searchRes, { RATE_LIMIT: 1000 });
+  assert.strictEqual(statusCode, 200);
+  const parsed = JSON.parse(responseData);
+  assert.ok(parsed.conversations.some(c => c.id === searchConvId));
+
+  // 5. Client searchConversationsApi helper attaches query param
+  const originalFetch = globalThis.fetch;
+  let interceptedUrl = '';
+  globalThis.fetch = async (url) => {
+    interceptedUrl = url;
+    return new Response(JSON.stringify({ conversations: [{ id: searchConvId, title: 'Fisika Kuantum' }] }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+
+  try {
+    const apiRes = await searchConversationsApi('Heisenberg', { userId: TEST_USER_ID });
+    assert.ok(interceptedUrl.includes('q=Heisenberg'));
+    assert.strictEqual(apiRes.conversations[0].id, searchConvId);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await deleteConversation({ conversationId: searchConvId, userId: TEST_USER_ID });
+  }
+});
+
 
 
 

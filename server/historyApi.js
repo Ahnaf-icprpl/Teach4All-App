@@ -71,9 +71,10 @@ export async function handleConversationsRequest(req, res, serverEnv = {}) {
     const userId = parsedUrl.searchParams.get('userId') || DEFAULT_USER_ID;
     const limit = parseInt(parsedUrl.searchParams.get('limit') || '50', 10);
     const offset = parseInt(parsedUrl.searchParams.get('offset') || '0', 10);
+    const query = parsedUrl.searchParams.get('q') || parsedUrl.searchParams.get('query') || '';
 
     try {
-      const conversations = await getConversations({ userId, limit, offset, databaseUrl });
+      const conversations = await getConversations({ userId, limit, offset, query, databaseUrl });
       logger.info('Fetched conversations list', {
         endpoint: '/api/conversations',
         client_ip: clientIp,
@@ -81,6 +82,7 @@ export async function handleConversationsRequest(req, res, serverEnv = {}) {
         count: conversations.length,
         limit,
         offset,
+        ...(query ? { query } : {}),
       });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ conversations }));

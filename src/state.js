@@ -33,6 +33,8 @@ export const messagesLoading = van.state(false);
 export const sidebarOpen = van.state(false);
 export const sidebarCollapsed = van.state(false);
 export const search = van.state('');
+export const searchResults = van.state(null);
+export const searchLoading = van.state(false);
 export const storageError = van.state('');
 export const notice = van.state('');
 export const online = van.state(typeof navigator !== 'undefined' ? navigator.onLine : true);
@@ -40,6 +42,52 @@ export const offlineReady = van.state(false);
 export const updateReady = van.state(false);
 export const modal = van.state(null);
 let toastTimer;
+let searchDebounceTimer = null;
+
+export function onSearchInput(query) {
+  search.val = query;
+  const term = typeof query === 'string' ? query.trim() : '';
+  if (!term) {
+    if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+    searchResults.val = null;
+    searchLoading.val = false;
+    return;
+  }
+
+  searchLoading.val = true;
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+  searchDebounceTimer = setTimeout(async () => {
+    try {
+      const data = await fetchConversations({ userId: TEST_USER_ID, query: term });
+      if (Array.isArray(data?.conversations)) {
+        searchResults.val = data.conversations.map(c => {
+          const existing = chats.val.find(item => item.id === c.id);
+          return {
+            id: c.id,
+            title: c.title || t('state_default_title'),
+            messages: existing ? existing.messages : [],
+            messagesLoaded: existing ? existing.messagesLoaded : false,
+            updatedAt: c.updated_at ? new Date(c.updated_at).getTime() : Date.now(),
+          };
+        });
+      } else {
+        searchResults.val = [];
+      }
+    } catch (err) {
+      const qLower = term.toLowerCase();
+      searchResults.val = chats.val.filter(chat =>
+        chat.title.toLowerCase().includes(qLower) ||
+        (chat.messages && chat.messages.some(message => message.text?.toLowerCase().includes(qLower))),
+      );
+      reportClientError({
+        type: 'client_search_db_failed',
+        message: err.message,
+      });
+    } finally {
+      searchLoading.val = false;
+    }
+  }, 250);
+}
 
 export const currentChat = () => chats.val.find(chat => chat.id === activeId.val);
 export const hasMessages = () => Boolean(activeId.val || currentChat()?.messages?.length);
@@ -120,7 +168,15 @@ export async function selectChat(id) {
   persist();
   focusComposer();
 
-  const chat = chats.val.find(c => c.id === id);
+  let chat = chats.val.find(c => c.id === id);
+  if (!chat && searchResults.val) {
+    const foundInSearch = searchResults.val.find(c => c.id === id);
+    if (foundInSearch) {
+      chats.val = [foundInSearch, ...chats.val];
+      chat = foundInSearch;
+    }
+  }
+
   if (chat && !chat.messagesLoaded) {
     await loadMessagesForChat(id);
   }
