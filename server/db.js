@@ -168,6 +168,7 @@ export async function saveConversation({
       const pool = getPool(databaseUrl);
       if (pool) {
         await pool.query(sql, [convId, uId, cleanTitle]);
+        logger.info('Saved conversation to DB', { conversation_id: convId, user_id: uId, title: cleanTitle });
       }
       return { id: convId, userId: uId };
     } catch (err) {
@@ -218,6 +219,12 @@ export async function saveMessage({
       const pool = getPool(databaseUrl);
       if (pool) {
         await pool.query(sql, [msgId, convId, uId, safeRole, content || '']);
+        logger.info(`Saved ${safeRole} message to DB`, {
+          message_id: msgId,
+          conversation_id: convId,
+          role: safeRole,
+          chars_length: (content || '').length,
+        });
       }
       return { id: msgId, conversationId: convId };
     } catch (err) {
@@ -307,7 +314,7 @@ export async function getMessages({
         return rows;
       }
     } catch (err) {
-      console.error('Failed to get messages from DB:', err.message);
+      logger.error('Failed to get messages from DB', { conversation_id: convId, user_id: uId, error: err.message });
     }
   }
 
@@ -342,7 +349,7 @@ export async function deleteConversation({
         await pool.query(sql, [convId, uId]);
       }
     } catch (err) {
-      console.error('Failed to delete conversation from DB:', err.message);
+      logger.error('Failed to delete conversation from DB', { conversation_id: convId, user_id: uId, error: err.message });
     }
   }
   return { success: true };
@@ -375,7 +382,7 @@ export async function updateConversationTitle({
         await pool.query(sql, [cleanTitle, convId, uId]);
       }
     } catch (err) {
-      console.error('Failed to update conversation title in DB:', err.message);
+      logger.error('Failed to update conversation title in DB', { conversation_id: convId, user_id: uId, error: err.message });
     }
   }
   return { success: true, title: cleanTitle };

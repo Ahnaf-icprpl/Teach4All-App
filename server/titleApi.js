@@ -132,7 +132,9 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
       : (process.env.TITLE_TEMPERATURE || DEFAULT_TITLE_TEMPERATURE)
   );
 
+  const startTime = Date.now();
   let finalTitle = fallbackTitle;
+  let usedSource = 'fallback';
 
   const cachedProvider = conversationId ? await getConversationProvider(conversationId, { redisClient }) : null;
   const providerRouting = buildProviderRoutingPayload(conversationId, cachedProvider);
@@ -177,9 +179,16 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
         }
         const rawContent = json?.choices?.[0]?.message?.content;
         finalTitle = cleanTitle(rawContent, fallbackTitle);
+        usedSource = 'llm';
       }
-    } catch {
+    } catch (err) {
       // Gracefully fall back to deterministic title on upstream error or timeout
+      logger.warn('Title generation LLM call failed, using fallback', {
+        endpoint: '/api/title',
+        conversation_id: conversationId,
+        client_ip: clientIp,
+        error: err.message,
+      });
       finalTitle = fallbackTitle;
     }
   }
@@ -198,8 +207,12 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
   logger.info('Title generated successfully', {
     endpoint: '/api/title',
     conversation_id: conversationId,
+    client_ip: clientIp,
     title: finalTitle,
     prompt: firstUserText,
+    model,
+    source: usedSource,
+    duration_ms: Date.now() - startTime,
   });
 
   res.writeHead(200, { 'Content-Type': 'application/json' });

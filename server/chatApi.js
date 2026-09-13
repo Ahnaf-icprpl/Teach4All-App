@@ -188,9 +188,6 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
     streamWriter.abort().catch(() => {});
   });
 
-  const cachedProvider = conversationId ? await getConversationProvider(conversationId, { redisClient }) : null;
-  const providerRouting = buildProviderRoutingPayload(conversationId, cachedProvider);
-
   try {
     const upstream = await fetch(OPENROUTER_API_URL, {
       method: 'POST',
@@ -239,6 +236,8 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
         status,
         model,
         conversation_id: conversationId,
+        client_ip: clientIp,
+        duration_ms: Date.now() - startTime,
         error: errorMsg || userMsg,
       });
 
@@ -269,11 +268,15 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
     const reader = upstream.body.getReader();
     const decoder = new TextDecoder();
     let sseBuffer = '';
+    let chunkCount = 0;
+    let bytesStreamed = 0;
 
     try {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
+        chunkCount++;
+        if (value) bytesStreamed += value.length;
         res.write(value);
 
         // Stream text deltas to DB asynchronously
@@ -319,18 +322,33 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
       logger.info('Chat completion stream finished', {
         endpoint: '/api/chat',
         conversation_id: conversationId,
+        client_ip: clientIp,
         provider: detectedProvider,
         model,
+        duration_ms: Date.now() - startTime,
+        chunks_count: chunkCount,
+        bytes_streamed: bytesStreamed,
       });
     } finally {
       res.end();
     }
   } catch (err) {
     if (controller.signal.aborted) {
-      logger.info('Chat request aborted by client', { endpoint: '/api/chat', conversation_id: conversationId });
+      logger.info('Chat request aborted by client', {
+        endpoint: '/api/chat',
+        conversation_id: conversationId,
+        client_ip: clientIp,
+        duration_ms: Date.now() - startTime,
+        chunks_count: chunkCount,
+      });
       return;
     }
-    logger.error('Unhandled proxy error in chatApi', { endpoint: '/api/chat', error: err.message });
+    logger.error('Unhandled proxy error in chatApi', {
+      endpoint: '/api/chat',
+      client_ip: clientIp,
+      duration_ms: Date.now() - startTime,
+      error: err.message,
+    });
     if (!res.headersSent) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: { message: 'Server proxy error communicating with OpenRouter.' } }));

@@ -71,9 +71,23 @@ export async function handleConversationsRequest(req, res, serverEnv = {}) {
 
     try {
       const conversations = await getConversations({ userId, limit, offset, databaseUrl });
+      logger.info('Fetched conversations list', {
+        endpoint: '/api/conversations',
+        client_ip: clientIp,
+        user_id: userId,
+        count: conversations.length,
+        limit,
+        offset,
+      });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ conversations }));
     } catch (err) {
+      logger.error('Failed to fetch conversations from DB', {
+        endpoint: '/api/conversations',
+        client_ip: clientIp,
+        user_id: userId,
+        error: err.message,
+      });
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: { message: err.message || 'Database error' } }));
     }
@@ -202,9 +216,24 @@ export async function handleMessagesRequest(req, res, serverEnv = {}) {
 
   try {
     const messages = await getMessages({ conversationId, userId, limit, offset, databaseUrl });
+    logger.info('Fetched messages for conversation', {
+      endpoint: '/api/messages',
+      client_ip: clientIp,
+      conversation_id: conversationId,
+      user_id: userId,
+      count: messages.length,
+      limit,
+      offset,
+    });
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ messages }));
   } catch (err) {
+    logger.error('Failed to fetch messages from DB', {
+      endpoint: '/api/messages',
+      client_ip: clientIp,
+      conversation_id: conversationId,
+      error: err.message,
+    });
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: { message: err.message || 'Database error' } }));
   }
