@@ -55,6 +55,7 @@
   }
   @media (max-width: 760px) {
     .sidebar { width: 280px; max-width: 85vw; padding-bottom: env(safe-area-inset-bottom); }
+    .close-sidebar { display: inline-flex; }
     .chat-options { opacity: 1; }
     .sidebar-brand { height: 80px; }
     .search-field input { font-size: 12px; }

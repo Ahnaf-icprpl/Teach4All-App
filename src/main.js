@@ -30,10 +30,10 @@ function Topbar() {
   return header({ class: 'topbar' },
     div({ class: 'topbar-left' },
       button({
-        class: 'icon-button open-sidebar', 'aria-label': 'Buka bilah samping', 'aria-controls': 'sidebar',
+        class: 'icon-button open-sidebar hamburger-menu', 'aria-label': 'Buka menu navigasi', 'aria-controls': 'sidebar',
         'aria-expanded': () => String(sidebarOpen.val || !sidebarCollapsed.val),
         onclick: () => { sidebarOpen.val = true; sidebarCollapsed.val = false; },
-      }, icon('panel')),
+      }, icon('menu')),
       button({
         class: 'icon-button', 'aria-label': 'Percakapan baru', title: 'Percakapan baru (⇧ ⌘ O)',
         onclick: newChat,

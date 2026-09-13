@@ -10,11 +10,26 @@ import { getSystemPrompt, injectSystemPrompt } from '../prompts/systemPrompt.js'
 import { ConversationStreamWriter, DEFAULT_USER_ID } from './db.js';
 import { handleTitleRequest } from './titleApi.js';
 import { handleConversationsRequest, handleMessagesRequest } from './historyApi.js';
+import {
+  getConversationProvider,
+  setConversationProvider,
+  buildProviderRoutingPayload,
+  extractProvider,
+} from './providerCache.js';
 
 export const DEFAULT_MODEL = 'google/gemini-2.5-flash-lite';
 export const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
-export { getSystemPrompt, handleTitleRequest, handleConversationsRequest, handleMessagesRequest };
+export {
+  getSystemPrompt,
+  handleTitleRequest,
+  handleConversationsRequest,
+  handleMessagesRequest,
+  getConversationProvider,
+  setConversationProvider,
+  buildProviderRoutingPayload,
+  extractProvider,
+};
 
 export function isPlaceholderKey(key) {
   if (!key || typeof key !== 'string') return true;
@@ -147,6 +162,9 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
     streamWriter.abort().catch(() => {});
   });
 
+  const cachedProvider = conversationId ? await getConversationProvider(conversationId, { redisClient }) : null;
+  const providerRouting = buildProviderRoutingPayload(conversationId, cachedProvider);
+
   try {
     const upstream = await fetch(OPENROUTER_API_URL, {
       method: 'POST',
@@ -155,11 +173,13 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
         'Content-Type': 'application/json',
         'HTTP-Referer': 'https://teach4all.local',
         'X-Title': 'Teach4All',
+        ...(conversationId ? { 'X-Session-Id': conversationId } : {}),
       },
       body: JSON.stringify({
         model,
         messages: formattedMessages,
         stream: true,
+        ...providerRouting,
       }),
       signal: controller.signal,
     });
@@ -199,11 +219,17 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
       return;
     }
 
+    let detectedProvider = extractProvider(upstream.headers) || cachedProvider;
+    if (conversationId && detectedProvider) {
+      setConversationProvider(conversationId, detectedProvider, { redisClient }).catch(() => {});
+    }
+
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',
       'Connection': 'keep-alive',
       'X-Accel-Buffering': 'no',
+      ...(detectedProvider ? { 'X-Provider': detectedProvider } : {}),
     });
 
     const reader = upstream.body.getReader();
@@ -228,6 +254,12 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
           if (data === '[DONE]') continue;
           try {
             const json = JSON.parse(data);
+            if (conversationId && !detectedProvider && json.provider) {
+              detectedProvider = extractProvider(null, json);
+              if (detectedProvider) {
+                setConversationProvider(conversationId, detectedProvider, { redisClient }).catch(() => {});
+              }
+            }
             const delta = json.choices?.[0]?.delta?.content || '';
             if (delta) {
               streamWriter.writeChunk(delta);

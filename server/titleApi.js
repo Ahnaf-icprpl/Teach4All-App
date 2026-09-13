@@ -13,8 +13,15 @@ import {
   generateOfflineTitle,
   TITLE_SYSTEM_PROMPT,
 } from '../prompts/titlePrompt.js';
+import {
+  getConversationProvider,
+  setConversationProvider,
+  buildProviderRoutingPayload,
+  extractProvider,
+} from './providerCache.js';
 
 export const DEFAULT_MODEL = 'google/gemini-2.5-flash-lite';
+export const DEFAULT_TITLE_TEMPERATURE = 0.85;
 export const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 export { cleanTitle, generateOfflineTitle, TITLE_SYSTEM_PROMPT };
@@ -109,8 +116,12 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
 
   const apiKey = (process.env.OPENROUTER_API_KEY || serverEnv.OPENROUTER_API_KEY || '').trim();
   const model = (process.env.OPENROUTER_MODEL || serverEnv.OPENROUTER_MODEL || DEFAULT_MODEL).trim();
+  const temperature = Number(process.env.TITLE_TEMPERATURE || serverEnv.TITLE_TEMPERATURE || DEFAULT_TITLE_TEMPERATURE);
 
   let finalTitle = fallbackTitle;
+
+  const cachedProvider = conversationId ? await getConversationProvider(conversationId, { redisClient }) : null;
+  const providerRouting = buildProviderRoutingPayload(conversationId, cachedProvider);
 
   if (apiKey && !isPlaceholderKey(apiKey)) {
     try {
@@ -124,12 +135,14 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
           'Content-Type': 'application/json',
           'HTTP-Referer': 'https://teach4all.local',
           'X-Title': 'Teach4All Title Generator',
+          ...(conversationId ? { 'X-Session-Id': conversationId } : {}),
         },
         body: JSON.stringify({
           model,
           messages: formatTitleMessages(messages),
           max_tokens: 25,
-          temperature: 0.3,
+          temperature,
+          ...providerRouting,
         }),
         signal: controller.signal,
       });
@@ -137,7 +150,17 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
       clearTimeout(timeoutId);
 
       if (upstream.ok) {
+        let detectedProvider = extractProvider(upstream.headers) || cachedProvider;
+        if (conversationId && detectedProvider) {
+          setConversationProvider(conversationId, detectedProvider, { redisClient }).catch(() => {});
+        }
         const json = await upstream.json();
+        if (conversationId && !detectedProvider && json?.provider) {
+          detectedProvider = extractProvider(null, json);
+          if (detectedProvider) {
+            setConversationProvider(conversationId, detectedProvider, { redisClient }).catch(() => {});
+          }
+        }
         const rawContent = json?.choices?.[0]?.message?.content;
         finalTitle = cleanTitle(rawContent, fallbackTitle);
       }

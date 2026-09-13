@@ -377,6 +377,8 @@ test('server handleTitleRequest handles title generation and DB update', async (
       assert.ok(opts.headers.Authorization.includes('sk-test-valid-key'));
       const payload = JSON.parse(opts.body);
       assert.strictEqual(payload.messages[0].role, 'system');
+      assert.ok(payload.temperature >= 0.7, 'Title generation must use a high temperature');
+      assert.strictEqual(payload.temperature, 0.85);
 
       return new Response(JSON.stringify({
         choices: [{
