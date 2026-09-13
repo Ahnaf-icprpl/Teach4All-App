@@ -10,6 +10,8 @@ export const INITIAL_QUIZZES = [
     prompt: 'Buatkan kuis singkat 5 soal pilihan ganda tentang topik berikut: Fotosintesis dan Reaksi Terang',
     question_count: 5,
     questionCount: 5,
+    is_solved: false,
+    isSolved: false,
     icon: 'leaf',
     color: 'green',
     timeType: 'today',
@@ -23,6 +25,8 @@ export const INITIAL_QUIZZES = [
     prompt: 'Buatkan kuis singkat 5 soal pilihan ganda tentang topik berikut: Tata Surya dan Karakteristik Planet',
     question_count: 5,
     questionCount: 5,
+    is_solved: false,
+    isSolved: false,
     icon: 'globe',
     color: 'blue',
     timeType: 'today',
@@ -36,6 +40,8 @@ export const INITIAL_QUIZZES = [
     prompt: 'Buatkan kuis singkat 5 soal pilihan ganda tentang topik berikut: Matematika dan Logika Bertahap',
     question_count: 5,
     questionCount: 5,
+    is_solved: false,
+    isSolved: false,
     icon: 'bulb',
     color: 'purple',
     timeType: 'yesterday',
@@ -48,6 +54,8 @@ export const INITIAL_QUIZZES = [
     prompt: 'Buatkan kuis singkat 5 soal pilihan ganda tentang topik berikut: Sains dan Alam Sekitar',
     question_count: 5,
     questionCount: 5,
+    is_solved: false,
+    isSolved: false,
     icon: 'spark',
     color: 'amber',
     timeType: 'yesterday',
@@ -60,6 +68,8 @@ export const INITIAL_QUIZZES = [
     prompt: 'Buatkan kuis singkat 5 soal pilihan ganda tentang topik berikut: Rencana dan Metode Belajar',
     question_count: 5,
     questionCount: 5,
+    is_solved: false,
+    isSolved: false,
     icon: 'plan',
     color: 'blue',
     timeType: 'days_ago',
@@ -78,6 +88,8 @@ export const INITIAL_MATERIALS = [
     section_count: 3,
     sectionCount: 3,
     estimated_read_time: 4,
+    is_solved: false,
+    isSolved: false,
     icon: 'leaf',
     color: 'green',
     timeType: 'today',
@@ -93,6 +105,8 @@ export const INITIAL_MATERIALS = [
     section_count: 3,
     sectionCount: 3,
     estimated_read_time: 6,
+    is_solved: false,
+    isSolved: false,
     icon: 'globe',
     color: 'blue',
     timeType: 'today',
@@ -108,6 +122,8 @@ export const INITIAL_MATERIALS = [
     section_count: 3,
     sectionCount: 3,
     estimated_read_time: 5,
+    is_solved: false,
+    isSolved: false,
     icon: 'bulb',
     color: 'purple',
     timeType: 'yesterday',
@@ -122,6 +138,8 @@ export const INITIAL_MATERIALS = [
     section_count: 3,
     sectionCount: 3,
     estimated_read_time: 4,
+    is_solved: false,
+    isSolved: false,
     icon: 'plan',
     color: 'amber',
     timeType: 'yesterday',
@@ -136,6 +154,8 @@ export const INITIAL_MATERIALS = [
     section_count: 3,
     sectionCount: 3,
     estimated_read_time: 5,
+    is_solved: false,
+    isSolved: false,
     icon: 'book',
     color: 'blue',
     timeType: 'days_ago',
@@ -181,11 +201,16 @@ export async function fetchQuizzes() {
     if (!res.ok) return quizzes.val;
     const data = await res.json();
     if (Array.isArray(data?.quizzes) && data.quizzes.length > 0) {
-      const formatted = data.quizzes.map(q => ({
-        ...q,
-        questionCount: Number(q.question_count ?? q.questionCount ?? 5),
-        question_count: Number(q.question_count ?? q.questionCount ?? 5),
-      }));
+      const formatted = data.quizzes.map(q => {
+        const solved = Boolean(q.is_solved ?? q.isSolved ?? false);
+        return {
+          ...q,
+          questionCount: Number(q.question_count ?? q.questionCount ?? 5),
+          question_count: Number(q.question_count ?? q.questionCount ?? 5),
+          is_solved: solved,
+          isSolved: solved,
+        };
+      });
       quizzes.val = formatted;
       try {
         if (typeof localStorage !== 'undefined') {
@@ -204,12 +229,19 @@ export async function fetchMaterials() {
     if (!res.ok) return materials.val;
     const data = await res.json();
     if (Array.isArray(data?.materials) && data.materials.length > 0) {
-      const formatted = data.materials.map(m => ({
-        ...m,
-        sectionCount: Number(m.section_count ?? m.part_count ?? m.sectionCount ?? 3),
-        section_count: Number(m.section_count ?? m.part_count ?? m.sectionCount ?? 3),
-        part_count: Number(m.section_count ?? m.part_count ?? m.sectionCount ?? 3),
-      }));
+      const formatted = data.materials.map(m => {
+        const solved = Boolean(m.is_solved ?? m.isSolved ?? m.is_completed ?? m.isCompleted ?? false);
+        return {
+          ...m,
+          sectionCount: Number(m.section_count ?? m.part_count ?? m.sectionCount ?? 3),
+          section_count: Number(m.section_count ?? m.part_count ?? m.sectionCount ?? 3),
+          part_count: Number(m.section_count ?? m.part_count ?? m.sectionCount ?? 3),
+          is_solved: solved,
+          isSolved: solved,
+          is_completed: solved,
+          isCompleted: solved,
+        };
+      });
       materials.val = formatted;
       try {
         if (typeof localStorage !== 'undefined') {
@@ -220,6 +252,44 @@ export async function fetchMaterials() {
     }
   } catch {}
   return materials.val;
+}
+
+export async function markQuizSolved(id, isSolved = true) {
+  const val = Boolean(isSolved);
+  const updated = quizzes.val.map(q => (q.id === id ? { ...q, is_solved: val, isSolved: val } : q));
+  quizzes.val = updated;
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(QUIZZES_STORAGE_KEY, JSON.stringify(updated));
+    }
+  } catch {}
+  try {
+    await fetch('/api/quizzes', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, isSolved: val }),
+    });
+  } catch {}
+  return updated;
+}
+
+export async function markMaterialSolved(id, isSolved = true) {
+  const val = Boolean(isSolved);
+  const updated = materials.val.map(m => (m.id === id ? { ...m, is_solved: val, isSolved: val, is_completed: val, isCompleted: val } : m));
+  materials.val = updated;
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(MATERIALS_STORAGE_KEY, JSON.stringify(updated));
+    }
+  } catch {}
+  try {
+    await fetch('/api/materials', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, isSolved: val }),
+    });
+  } catch {}
+  return updated;
 }
 
 export function initStudyModules() {

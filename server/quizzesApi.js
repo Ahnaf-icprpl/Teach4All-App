@@ -1,4 +1,4 @@
-import { getQuizzes, getQuizById, createQuiz } from './db.js';
+import { getQuizzes, getQuizById, createQuiz, setQuizSolvedStatus } from './db.js';
 import { logger } from './logger.js';
 import { getClientIp } from './rateLimiter.js';
 
@@ -69,6 +69,49 @@ export async function handleQuizzesRequest(req, res, env = {}) {
       logger.error('Failed to create quiz in database', { error: err.message, client_ip: clientIp });
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: { message: 'Failed to create quiz.' } }));
+    }
+    return;
+  }
+
+  if (req.method === 'PATCH') {
+    let body = '';
+    try {
+      body = await new Promise((resolve, reject) => {
+        let data = '';
+        req.on('data', chunk => {
+          data += chunk;
+          if (data.length > 1e6) reject(new Error('Payload Too Large'));
+        });
+        req.on('end', () => resolve(data));
+        req.on('error', reject);
+      });
+    } catch (err) {
+      res.writeHead(err.message === 'Payload Too Large' ? 413 : 400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: err.message || 'Invalid request' } }));
+      return;
+    }
+
+    try {
+      const payload = JSON.parse(body || '{}');
+      const id = payload.id || url.searchParams.get('id');
+      if (!id) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: { message: 'ID is required.' } }));
+        return;
+      }
+      const isSolved = payload.isSolved !== undefined ? payload.isSolved : payload.is_solved !== undefined ? payload.is_solved : true;
+      const updated = await setQuizSolvedStatus(id, isSolved, { databaseUrl: dbUrl });
+      if (!updated) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: { message: 'Quiz not found.' } }));
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ quiz: updated }));
+    } catch (err) {
+      logger.error('Failed to update quiz solved status in database', { error: err.message, client_ip: clientIp });
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: 'Failed to update quiz.' } }));
     }
     return;
   }

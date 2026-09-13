@@ -47,6 +47,9 @@ function TopicList(type) {
             div({ class: 'topic-card-headline' },
               div({ class: 'topic-card-badges' },
                 span({ class: `topic-category-pill ${item.color || 'blue'}` }, item.category || (item.categoryKey ? t(item.categoryKey) : '')),
+                (item.is_solved || item.isSolved)
+                  ? span({ class: 'topic-solved-pill' }, icon('check', 'topic-solved-icon'), () => t('dialogs_status_solved'))
+                  : null,
                 span({ class: 'topic-card-time' }, () => formatTime(item)),
               ),
               h3({ class: 'topic-card-title' }, item.title || (item.titleKey ? t(item.titleKey) : '')),

@@ -602,7 +602,7 @@ export async function getQuizzes({ category, limit = 50, offset = 0, databaseUrl
   const sql = `
     SELECT
       q.id, q.title, q.slug, q.category, q.summary, q.difficulty,
-      q.icon, q.color, q.prompt, q.created_at, q.updated_at,
+      q.icon, q.color, q.prompt, q.is_solved, q.created_at, q.updated_at,
       COUNT(qq.id)::int AS question_count
     FROM quizzes q
     LEFT JOIN quiz_questions qq ON qq.quiz_id = q.id
@@ -631,6 +631,19 @@ export async function getQuizById(id, { databaseUrl } = {}) {
 }
 
 /**
+ * Update the is_solved status of a quiz.
+ */
+export async function setQuizSolvedStatus(id, isSolved = true, { databaseUrl } = {}) {
+  if (!id) return null;
+  const rows = await query(
+    'UPDATE quizzes SET is_solved = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *;',
+    [Boolean(isSolved), id],
+    databaseUrl
+  );
+  return rows[0] || null;
+}
+
+/**
  * Insert a new quiz with its nested questions atomically.
  */
 export async function createQuiz(quiz, questions = [], { databaseUrl } = {}) {
@@ -643,8 +656,8 @@ export async function createQuiz(quiz, questions = [], { databaseUrl } = {}) {
   try {
     await client.query('BEGIN');
     const qRes = await client.query(
-      `INSERT INTO quizzes (id, user_id, conversation_id, title, slug, category, summary, difficulty, icon, color, prompt, is_published)
-       VALUES (COALESCE($1, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      `INSERT INTO quizzes (id, user_id, conversation_id, title, slug, category, summary, difficulty, icon, color, prompt, is_published, is_solved)
+       VALUES (COALESCE($1, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING *;`,
       [
         quiz.id || null,
@@ -659,6 +672,7 @@ export async function createQuiz(quiz, questions = [], { databaseUrl } = {}) {
         quiz.color || 'blue',
         quiz.prompt || '',
         quiz.isPublished ?? true,
+        Boolean(quiz.isSolved ?? quiz.is_solved ?? false),
       ]
     );
     const newQuiz = qRes.rows[0];
@@ -666,8 +680,8 @@ export async function createQuiz(quiz, questions = [], { databaseUrl } = {}) {
     for (let i = 0; i < qList.length; i++) {
       const q = qList[i];
       const qqRes = await client.query(
-        `INSERT INTO quiz_questions (quiz_id, question_number, question_text, question_type, options, correct_answer, explanation, points)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `INSERT INTO quiz_questions (quiz_id, question_number, question_text, question_type, options, correct_answer, explanation, points, is_solved)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          RETURNING *;`,
         [
           newQuiz.id,
@@ -678,6 +692,7 @@ export async function createQuiz(quiz, questions = [], { databaseUrl } = {}) {
           q.correctAnswer || q.correct_answer,
           q.explanation || '',
           q.points ?? 10,
+          Boolean(q.isSolved ?? q.is_solved ?? false),
         ]
       );
       insertedQuestions.push(qqRes.rows[0]);
@@ -706,7 +721,8 @@ export async function getMaterials({ category, limit = 50, offset = 0, databaseU
   const sql = `
     SELECT
       m.id, m.title, m.slug, m.category, m.summary, m.estimated_read_time,
-      m.difficulty, m.icon, m.color, m.prompt, m.created_at, m.updated_at,
+      m.difficulty, m.icon, m.color, m.prompt, m.is_solved, m.is_completed,
+      m.created_at, m.updated_at,
       COUNT(ms.id)::int AS section_count,
       COUNT(ms.id)::int AS part_count
     FROM materials m
@@ -736,6 +752,20 @@ export async function getMaterialById(id, { databaseUrl } = {}) {
 }
 
 /**
+ * Update the is_solved / is_completed status of a material.
+ */
+export async function setMaterialSolvedStatus(id, isSolved = true, { databaseUrl } = {}) {
+  if (!id) return null;
+  const val = Boolean(isSolved);
+  const rows = await query(
+    'UPDATE materials SET is_solved = $1, is_completed = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *;',
+    [val, id],
+    databaseUrl
+  );
+  return rows[0] || null;
+}
+
+/**
  * Insert a new material with its nested sections atomically.
  */
 export async function createMaterial(material, sections = [], { databaseUrl } = {}) {
@@ -747,9 +777,10 @@ export async function createMaterial(material, sections = [], { databaseUrl } = 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const isSolvedVal = Boolean(material.isSolved ?? material.is_solved ?? material.isCompleted ?? material.is_completed ?? false);
     const mRes = await client.query(
-      `INSERT INTO materials (id, user_id, conversation_id, title, slug, category, summary, estimated_read_time, difficulty, icon, color, prompt, is_published)
-       VALUES (COALESCE($1, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      `INSERT INTO materials (id, user_id, conversation_id, title, slug, category, summary, estimated_read_time, difficulty, icon, color, prompt, is_published, is_solved, is_completed)
+       VALUES (COALESCE($1, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
        RETURNING *;`,
       [
         material.id || null,
@@ -765,6 +796,8 @@ export async function createMaterial(material, sections = [], { databaseUrl } = 
         material.color || 'green',
         material.prompt || '',
         material.isPublished ?? true,
+        isSolvedVal,
+        isSolvedVal,
       ]
     );
     const newMat = mRes.rows[0];
@@ -772,8 +805,8 @@ export async function createMaterial(material, sections = [], { databaseUrl } = 
     for (let i = 0; i < sList.length; i++) {
       const s = sList[i];
       const sRes = await client.query(
-        `INSERT INTO material_sections (material_id, section_number, title, content, read_time_minutes)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO material_sections (material_id, section_number, title, content, read_time_minutes, is_completed)
+         VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING *;`,
         [
           newMat.id,
@@ -781,6 +814,7 @@ export async function createMaterial(material, sections = [], { databaseUrl } = 
           s.title,
           s.content,
           s.readTimeMinutes || s.read_time_minutes || 2,
+          Boolean(s.isCompleted ?? s.is_completed ?? false),
         ]
       );
       insertedSections.push(sRes.rows[0]);

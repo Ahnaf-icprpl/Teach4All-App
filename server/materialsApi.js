@@ -1,4 +1,4 @@
-import { getMaterials, getMaterialById, createMaterial } from './db.js';
+import { getMaterials, getMaterialById, createMaterial, setMaterialSolvedStatus } from './db.js';
 import { logger } from './logger.js';
 import { getClientIp } from './rateLimiter.js';
 
@@ -69,6 +69,49 @@ export async function handleMaterialsRequest(req, res, env = {}) {
       logger.error('Failed to create material in database', { error: err.message, client_ip: clientIp });
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: { message: 'Failed to create material.' } }));
+    }
+    return;
+  }
+
+  if (req.method === 'PATCH') {
+    let body = '';
+    try {
+      body = await new Promise((resolve, reject) => {
+        let data = '';
+        req.on('data', chunk => {
+          data += chunk;
+          if (data.length > 1e6) reject(new Error('Payload Too Large'));
+        });
+        req.on('end', () => resolve(data));
+        req.on('error', reject);
+      });
+    } catch (err) {
+      res.writeHead(err.message === 'Payload Too Large' ? 413 : 400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: err.message || 'Invalid request' } }));
+      return;
+    }
+
+    try {
+      const payload = JSON.parse(body || '{}');
+      const id = payload.id || url.searchParams.get('id');
+      if (!id) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: { message: 'ID is required.' } }));
+        return;
+      }
+      const isSolved = payload.isSolved !== undefined ? payload.isSolved : payload.is_solved !== undefined ? payload.is_solved : true;
+      const updated = await setMaterialSolvedStatus(id, isSolved, { databaseUrl: dbUrl });
+      if (!updated) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: { message: 'Material not found.' } }));
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ material: updated }));
+    } catch (err) {
+      logger.error('Failed to update material solved status in database', { error: err.message, client_ip: clientIp });
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: 'Failed to update material.' } }));
     }
     return;
   }

@@ -12,9 +12,11 @@ import {
   getQuizzes,
   getQuizById,
   createQuiz,
+  setQuizSolvedStatus,
   getMaterials,
   getMaterialById,
   createMaterial,
+  setMaterialSolvedStatus,
   runSql,
   DEFAULT_USER_ID,
 } from '../server/db.js';
@@ -27,6 +29,8 @@ import {
   materials,
   fetchQuizzes,
   fetchMaterials,
+  markQuizSolved,
+  markMaterialSolved,
   FALLBACK_QUIZZES,
   FALLBACK_MATERIALS,
 } from '../src/studyModules.js';
@@ -418,12 +422,128 @@ test('client fetchQuizzes and fetchMaterials update state on successful response
     assert.strictEqual(fetchedQ[0].id, 'mock-q-1');
     assert.strictEqual(quizzes.val[0].title, 'Mock Quiz Online');
     assert.strictEqual(quizzes.val[0].questionCount, 8);
+    assert.strictEqual(quizzes.val[0].is_solved, false);
 
     const fetchedM = await fetchMaterials();
     assert.strictEqual(fetchedM.length, 1);
     assert.strictEqual(fetchedM[0].id, 'mock-m-1');
     assert.strictEqual(materials.val[0].title, 'Mock Material Online');
     assert.strictEqual(materials.val[0].sectionCount, 6);
+    assert.strictEqual(materials.val[0].is_solved, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('migration 012 defines is_solved columns, indexes, and UI text keys', () => {
+  const filePath = resolve(process.cwd(), 'migrations/012_add_is_solved_property.sql');
+  assert.strictEqual(existsSync(filePath), true, 'migration file 012 must exist');
+
+  const sql = readFileSync(filePath, 'utf8');
+  assert.ok(sql.includes('ALTER TABLE quizzes\nADD COLUMN IF NOT EXISTS is_solved BOOLEAN NOT NULL DEFAULT false'));
+  assert.ok(sql.includes('ALTER TABLE quiz_questions\nADD COLUMN IF NOT EXISTS is_solved BOOLEAN NOT NULL DEFAULT false'));
+  assert.ok(sql.includes('ALTER TABLE materials\nADD COLUMN IF NOT EXISTS is_solved BOOLEAN NOT NULL DEFAULT false'));
+  assert.ok(sql.includes('ALTER TABLE materials\nADD COLUMN IF NOT EXISTS is_completed BOOLEAN NOT NULL DEFAULT false'));
+  assert.ok(sql.includes('ALTER TABLE material_sections\nADD COLUMN IF NOT EXISTS is_completed BOOLEAN NOT NULL DEFAULT false'));
+  assert.ok(sql.includes('idx_quizzes_is_solved'));
+  assert.ok(sql.includes('idx_materials_is_solved'));
+  assert.ok(sql.includes('dialogs_status_solved'));
+});
+
+test('server db helpers and PATCH APIs handle is_solved status updates', async () => {
+  if (!DB_URL) return;
+
+  const seedQuizId = '00000000-0000-0000-0001-000000000001';
+  const seedMaterialId = '00000000-0000-0000-0002-000000000001';
+
+  // 1. DB helper setQuizSolvedStatus
+  const updatedQuizTrue = await setQuizSolvedStatus(seedQuizId, true, { databaseUrl: DB_URL });
+  assert.strictEqual(updatedQuizTrue.is_solved, true);
+
+  const quizAfter = await getQuizById(seedQuizId, { databaseUrl: DB_URL });
+  assert.strictEqual(quizAfter.is_solved, true);
+
+  const updatedQuizFalse = await setQuizSolvedStatus(seedQuizId, false, { databaseUrl: DB_URL });
+  assert.strictEqual(updatedQuizFalse.is_solved, false);
+
+  // 2. DB helper setMaterialSolvedStatus
+  const updatedMatTrue = await setMaterialSolvedStatus(seedMaterialId, true, { databaseUrl: DB_URL });
+  assert.strictEqual(updatedMatTrue.is_solved, true);
+  assert.strictEqual(updatedMatTrue.is_completed, true);
+
+  const matAfter = await getMaterialById(seedMaterialId, { databaseUrl: DB_URL });
+  assert.strictEqual(matAfter.is_solved, true);
+
+  const updatedMatFalse = await setMaterialSolvedStatus(seedMaterialId, false, { databaseUrl: DB_URL });
+  assert.strictEqual(updatedMatFalse.is_solved, false);
+
+  // 3. API handleQuizzesRequest PATCH
+  const { req: reqPatchQuiz, res: resPatchQuiz } = createMockReqRes({
+    method: 'PATCH',
+    url: '/api/quizzes',
+    body: { id: seedQuizId, isSolved: true },
+  });
+  await handleQuizzesRequest(reqPatchQuiz, resPatchQuiz);
+  assert.strictEqual(resPatchQuiz.statusCode, 200);
+  const patchQuizBody = JSON.parse(resPatchQuiz.body);
+  assert.strictEqual(patchQuizBody.quiz.is_solved, true);
+
+  // Revert back
+  await setQuizSolvedStatus(seedQuizId, false, { databaseUrl: DB_URL });
+
+  // 4. API handleMaterialsRequest PATCH
+  const { req: reqPatchMat, res: resPatchMat } = createMockReqRes({
+    method: 'PATCH',
+    url: '/api/materials',
+    body: { id: seedMaterialId, isSolved: true },
+  });
+  await handleMaterialsRequest(reqPatchMat, resPatchMat);
+  assert.strictEqual(resPatchMat.statusCode, 200);
+  const patchMatBody = JSON.parse(resPatchMat.body);
+  assert.strictEqual(patchMatBody.material.is_solved, true);
+
+  // Revert back
+  await setMaterialSolvedStatus(seedMaterialId, false, { databaseUrl: DB_URL });
+});
+
+test('client markQuizSolved and markMaterialSolved update state and localStorage', async () => {
+  const originalFetch = globalThis.fetch;
+  const patchedCalls = [];
+
+  try {
+    globalThis.fetch = async (url, options = {}) => {
+      patchedCalls.push({ url, method: options.method, body: JSON.parse(options.body || '{}') });
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    };
+
+    const targetQuizId = quizzes.val[0]?.id;
+    if (targetQuizId) {
+      await markQuizSolved(targetQuizId, true);
+      const q = quizzes.val.find(item => item.id === targetQuizId);
+      assert.strictEqual(q.is_solved, true);
+      assert.strictEqual(q.isSolved, true);
+
+      await markQuizSolved(targetQuizId, false);
+      const qReverted = quizzes.val.find(item => item.id === targetQuizId);
+      assert.strictEqual(qReverted.is_solved, false);
+      assert.strictEqual(qReverted.isSolved, false);
+    }
+
+    const targetMaterialId = materials.val[0]?.id;
+    if (targetMaterialId) {
+      await markMaterialSolved(targetMaterialId, true);
+      const m = materials.val.find(item => item.id === targetMaterialId);
+      assert.strictEqual(m.is_solved, true);
+      assert.strictEqual(m.isSolved, true);
+
+      await markMaterialSolved(targetMaterialId, false);
+      const mReverted = materials.val.find(item => item.id === targetMaterialId);
+      assert.strictEqual(mReverted.is_solved, false);
+      assert.strictEqual(mReverted.isSolved, false);
+    }
+
+    assert.ok(patchedCalls.length >= 4, 'Should execute PATCH calls in background');
+    assert.strictEqual(patchedCalls[0].method, 'PATCH');
   } finally {
     globalThis.fetch = originalFetch;
   }
