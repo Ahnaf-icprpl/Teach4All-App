@@ -427,8 +427,9 @@ export function createChatMiddleware(serverEnv = {}) {
       endTracking();
       metrics.recordHttpRequest({ endpoint: url || fullUrl, method, status: res.statusCode, durationMs, req, res });
       metrics.flush().catch(() => {});
-      if (isDev) {
-        logger.info(`Completed ${method} ${fullUrl} -> ${res.statusCode} (${durationMs}ms)`, {
+      if (isDev || res.statusCode >= 400) {
+        const logMethod = res.statusCode >= 400 ? 'error' : 'info';
+        logger[logMethod](`Completed ${method} ${fullUrl} -> ${res.statusCode} (${durationMs}ms)`, {
           dev_trace: true,
           method,
           url: fullUrl,
@@ -436,29 +437,22 @@ export function createChatMiddleware(serverEnv = {}) {
           duration_ms: durationMs,
           client_ip: clientIp,
         });
+        logger.flush().catch(() => {});
       }
     });
 
-    if (url === '/api/chat' || url === '/api/chat/') {
-      return dispatchApi(handleChatRequest, req, res, serverEnv, '/api/chat');
-    }
-    if (url === '/api/title' || url === '/api/title/') {
-      return dispatchApi(handleTitleRequest, req, res, serverEnv, '/api/title');
-    }
-    if (url === '/api/conversations' || url === '/api/conversations/') {
-      return dispatchApi(handleConversationsRequest, req, res, serverEnv, '/api/conversations');
-    }
-    if (url === '/api/messages' || url === '/api/messages/') {
-      return dispatchApi(handleMessagesRequest, req, res, serverEnv, '/api/messages');
-    }
-    if (url === '/api/log-error' || url === '/api/log-error/') {
-      return dispatchApi(handleErrorLogRequest, req, res, serverEnv, '/api/log-error');
-    }
-    if (url === '/api/ui-texts' || url === '/api/ui-texts/') {
-      return dispatchApi(handleUiTextsRequest, req, res, serverEnv, '/api/ui-texts');
-    }
-    if (url === '/api/chat-prompts' || url === '/api/chat-prompts/') {
-      return dispatchApi(handleChatPromptsRequest, req, res, serverEnv, '/api/chat-prompts');
+    const apiRoutes = {
+      '/api/chat': handleChatRequest,
+      '/api/title': handleTitleRequest,
+      '/api/conversations': handleConversationsRequest,
+      '/api/messages': handleMessagesRequest,
+      '/api/log-error': handleErrorLogRequest,
+      '/api/ui-texts': handleUiTextsRequest,
+      '/api/chat-prompts': handleChatPromptsRequest,
+    };
+    const normUrl = (url.split('?')[0] || '').replace(/\/+$/, '') || '/';
+    if (apiRoutes[normUrl]) {
+      return dispatchApi(apiRoutes[normUrl], req, res, serverEnv, normUrl);
     }
     if (url.startsWith('/api/')) {
       logger.warn('API endpoint not found (404)', { endpoint: url, method, client_ip: clientIp });

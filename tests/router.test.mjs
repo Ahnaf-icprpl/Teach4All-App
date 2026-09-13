@@ -1384,6 +1384,46 @@ test('handleSsrRequest returns 404 status and 404.html template for unknown path
   assert.ok(!body.includes('id="app"'));
 });
 
+test('createChatMiddleware logs completed >= 400 requests with logger.error', async () => {
+  const { createChatMiddleware } = await import('../server/chatApi.js');
+  const logged = [];
+  const origError = logger.error.bind(logger);
+  const origInfo = logger.info.bind(logger);
+  logger.error = (msg, attrs) => {
+    logged.push({ level: 'error', msg, attrs });
+    return origError(msg, attrs);
+  };
+  logger.info = (msg, attrs) => {
+    logged.push({ level: 'info', msg, attrs });
+    return origInfo(msg, attrs);
+  };
+
+  try {
+    const middleware = createChatMiddleware({ ENV: 'development' });
+    const req = { method: 'GET', url: '/igrungrihbh', headers: { accept: 'text/html' } };
+    const finishListeners = [];
+    const res = {
+      statusCode: 200,
+      writeHead(code) { this.statusCode = code; },
+      end() {
+        for (const fn of finishListeners) fn();
+      },
+      on(evt, fn) {
+        if (evt === 'finish') finishListeners.push(fn);
+      },
+    };
+
+    await middleware(req, res, () => {});
+    assert.strictEqual(res.statusCode, 404);
+    const completionLog = logged.find(l => l.msg && l.msg.includes('Completed GET /igrungrihbh -> 404'));
+    assert(completionLog, 'Expected completion log for /igrungrihbh');
+    assert.strictEqual(completionLog.level, 'error', 'Expected 404 completion log to be marked as error level');
+  } finally {
+    logger.error = origError;
+    logger.info = origInfo;
+  }
+});
+
 
 
 
