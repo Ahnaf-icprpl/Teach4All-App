@@ -8,71 +8,115 @@ import { t } from '../uiTexts.js';
 
 const { dialog, div, h2, h3, p, span, button, label, form, input } = van.tags;
 
-const QUIZ_TOPICS = [
+const MOCK_QUIZZES = [
   {
-    title: 'Sains & Pengetahuan Umum',
-    detail: 'Uji pemahaman konsep sains dasar dan fakta menarik (5 soal)',
-    prompt: 'Buatkan kuis singkat 5 soal pilihan ganda tentang topik berikut: Sains dan Pengetahuan Umum',
-    icon: 'spark',
-    color: 'amber',
-  },
-  {
-    title: 'Fotosintesis & Tumbuhan',
-    detail: 'Kuis seputar daun, klorofil, dan pemanfaatan sinar matahari (5 soal)',
-    prompt: 'Buatkan kuis singkat 5 soal pilihan ganda tentang topik berikut: Fotosintesis dan Tumbuhan',
+    title: 'Kuis Fotosintesis & Reaksi Terang',
+    category: 'Biologi',
+    summary: 'Evaluasi 5 soal tentang kloroplas, penyerapan foton matahari, siklus Calvin, dan pelepasan oksigen.',
+    meta: '5 Soal · Pilihan Ganda',
+    time: 'Hari ini · 14:20',
+    prompt: 'Buatkan kuis singkat 5 soal pilihan ganda tentang topik berikut: Fotosintesis dan Reaksi Terang',
     icon: 'leaf',
     color: 'green',
   },
   {
-    title: 'Tata Surya & Astronomi',
-    detail: 'Kuis seputar planet, orbit, dan benda langit di tata surya (5 soal)',
-    prompt: 'Buatkan kuis singkat 5 soal pilihan ganda tentang topik berikut: Tata Surya dan Astronomi',
+    title: 'Kuis Tata Surya & Karakteristik Planet',
+    category: 'Astronomi',
+    summary: 'Uji pemahaman tentang planet kebumian, planet gas raksasa, orbit elips, dan gravitasi Matahari.',
+    meta: '5 Soal · Pilihan Ganda',
+    time: 'Hari ini · 11:05',
+    prompt: 'Buatkan kuis singkat 5 soal pilihan ganda tentang topik berikut: Tata Surya dan Karakteristik Planet',
     icon: 'globe',
     color: 'blue',
   },
   {
-    title: 'Matematika & Pemecahan Masalah',
-    detail: 'Kuis logika berhitung dan penalaran matematika terstruktur (5 soal)',
-    prompt: 'Buatkan kuis singkat 5 soal pilihan ganda tentang topik berikut: Matematika dan Pemecahan Masalah',
+    title: 'Kuis Penalaran Matematika & Logika',
+    category: 'Matematika',
+    summary: 'Soal penalaran proporsional, pola deret angka, dan pemecahan masalah bertahap.',
+    meta: '5 Soal · Logika Terarah',
+    time: 'Kemarin',
+    prompt: 'Buatkan kuis singkat 5 soal pilihan ganda tentang topik berikut: Matematika dan Logika Bertahap',
     icon: 'bulb',
     color: 'purple',
   },
+  {
+    title: 'Kuis Pengetahuan Sains & Alam Sekitar',
+    category: 'Sains Dasar',
+    summary: 'Pertanyaan seputar wujud zat, siklus air, perubahan energi, dan gaya gesek di lingkungan sekitar.',
+    meta: '5 Soal · Sains Terapan',
+    time: 'Kemarin',
+    prompt: 'Buatkan kuis singkat 5 soal pilihan ganda tentang topik berikut: Sains dan Alam Sekitar',
+    icon: 'spark',
+    color: 'amber',
+  },
+  {
+    title: 'Kuis Metode & Manajemen Waktu Belajar',
+    category: 'Pengembangan Diri',
+    summary: 'Refleksi penerapan teknik active recall, spaced repetition, dan strategi fokus pomodoro.',
+    meta: '5 Soal · Refleksi Diri',
+    time: '2 hari lalu',
+    prompt: 'Buatkan kuis singkat 5 soal pilihan ganda tentang topik berikut: Rencana dan Metode Belajar',
+    icon: 'plan',
+    color: 'blue',
+  },
 ];
 
-const MATERIAL_TOPICS = [
+const MOCK_MATERIALS = [
   {
-    title: 'Fotosintesis & Tumbuhan',
-    detail: 'Pelajari konsep dapur bertenaga surya dan peran penting oksigen',
+    title: 'Ringkasan Fotosintesis: Dapur Bertenaga Surya',
+    category: 'Biologi',
+    summary: 'Uraian terstruktur tentang struktur daun, konversi foton menjadi glukosa, dan peran krusial klorofil.',
+    meta: '3 Bagian · 4 mnt baca',
+    time: 'Hari ini · 13:45',
     prompt: 'Jelaskan ringkasan materi pembelajaran terstruktur mengenai topik berikut: Fotosintesis',
     icon: 'leaf',
     color: 'green',
   },
   {
-    title: 'Tata Surya & Astronomi',
-    detail: 'Ringkasan susunan tata surya, revolusi planet, dan gravitasi',
+    title: 'Arsitektur Tata Surya & Hukum Gravitasi',
+    category: 'Astronomi',
+    summary: 'Susunan planet dalam dan planet luar, pengaruh orbit elips Kepler, serta karakteristik sabuk asteroid.',
+    meta: '4 Bagian · 6 mnt baca',
+    time: 'Hari ini · 09:30',
     prompt: 'Jelaskan ringkasan materi pembelajaran terstruktur mengenai topik berikut: Tata Surya',
     icon: 'globe',
     color: 'blue',
   },
   {
-    title: 'Metode & Rencana Belajar',
-    detail: 'Pilar belajar efektif, konsistensi harian, dan evaluasi mandiri',
-    prompt: 'Jelaskan ringkasan materi pembelajaran terstruktur mengenai topik berikut: Rencana dan Metode Belajar',
-    icon: 'plan',
+    title: 'Kerangka 5 Langkah Pemecahan Masalah Matematika',
+    category: 'Matematika',
+    summary: 'Langkah terarah membedah soal rumit: pemahaman premis, pembuatan model, penyelesaian, dan validasi.',
+    meta: '3 Bagian · 5 mnt baca',
+    time: 'Kemarin',
+    prompt: 'Jelaskan ringkasan materi pembelajaran terstruktur mengenai topik berikut: Pemecahan Masalah Matematika',
+    icon: 'bulb',
     color: 'purple',
   },
   {
-    title: 'Pemecahan Masalah Matematika',
-    detail: 'Langkah terarah membedah soal rumit menjadi bagian-bagian sederhana',
-    prompt: 'Jelaskan ringkasan materi pembelajaran terstruktur mengenai topik berikut: Pemecahan Masalah Matematika',
-    icon: 'bulb',
+    title: 'Strategi Belajar Efektif & Retensi Memori',
+    category: 'Pengembangan Diri',
+    summary: 'Panduan active recall, teknik Feynman sederhana, dan cara mengatasi kurva lupa Ebbinghaus secara konsisten.',
+    meta: '3 Bagian · 4 mnt baca',
+    time: 'Kemarin',
+    prompt: 'Jelaskan ringkasan materi pembelajaran terstruktur mengenai topik berikut: Rencana dan Metode Belajar',
+    icon: 'plan',
     color: 'amber',
+  },
+  {
+    title: 'Prinsip Berpikir Kritis & Literasi Informasi',
+    category: 'Literasi & Sains',
+    summary: 'Tiga pilar verifikasi argumen ilmiah, pengujian data, dan pembedaan kausalitas dari korelasi semu.',
+    meta: '3 Bagian · 5 mnt baca',
+    time: '3 hari lalu',
+    prompt: 'Jelaskan ringkasan materi pembelajaran terstruktur mengenai topik berikut: Sains dan Pemikiran Kritis',
+    icon: 'book',
+    color: 'blue',
   },
 ];
 
 function TopicList(type) {
   const isQuiz = type === 'quiz';
-  const topics = isQuiz ? QUIZ_TOPICS : MATERIAL_TOPICS;
+  const items = isQuiz ? MOCK_QUIZZES : MOCK_MATERIALS;
   const customInput = input({
     type: 'text',
     class: 'topic-custom-input',
@@ -89,24 +133,35 @@ function TopicList(type) {
   return div({ class: 'topic-dialog-content' },
     p({ class: 'topic-dialog-desc' },
       () => isQuiz ? t('dialogs_quiz_desc') : t('dialogs_material_desc')),
-    div({ class: 'topic-list', role: 'list' },
-      topics.map(item => button({
-        type: 'button',
-        class: 'topic-item',
-        onclick: () => startTopicChat(type, item.prompt),
-      },
-        span({ class: `topic-icon ${item.color}` }, icon(item.icon)),
-        div({ class: 'topic-meta' },
-          span({ class: 'topic-title' }, item.title),
-          span({ class: 'topic-detail' }, item.detail),
+    div({ class: 'topic-card-grid', role: 'list' },
+      items.map(item => div({ class: 'topic-card', role: 'listitem' },
+        div({ class: 'topic-card-body' },
+          div({ class: 'topic-card-header' },
+            span({ class: `topic-icon ${item.color}` }, icon(item.icon)),
+            div({ class: 'topic-card-headline' },
+              div({ class: 'topic-card-badges' },
+                span({ class: `topic-category-pill ${item.color}` }, item.category),
+                span({ class: 'topic-card-time' }, item.time),
+              ),
+              h3({ class: 'topic-card-title' }, item.title),
+            ),
+          ),
+          p({ class: 'topic-card-summary' }, item.summary),
         ),
-        icon('arrowRight', 'topic-arrow'),
+        div({ class: 'topic-card-footer' },
+          span({ class: 'topic-card-meta' }, item.meta),
+          button({
+            type: 'button',
+            class: 'secondary-button topic-open-btn',
+            onclick: () => startTopicChat(type, item.prompt),
+          }, span(isQuiz ? 'Mulai Kuis' : 'Buka Materi'), icon('arrowRight')),
+        ),
       )),
     ),
     form({ class: 'topic-custom-form', onsubmit: onCustomSubmit },
       customInput,
       button({ type: 'submit', class: 'primary-button topic-submit-btn' },
-        icon('plus'), span(() => t('dialogs_topic_open_button'))),
+        icon('plus'), span(() => isQuiz ? 'Buat Kuis Baru' : 'Buat Materi Baru')),
     ),
   );
 }
@@ -163,8 +218,9 @@ export function Dialogs() {
       : current.type === 'conversation' ? Conversation(current.id)
       : (current.type === 'quiz' || current.type === 'material') ? TopicList(current.type)
       : Confirm(current.type, current.id);
+    const isTopicDialog = current.type === 'quiz' || current.type === 'material';
     const element = dialog({
-      class: 'app-dialog', 'aria-labelledby': 'dialog-title',
+      class: `app-dialog ${isTopicDialog ? 'dialog-wide' : ''}`, 'aria-labelledby': 'dialog-title',
       oncancel: event => { event.preventDefault(); modal.val = null; },
       onclick: event => {
         if (event.target !== element) return;
@@ -172,7 +228,13 @@ export function Dialogs() {
         if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) modal.val = null;
       },
     },
-    div({ class: 'dialog-heading' }, h2({ id: 'dialog-title' }, () => getTitles()[current.type]),
+    div({ class: 'dialog-heading' },
+      div({ class: 'dialog-heading-text' },
+        h2({ id: 'dialog-title' }, () => getTitles()[current.type]),
+        isTopicDialog
+          ? span({ class: 'dialog-count-badge' }, `${(current.type === 'quiz' ? MOCK_QUIZZES : MOCK_MATERIALS).length} modul`)
+          : null,
+      ),
       button({ class: 'icon-button', 'aria-label': () => t('dialogs_close_aria'), onclick: () => { modal.val = null; } }, icon('close'))),
     content,
     );
