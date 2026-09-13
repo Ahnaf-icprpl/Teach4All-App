@@ -1,6 +1,7 @@
 import {
   checkRateLimit,
   getClientIp,
+  getClientLocation,
   applyRateLimitHeaders,
   recordRequestMetric,
   getEndpointConfig,
@@ -163,6 +164,8 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
           'Content-Type': 'application/json',
           'HTTP-Referer': 'https://teach4all.local',
           'X-Title': 'Teach4All Title Generator',
+          'X-Forwarded-For': clientIp,
+          'X-Real-IP': clientIp,
           ...(conversationId ? { 'X-Session-Id': conversationId } : {}),
         },
         body: JSON.stringify({
@@ -170,6 +173,7 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
           messages: formatTitleMessages(messages),
           max_tokens: 25,
           temperature,
+          user: userId || clientIp,
           ...providerRouting,
         }),
         signal: controller.signal,
@@ -216,10 +220,13 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
     }).catch(() => {});
   }
 
+  const clientLoc = getClientLocation(req);
   logger.info('Title generated successfully', {
     endpoint: '/api/title',
     conversation_id: conversationId,
     client_ip: clientIp,
+    ...(clientLoc?.country ? { client_country: clientLoc.country } : {}),
+    ...(clientLoc?.city ? { client_city: clientLoc.city } : {}),
     title: finalTitle,
     prompt: firstUserText,
     model,

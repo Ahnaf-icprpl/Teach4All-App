@@ -1,4 +1,4 @@
-import { getClientIp } from './rateLimiter.js';
+import { getClientIp, getClientLocation } from './rateLimiter.js';
 import { logger, truncateText, logDevRequest } from './logger.js';
 
 function readJsonBody(req, maxBytes = 50000) {
@@ -67,9 +67,12 @@ export async function handleErrorLogRequest(req, res, serverEnv = {}) {
     userAgent,
   } = body;
 
+  const clientLoc = getClientLocation(req);
   const meta = {
     endpoint: '/api/log-error',
     client_ip: clientIp,
+    ...(clientLoc?.country ? { client_country: clientLoc.country } : {}),
+    ...(clientLoc?.city ? { client_city: clientLoc.city } : {}),
     error_type: truncateText(String(type || ''), 100),
     path: truncateText(String(path || href || ''), 300),
     referrer: truncateText(String(referrer || ''), 300),

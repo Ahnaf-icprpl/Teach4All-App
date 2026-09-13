@@ -17,19 +17,73 @@ setInterval(() => {
   }
 }, 60000).unref();
 
+/**
+ * Resolves the true client IP address with priority for Vercel Edge Network,
+ * Cloudflare, and standard reverse proxy forwarding headers.
+ *
+ * Header Priority:
+ * 1. x-vercel-forwarded-for (Vercel Edge Network verified client IP; cannot be spoofed)
+ * 2. cf-connecting-ip (Cloudflare verified client IP)
+ * 3. x-real-ip (Standard reverse proxy client IP)
+ * 4. x-forwarded-for (First IP in proxy chain)
+ * 5. Direct socket connection remoteAddress (normalized)
+ */
 export function getClientIp(req) {
+  if (!req) return '127.0.0.1';
   const headers = req.headers || {};
-  const forwarded = headers['x-forwarded-for'];
-  if (forwarded && typeof forwarded === 'string') {
-    const first = forwarded.split(',')[0].trim();
-    if (first) return first;
+
+  // 1. Vercel trusted edge client IP header
+  const vercelForwarded = headers['x-vercel-forwarded-for'];
+  if (vercelForwarded) {
+    const raw = Array.isArray(vercelForwarded) ? vercelForwarded[0] : vercelForwarded;
+    const ip = typeof raw === 'string' ? raw.split(',')[0].trim() : '';
+    if (ip) return ip.replace(/^::ffff:/, '');
   }
-  return (
-    headers['x-real-ip'] ||
-    req.socket?.remoteAddress ||
-    req.connection?.remoteAddress ||
-    '127.0.0.1'
-  );
+
+  // 2. Cloudflare connecting IP
+  const cfIp = headers['cf-connecting-ip'];
+  if (cfIp) {
+    const raw = Array.isArray(cfIp) ? cfIp[0] : cfIp;
+    const ip = typeof raw === 'string' ? raw.split(',')[0].trim() : '';
+    if (ip) return ip.replace(/^::ffff:/, '');
+  }
+
+  // 3. Standard reverse proxy real IP
+  const realIp = headers['x-real-ip'];
+  if (realIp) {
+    const raw = Array.isArray(realIp) ? realIp[0] : realIp;
+    const ip = typeof raw === 'string' ? raw.split(',')[0].trim() : '';
+    if (ip) return ip.replace(/^::ffff:/, '');
+  }
+
+  // 4. Standard X-Forwarded-For (first entry in comma-separated chain)
+  const forwarded = headers['x-forwarded-for'];
+  if (forwarded) {
+    const raw = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+    const ip = typeof raw === 'string' ? raw.split(',')[0].trim() : '';
+    if (ip) return ip.replace(/^::ffff:/, '');
+  }
+
+  // 5. Socket/connection remote address fallback
+  const remote = req.socket?.remoteAddress || req.connection?.remoteAddress;
+  if (remote) {
+    return remote.replace(/^::ffff:/, '');
+  }
+
+  return '127.0.0.1';
+}
+
+/**
+ * Extracts Vercel / Cloudflare edge location metadata for enhanced observability.
+ */
+export function getClientLocation(req) {
+  if (!req || !req.headers) return null;
+  const h = req.headers;
+  const country = h['x-vercel-ip-country'] || h['cf-ipcountry'] || null;
+  const city = h['x-vercel-ip-city'] || null;
+  const region = h['x-vercel-ip-country-region'] || null;
+  if (!country && !city && !region) return null;
+  return { country, city, region };
 }
 
 /**

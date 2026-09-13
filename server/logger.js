@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { getClientIp, getClientLocation } from './rateLimiter.js';
 
 /**
  * Grafana Cloud OTLP Logging Client for Teach4All.
@@ -372,15 +373,16 @@ export function logDevRequest(req, endpoint = '', extra = {}) {
   if (!logger.isDev()) return;
   const method = req?.method || 'GET';
   const url = req?.url || endpoint || '/';
-  const ip = req?.headers
-    ? (req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || '127.0.0.1')
-    : '127.0.0.1';
+  const ip = getClientIp(req);
+  const loc = getClientLocation(req);
   logger.info(`[DEV] Request: ${method} ${url}`, {
     dev_trace: true,
     endpoint: endpoint || url,
     method,
     url,
     client_ip: ip,
+    ...(loc?.country ? { client_country: loc.country } : {}),
+    ...(loc?.city ? { client_city: loc.city } : {}),
     user_agent: req?.headers ? req.headers['user-agent'] : undefined,
     ...extra,
   });

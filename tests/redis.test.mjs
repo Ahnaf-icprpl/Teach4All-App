@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import { RedisClient } from '../server/redis.js';
-import { checkRateLimit, getClientIp, applyRateLimitHeaders } from '../server/rateLimiter.js';
+import { checkRateLimit, getClientIp, getClientLocation, applyRateLimitHeaders } from '../server/rateLimiter.js';
 import { handleChatRequest } from '../server/chatApi.js';
 import { EventEmitter } from 'node:events';
 import { loadLocalEnv } from '../scripts/migrate.mjs';
@@ -295,4 +295,36 @@ test('setConversationProvider and getConversationProvider cache provider in Redi
     client.close();
   }
 });
+
+test('getClientIp properly resolves Vercel edge IP forwarding and prevents spoofing', () => {
+  // Priority: x-vercel-forwarded-for overrides spoofed x-forwarded-for
+  const req1 = {
+    headers: {
+      'x-vercel-forwarded-for': '198.51.100.42, 10.0.0.1',
+      'x-forwarded-for': '1.2.3.4',
+      'x-real-ip': '1.2.3.4',
+    },
+  };
+  assert.strictEqual(getClientIp(req1), '198.51.100.42');
+
+  // IPv6 mapped IPv4 normalization
+  const req2 = {
+    headers: {},
+    socket: { remoteAddress: '::ffff:203.0.113.88' },
+  };
+  assert.strictEqual(getClientIp(req2), '203.0.113.88');
+
+  // Location resolution from Vercel edge headers
+  const req3 = {
+    headers: {
+      'x-vercel-ip-country': 'ID',
+      'x-vercel-ip-city': 'Jakarta',
+      'x-vercel-ip-country-region': 'JK',
+    },
+  };
+  const loc = getClientLocation(req3);
+  assert.strictEqual(loc.country, 'ID');
+  assert.strictEqual(loc.city, 'Jakarta');
+});
+
 

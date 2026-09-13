@@ -1,6 +1,7 @@
 import {
   checkRateLimit,
   getClientIp,
+  getClientLocation,
   applyRateLimitHeaders,
   recordRequestMetric,
   getEndpointConfig,
@@ -185,10 +186,13 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
   const cachedProvider = conversationId ? await getConversationProvider(conversationId, { redisClient }) : null;
   const providerRouting = buildProviderRoutingPayload(conversationId, cachedProvider);
 
+  const clientLoc = getClientLocation(req);
   logger.info('Chat stream requested', {
     endpoint: '/api/chat',
     conversation_id: conversationId,
     client_ip: clientIp,
+    ...(clientLoc?.country ? { client_country: clientLoc.country } : {}),
+    ...(clientLoc?.city ? { client_city: clientLoc.city } : {}),
     model,
     prompt: promptText,
     messages_count: messages.length,
@@ -210,12 +214,15 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
         'Content-Type': 'application/json',
         'HTTP-Referer': 'https://teach4all.local',
         'X-Title': 'Teach4All',
+        'X-Forwarded-For': clientIp,
+        'X-Real-IP': clientIp,
         ...(conversationId ? { 'X-Session-Id': conversationId } : {}),
       },
       body: JSON.stringify({
         model,
         messages: formattedMessages,
         stream: true,
+        user: userId || clientIp,
         ...providerRouting,
       }),
       signal: controller.signal,
