@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import { RedisClient } from '../server/redis.js';
-import { checkRateLimit, getClientIp, applyRateLimitHeaders } from '../server/rateLimiter.js';
+import { checkRateLimit, getClientIp, getClientLocation, applyRateLimitHeaders } from '../server/rateLimiter.js';
 import { handleChatRequest } from '../server/chatApi.js';
 import { EventEmitter } from 'node:events';
 import { loadLocalEnv } from '../scripts/migrate.mjs';
@@ -258,3 +258,122 @@ test('getEndpointConfig fetches authoritative DB policy and caches in Redis with
     client.close();
   }
 });
+
+test('setConversationProvider and getConversationProvider cache provider in Redis atomically', async () => {
+  const {
+    getConversationProvider,
+    setConversationProvider,
+    clearConversationProvider,
+  } = await import('../server/providerCache.js');
+  const client = new RedisClient(REDIS_URL);
+  client.connect();
+
+  const conversationId = `convo-test-${Date.now()}`;
+  try {
+    // 1. Initial state is null
+    const initial = await getConversationProvider(conversationId, { redisClient: client });
+    assert.strictEqual(initial, null);
+
+    // 2. Set provider
+    const saved = await setConversationProvider(conversationId, 'Google', { redisClient: client, ttlSeconds: 60 });
+    assert.strictEqual(saved, 'google');
+
+    // 3. Read back from Redis
+    const cached = await getConversationProvider(conversationId, { redisClient: client });
+    assert.strictEqual(cached, 'google');
+
+    // 4. Verify directly in Redis key
+    const rawVal = await client.get(`teach4all:convo:provider:${conversationId}`);
+    assert.strictEqual(rawVal, 'google');
+
+    // 5. Clear provider
+    await clearConversationProvider(conversationId, { redisClient: client });
+    const afterClear = await getConversationProvider(conversationId, { redisClient: client });
+    assert.strictEqual(afterClear, null);
+  } finally {
+    await clearConversationProvider(conversationId, { redisClient: client });
+    client.close();
+  }
+});
+
+test('getClientIp properly resolves Vercel edge IP forwarding and prevents spoofing', () => {
+  // Priority: x-vercel-forwarded-for overrides spoofed x-forwarded-for
+  const req1 = {
+    headers: {
+      'x-vercel-forwarded-for': '198.51.100.42, 10.0.0.1',
+      'x-forwarded-for': '1.2.3.4',
+      'x-real-ip': '1.2.3.4',
+    },
+  };
+  assert.strictEqual(getClientIp(req1), '198.51.100.42');
+
+  // IPv6 mapped IPv4 normalization
+  const req2 = {
+    headers: {},
+    socket: { remoteAddress: '::ffff:203.0.113.88' },
+  };
+  assert.strictEqual(getClientIp(req2), '203.0.113.88');
+
+  // Location resolution from Vercel edge headers
+  const req3 = {
+    headers: {
+      'x-vercel-ip-country': 'ID',
+      'x-vercel-ip-city': 'Jakarta',
+      'x-vercel-ip-country-region': 'JK',
+    },
+  };
+  const loc = getClientLocation(req3);
+  assert.strictEqual(loc.country, 'ID');
+  assert.strictEqual(loc.city, 'Jakarta');
+});
+
+test('GrafanaMetrics records requests, handles Redis fan-out, and formats OTLP metrics', async () => {
+  const { GrafanaMetrics, parseMetricKey, toOtlpMetricAttributes } = await import('../server/metrics.js');
+
+  const parsed = parseMetricKey('http_requests_total{endpoint=/api/chat,status=200,method=POST}');
+  assert.strictEqual(parsed.name, 'http_requests_total');
+  assert.strictEqual(parsed.attributes.endpoint, '/api/chat');
+  assert.strictEqual(parsed.attributes.status, '200');
+
+  const attrs = toOtlpMetricAttributes({ endpoint: '/api/chat', count: 5 });
+  assert.strictEqual(attrs.length, 2);
+  assert.strictEqual(attrs[0].key, 'endpoint');
+  assert.strictEqual(attrs[0].value.stringValue, '/api/chat');
+
+  const client = new RedisClient(REDIS_URL);
+  client.connect();
+
+  const metricsInst = new GrafanaMetrics({
+    redisClient: client,
+    forceSendInTest: false,
+  });
+
+  try {
+    metricsInst.recordHttpRequest({
+      endpoint: '/api/test-metrics',
+      method: 'POST',
+      status: 200,
+      durationMs: 45,
+    });
+
+    metricsInst.recordStreamMetric({
+      chunks: 5,
+      bytes: 250,
+      model: 'test-model',
+      durationMs: 120,
+    });
+
+    metricsInst.recordRateLimitHit({ endpoint: '/api/test-metrics' });
+    metricsInst.recordClientError({ type: 'unit_test_err', path: '/test' });
+
+    assert(metricsInst.localDataPoints.length >= 4);
+
+    // Verify atomic increment in Redis for fanning out
+    const hash = await client.hgetall('teach4all:metrics:counters');
+    assert(hash, 'Redis counters hash should exist');
+  } finally {
+    client.close();
+  }
+});
+
+

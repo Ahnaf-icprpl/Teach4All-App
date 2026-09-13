@@ -135,3 +135,13 @@ test('offline standalone companion generates deterministic replies with zero ext
   assert.ok(photoReply.includes('solar-powered kitchen'), 'reply must include intuitive explanation');
 });
 
+test('.env.example documents valid ENV options and update banner is removed from all envs', () => {
+  const envExample = readFileSync('.env.example', 'utf8');
+  assert.ok(envExample.includes('ENV='), '.env.example must define ENV');
+  assert.ok(envExample.includes('production') && envExample.includes('development'), '.env.example must specify valid options');
+
+  const mainContent = readFileSync('src/main.js', 'utf8');
+  assert.strictEqual(mainContent.includes('Versi terbaru Teach4All telah siap.'), false, 'Update banner text must be removed from main.js');
+});
+
+

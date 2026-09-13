@@ -4,32 +4,27 @@ import {
   modal, chats, newChat, exportWorkspace,
   clearWorkspace, renameChat, deleteChat,
 } from '../state.js';
+import { t } from '../uiTexts.js';
 
-const { dialog, div, h2, h3, p, span, button, label, form, input, kbd } = van.tags;
+const { dialog, div, h2, h3, p, span, button, label, form, input } = van.tags;
 
 function Tools() {
   const closeAnd = action => () => { modal.val = null; action(); };
   return div({ class: 'tools-content' },
-    button({ class: 'tool-row', onclick: closeAnd(newChat) }, icon('plus'), span('Mulai percakapan baru'), kbd('⇧ ⌘ O')),
-    button({ class: 'tool-row', onclick: closeAnd(exportWorkspace) }, icon('download'), span('Ekspor ruang kerja Anda')),
-    h3('Pintasan yang berguna'),
-    p({ class: 'shortcut-row' }, span('Cari percakapan'), kbd('Ctrl / ⌘ K')),
-    p({ class: 'shortcut-row' }, span('Fokus ke kolom pesan'), kbd('/')),
-    p({ class: 'shortcut-row' }, span('Kirim pesan'), kbd('Enter')),
-    p({ class: 'shortcut-row' }, span('Buat baris baru'), kbd('Shift + Enter')),
-    p({ class: 'tools-note' }, 'Pada layar sentuh, tekan Enter untuk membuat baris baru. Ketuk ikon panah untuk mengirim.'),
+    button({ class: 'tool-row', onclick: closeAnd(newChat) }, icon('plus'), span(() => t('dialogs_tools_new_chat'))),
+    button({ class: 'tool-row', onclick: closeAnd(exportWorkspace) }, icon('download'), span(() => t('dialogs_tools_export'))),
   );
 }
 
 function Conversation(id) {
   const chat = chats.val.find(item => item.id === id);
-  if (!chat) return p('Percakapan ini sudah tidak tersedia.');
+  if (!chat) return p(() => t('dialogs_conversation_unavailable'));
   const titleInput = input({ id: 'conversation-title', value: chat.title, maxlength: 100, required: true, autocomplete: 'off' });
   return form({ onsubmit: event => { event.preventDefault(); renameChat(id, titleInput.value); } },
-    label({ for: 'conversation-title', class: 'field-label' }, 'Nama percakapan'), titleInput,
+    label({ for: 'conversation-title', class: 'field-label' }, () => t('dialogs_conversation_title_label')), titleInput,
     div({ class: 'dialog-actions' },
-      button({ type: 'button', class: 'secondary-button danger-text', onclick: () => { modal.val = { type: 'delete', id }; } }, icon('trash'), 'Hapus'),
-      button({ type: 'submit', class: 'primary-button' }, 'Simpan nama'),
+      button({ type: 'button', class: 'secondary-button danger-text', onclick: () => { modal.val = { type: 'delete', id }; } }, icon('trash'), () => t('dialogs_delete_button')),
+      button({ type: 'submit', class: 'primary-button' }, () => t('dialogs_save_name_button')),
     ),
   );
 }
@@ -37,20 +32,24 @@ function Conversation(id) {
 function Confirm(type, id) {
   return div(
     p(type === 'clear'
-      ? 'Tindakan ini akan membersihkan semua percakapan dan draf pada sesi ini. Ekspor data terlebih dahulu jika Anda ingin menyimpannya.'
-      : 'Percakapan ini akan dihapus.'),
+      ? () => t('dialogs_clear_warning')
+      : () => t('dialogs_delete_warning')),
     div({ class: 'dialog-actions' },
-      button({ class: 'secondary-button', onclick: () => { modal.val = null; } }, 'Batal'),
-      button({ class: 'danger-button', onclick: () => type === 'clear' ? clearWorkspace() : deleteChat(id) }, type === 'clear' ? 'Hapus semua data' : 'Hapus percakapan'),
+      button({ class: 'secondary-button', onclick: () => { modal.val = null; } }, () => t('dialogs_cancel_button')),
+      button({ class: 'danger-button', onclick: () => type === 'clear' ? clearWorkspace() : deleteChat(id) },
+        type === 'clear' ? () => t('dialogs_clear_confirm_button') : () => t('dialogs_delete_confirm_button')),
     ),
   );
 }
 
 export function Dialogs() {
-  const titles = {
-    tools: 'Alat & Pintasan',
-    conversation: 'Opsi percakapan', clear: 'Hapus ruang kerja Anda?', delete: 'Hapus percakapan ini?',
-  };
+  const getTitles = () => ({
+    tools: t('dialogs_title_tools'),
+    conversation: t('dialogs_title_conversation'),
+    clear: t('dialogs_title_clear'),
+    delete: t('dialogs_title_delete'),
+  });
+
   return () => {
     const current = modal.val;
     if (!current) return div({ hidden: true });
@@ -67,8 +66,8 @@ export function Dialogs() {
         if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) modal.val = null;
       },
     },
-    div({ class: 'dialog-heading' }, h2({ id: 'dialog-title' }, titles[current.type]),
-      button({ class: 'icon-button', 'aria-label': 'Tutup dialog', onclick: () => { modal.val = null; } }, icon('close'))),
+    div({ class: 'dialog-heading' }, h2({ id: 'dialog-title' }, () => getTitles()[current.type]),
+      button({ class: 'icon-button', 'aria-label': () => t('dialogs_close_aria'), onclick: () => { modal.val = null; } }, icon('close'))),
     content,
     );
     requestAnimationFrame(() => { if (element.isConnected) element.showModal(); });

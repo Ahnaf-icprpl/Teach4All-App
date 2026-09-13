@@ -3,28 +3,23 @@ import { icon } from '../icons.js';
 import { MAX_INPUT } from '../storage.js';
 import {
   currentChat, hasMessages, draft, setDraft, sendMessage, focusComposer,
-  modal, toast, online, offlineReady, storageError, loading,
+  modal, toast, online, offlineReady, storageError, loading, messagesLoading,
 } from '../state.js';
 import { getModel } from '../router.js';
 import { renderMarkdown } from '../markdown.js';
+import { t, activePrompts, rotatePrompts } from '../uiTexts.js';
 
 const { div, section, h1, h2, p, span, button, textarea, form, article } = van.tags;
-const prompts = [
-  { icon: 'bulb', color: 'amber', title: 'Jelaskan sederhana', detail: 'Pahami konsep penting', prompt: 'Jelaskan proses fotosintesis secara sederhana beserta contoh dalam kehidupan sehari-hari.' },
-  { icon: 'plan', color: 'blue', title: 'Buat rencana belajar', detail: 'Langkah kecil, hasil nyata', prompt: 'Bantu saya membuat rencana belajar sederhana untuk minggu ini.' },
-  { icon: 'spark', color: 'purple', title: 'Inspirasi ide kreatif', detail: 'Kembangkan imajinasi Anda', prompt: 'Berikan ide cerita kreatif atau topik menarik untuk memicu ide saya.' },
-  { icon: 'book', color: 'green', title: 'Pecahkan masalah', detail: 'Satu langkah demi satu langkah', prompt: 'Tunjukkan langkah demi langkah cara menyelesaikan masalah atau soal ini.' },
-];
 
 function Welcome() {
   return section({ class: 'welcome', 'aria-labelledby': 'welcome-title' },
     div({ class: 'welcome-symbol' }, icon('mountain'), span({ class: 'symbol-dot' })),
-    div({ class: 'welcome-eyebrow' }, span(), 'RUANG UNTUK RASA INGIN TAHU'),
-    h1({ id: 'welcome-title' }, 'Rasa ingin tahu.', van.tags.br(), 'Dunia penuh ', span({ class: 'accent-word' }, 'kemungkinan.')),
+    div({ class: 'welcome-eyebrow' }, span(), () => t('chat_welcome_eyebrow')),
+    h1({ id: 'welcome-title' }, () => t('chat_welcome_title_p1'), van.tags.br(), () => t('chat_welcome_title_p2'), span({ class: 'accent-word' }, () => t('chat_welcome_title_p3'))),
     p({ class: 'welcome-description' },
-      'Ajukan pertanyaan. Uraikan gagasan rumit. Pelajari hal baru.',
+      () => t('chat_welcome_desc_p1'),
       van.tags.br(),
-      'Di mana pun Anda berada, ini tempat yang tepat untuk memulai.',
+      () => t('chat_welcome_desc_p2'),
     ),
   );
 }
@@ -32,15 +27,28 @@ function Welcome() {
 async function copyText(text) {
   try {
     await navigator.clipboard.writeText(text);
-    toast('Tanggapan berhasil disalin.');
+    toast(t('chat_copy_success'));
   } catch {
-    toast('Fitur salin tidak tersedia di peramban ini. Pilih teks tanggapan untuk menyalinnya.');
+    toast(t('chat_copy_fail'));
   }
 }
 
 function Messages() {
   const chat = currentChat();
   const messagesList = chat?.messages || [];
+
+  if (messagesLoading.val && !messagesList.length) {
+    return div({ class: 'message-content' },
+      div({ class: 'message-history-loader' },
+        span({ class: 'typing-indicator', 'aria-label': () => t('chat_loading_conversation_aria'), title: () => t('chat_loading_conversation_aria') },
+          span({ class: 'typing-dot' }),
+          span({ class: 'typing-dot' }),
+          span({ class: 'typing-dot' }),
+        ),
+        span(() => t('chat_loading_messages_text')),
+      ),
+    );
+  }
 
   return div({ class: 'message-content' },
     ...messagesList.map((message, idx) => {
@@ -52,15 +60,15 @@ function Messages() {
         message.role === 'assistant'
           ? div({ class: 'assistant-label' },
               span({ class: 'assistant-mark' }, icon('mountain')),
-              'Teach4All',
-              isError ? span({ class: 'demo-label error-label' }, 'Pemberitahuan') : null,
+              () => t('chat_assistant_name'),
+              isError ? span({ class: 'demo-label error-label' }, () => t('chat_notice_label')) : null,
             )
-          : h2({ class: 'sr-only' }, 'Anda'),
+          : h2({ class: 'sr-only' }, () => t('chat_user_aria')),
         div({ class: 'message-text' },
           message.text
             ? renderMarkdown(message.text)
             : (isGenerating
-                ? span({ class: 'typing-indicator', 'aria-label': 'Sedang mengetik tanggapan...', title: 'Sedang mengetik tanggapan...' },
+                ? span({ class: 'typing-indicator', 'aria-label': () => t('chat_typing_aria'), title: () => t('chat_typing_aria') },
                     span({ class: 'typing-dot' }),
                     span({ class: 'typing-dot' }),
                     span({ class: 'typing-dot' }),
@@ -70,8 +78,8 @@ function Messages() {
         message.role === 'assistant' && message.text && !loading.val
           ? button({
               class: 'icon-button copy-button',
-              'aria-label': 'Salin tanggapan',
-              title: 'Salin tanggapan',
+              'aria-label': () => t('chat_copy_button_aria'),
+              title: () => t('chat_copy_button_aria'),
               onclick: () => copyText(message.text),
             }, icon('copy'))
           : null,
@@ -91,10 +99,11 @@ function Composer() {
 
   const inputEl = textarea({
     id: 'message-input',
-    placeholder: 'Apa yang sedang Anda pikirkan?',
+    autofocus: true,
+    placeholder: () => t('chat_composer_placeholder'),
     rows: 1,
     maxlength: MAX_INPUT,
-    'aria-label': 'Pesan Teach4All',
+    'aria-label': () => t('chat_composer_aria'),
     value: () => draft.val,
     oninput: event => setDraft(event.target.value),
     onkeydown: event => {
@@ -122,13 +131,13 @@ function Composer() {
         div({ class: 'composer-tools' },
           button({
             type: 'button', class: 'icon-button add-button',
-            'aria-label': 'Alat percakapan', title: 'Alat percakapan',
+            'aria-label': () => t('chat_composer_tools_aria'), title: () => t('chat_composer_tools_aria'),
             onclick: () => { modal.val = { type: 'tools' }; },
           }, icon('plus')),
         ),
         div({ class: 'send-tools' },
           () => span({ class: `input-count ${draft.val.length > MAX_INPUT - 300 ? '' : 'is-hidden'}` }, `${draft.val.length}/${MAX_INPUT}`),
-          button({ type: 'submit', class: 'send-button', 'aria-label': 'Kirim pesan', title: 'Kirim pesan', disabled: () => !draft.val.trim() || loading.val }, 
+          button({ type: 'submit', class: 'send-button', 'aria-label': () => t('chat_send_button_aria'), title: () => t('chat_send_button_aria'), disabled: () => !draft.val.trim() || loading.val }, 
             loading.val ? icon('settings', 'is-loading') : icon('arrow')),
         ),
       ),
@@ -137,11 +146,21 @@ function Composer() {
 }
 
 function Suggestions() {
-  return section({ class: 'suggestions', 'aria-label': 'Ide untuk memulai' },
-    div({ class: 'suggestions-label' }, span('Beberapa topik untuk memulai'), span({ class: 'little-line' })),
-    div({ class: 'suggestion-grid' }, prompts.map(prompt =>
+  return section({ class: 'suggestions', 'aria-label': () => t('chat_suggestions_aria') },
+    div({ class: 'suggestions-label' },
+      span(() => t('chat_suggestions_heading')),
+      span({ class: 'little-line' }),
+      button({
+        type: 'button',
+        class: 'icon-button rotate-prompts-btn',
+        'aria-label': () => t('chat_suggestions_aria'),
+        title: () => t('chat_suggestions_aria'),
+        onclick: rotatePrompts,
+      }, icon('spark')),
+    ),
+    div({ class: 'suggestion-grid' }, () => activePrompts.val.map(prompt =>
       button({ class: 'suggestion-card', onclick: () => { setDraft(prompt.prompt); focusComposer(); } },
-        span({ class: `suggestion-icon ${prompt.color}` }, icon(prompt.icon)),
+        span({ class: `suggestion-icon ${prompt.color || 'amber'}` }, icon(prompt.icon || 'bulb')),
         span({ class: 'suggestion-title' }, prompt.title),
         span({ class: 'suggestion-detail' }, prompt.detail),
         icon('arrowRight', 'suggestion-arrow'),
@@ -158,20 +177,20 @@ export function Chat() {
       : div(),
     () => !online.val && !offlineReady.val
       ? div({ class: 'connection-warning', role: 'status' },
-          'Anda sedang luring. Tab ini tetap berfungsi, tetapi pemuatan ulang luring belum disiapkan.')
+          () => t('chat_offline_warning'))
       : div(),
     div({ class: 'chat-stage' },
       Welcome(),
       div({
         class: 'messages', id: 'messages', role: 'log',
-        'aria-label': 'Percakapan', 'aria-live': 'polite', tabindex: '0',
+        'aria-label': () => t('chat_messages_aria'), 'aria-live': 'polite', tabindex: '0',
       }, Messages),
       Composer(),
       Suggestions(),
     ),
     div({ class: 'workspace-footer' },
       icon('mountain'),
-      span('Belajar tanpa batas. Begitu pula potensi Anda.'),
+      span(() => t('chat_footer_text')),
     ),
   );
 }

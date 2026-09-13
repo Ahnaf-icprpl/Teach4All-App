@@ -1,4 +1,6 @@
 import { offlineReady, updateReady, toast } from './state.js';
+import { isDevEnv } from './env.js';
+import { t } from './uiTexts.js';
 
 let registration;
 
@@ -6,22 +8,28 @@ export async function registerOffline() {
   if (!import.meta.env.PROD || !('serviceWorker' in navigator)) return;
   try {
     registration = await navigator.serviceWorker.register('./sw.js', { scope: './' });
-    if (registration.waiting) updateReady.val = true;
+    if (registration.waiting && isDevEnv()) updateReady.val = true;
     registration.addEventListener('updatefound', () => {
       const worker = registration.installing;
       worker?.addEventListener('statechange', () => {
-        if (worker.state === 'installed' && navigator.serviceWorker.controller) updateReady.val = true;
+        if (worker.state === 'installed' && navigator.serviceWorker.controller && isDevEnv()) {
+          updateReady.val = true;
+        }
       });
     });
     await navigator.serviceWorker.ready;
     offlineReady.val = true;
   } catch {
-    toast('Pemasangan mode luring belum selesai. Percakapan Anda tetap tersimpan secara lokal; sambungkan kembali dan muat ulang untuk mencoba lagi.');
+    toast(t('offline_setup_failed'));
   }
 }
 
 export function applyUpdate() {
-  if (!registration?.waiting) return;
+  updateReady.val = false;
+  if (!registration?.waiting) {
+    location.reload();
+    return;
+  }
   navigator.serviceWorker.addEventListener('controllerchange', () => location.reload(), { once: true });
   registration.waiting.postMessage({ type: 'SKIP_WAITING' });
 }

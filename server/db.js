@@ -1,55 +1,96 @@
-import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
+import pg from 'pg';
+import { logger } from './logger.js';
+
+const { Pool } = pg;
 
 export const DEFAULT_USER_ID = '00000000-0000-0000-0000-000000000001';
 
+const pools = new Map();
+
 /**
- * Execute SQL via psql process with stdin.
- * Handles multiline text and special characters safely without shell escaping.
+ * Configure SSL based on database connection string and environment.
  */
-export function runSql(sql, databaseUrl = process.env.DATABASE_URL) {
-  if (!databaseUrl) {
-    return Promise.resolve('');
+export function getSslConfig(connectionString) {
+  if (!connectionString) return false;
+  const isLocalhost = connectionString.includes('localhost') || connectionString.includes('127.0.0.1');
+  if (isLocalhost && !connectionString.includes('sslmode=require')) {
+    return false;
   }
-
-  return new Promise((resolve, reject) => {
-    const child = spawn('psql', [databaseUrl, '-v', 'ON_ERROR_STOP=1', '-X', '-q'], {
-      env: process.env,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-
-    let stderr = '';
-    let stdout = '';
-
-    child.stdout.on('data', chunk => {
-      stdout += chunk;
-    });
-
-    child.stderr.on('data', chunk => {
-      stderr += chunk;
-    });
-
-    child.on('error', err => {
-      reject(err);
-    });
-
-    child.on('close', code => {
-      if (code !== 0) {
-        reject(new Error(stderr.trim() || `psql process exited with code ${code}`));
-      } else {
-        resolve(stdout);
-      }
-    });
-
-    child.stdin.write(sql);
-    child.stdin.end();
-  });
+  return { rejectUnauthorized: false };
 }
 
 /**
- * Safely escape string literals for SQL.
+ * Retrieve or instantiate a connection pool for the specified databaseUrl.
  */
-function escapeSqlString(str) {
+export function getPool(databaseUrl = process.env.DATABASE_URL) {
+  if (!databaseUrl) return null;
+  let pool = pools.get(databaseUrl);
+  if (!pool) {
+    pool = new Pool({
+      connectionString: databaseUrl,
+      ssl: getSslConfig(databaseUrl),
+      max: 10,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 5000,
+      allowExitOnIdle: true,
+    });
+
+    pool.on('error', (err) => {
+      logger.error('Unexpected error on idle PostgreSQL client', { error: err.message });
+    });
+
+    pools.set(databaseUrl, pool);
+  }
+  return pool;
+}
+
+/**
+ * Cleanly close all active PostgreSQL pools.
+ */
+export async function closePools() {
+  for (const pool of pools.values()) {
+    try {
+      await pool.end();
+    } catch {}
+  }
+  pools.clear();
+}
+
+/**
+ * Execute parameterized query returning rows directly.
+ */
+export async function query(sql, params = [], databaseUrl = process.env.DATABASE_URL) {
+  if (!databaseUrl) return [];
+  const pool = getPool(databaseUrl);
+  if (!pool) return [];
+  const res = await pool.query(sql, params);
+  return res.rows || [];
+}
+
+/**
+ * Execute SQL via pg driver.
+ * Returns stringified rows or formatted output for compatibility with stdout inspections.
+ */
+export async function runSql(sql, databaseUrl = process.env.DATABASE_URL, params = []) {
+  if (!databaseUrl) return '';
+  const pool = getPool(databaseUrl);
+  if (!pool) return '';
+
+  const res = params && params.length > 0 ? await pool.query(sql, params) : await pool.query(sql);
+  if (Array.isArray(res)) {
+    return res.map(r => JSON.stringify(r.rows || [])).join('\n');
+  }
+  if (res && res.rows && res.rows.length > 0) {
+    return JSON.stringify(res.rows);
+  }
+  return '';
+}
+
+/**
+ * Safely escape string literals for SQL (kept for utility compatibility).
+ */
+export function escapeSqlString(str) {
   if (typeof str !== 'string') return "''";
   return `'${str.replace(/'/g, "''")}'`;
 }
@@ -57,11 +98,40 @@ function escapeSqlString(str) {
 /**
  * Ensure string is valid UUID format.
  */
-function toUuid(id) {
+export function toUuid(id) {
   if (typeof id === 'string' && /^[0-9a-fA-F-]{36}$/.test(id.trim())) {
     return id.trim();
   }
   return crypto.randomUUID();
+}
+
+export const inMemoryConversations = new Map();
+export const inMemoryMessages = new Map();
+
+/**
+ * Query JSON from PostgreSQL safely via pg driver.
+ */
+export async function queryJson(sql, databaseUrl = process.env.DATABASE_URL) {
+  if (!databaseUrl) return null;
+  const pool = getPool(databaseUrl);
+  if (!pool) return null;
+  try {
+    const res = await pool.query(sql);
+    if (!res || !res.rows || res.rows.length === 0) return null;
+    const firstRow = res.rows[0];
+    const firstKey = Object.keys(firstRow)[0];
+    const val = firstRow[firstKey];
+    if (typeof val === 'string') {
+      try {
+        return JSON.parse(val);
+      } catch {
+        return val;
+      }
+    }
+    return val;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -75,23 +145,39 @@ export async function saveConversation({
 } = {}) {
   const convId = toUuid(id);
   const uId = toUuid(userId);
-  const safeTitle = escapeSqlString((title || 'New Conversation').slice(0, 255));
+  const cleanTitle = (title || 'New Conversation').slice(0, 255);
 
-  const sql = `
-    INSERT INTO conversations (id, user_id, title, updated_at)
-    VALUES ('${convId}', '${uId}', ${safeTitle}, CURRENT_TIMESTAMP)
-    ON CONFLICT (id) DO UPDATE
-    SET title = EXCLUDED.title, updated_at = CURRENT_TIMESTAMP;
-  `;
+  // Sync to in-memory store
+  const existing = inMemoryConversations.get(convId);
+  inMemoryConversations.set(convId, {
+    id: convId,
+    user_id: uId,
+    title: cleanTitle,
+    created_at: existing?.created_at || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  });
 
-  try {
-    await runSql(sql, databaseUrl);
-    return { id: convId, userId: uId };
-  } catch (err) {
-    // Non-fatal: log and return
-    console.error('Failed to save conversation to DB:', err.message);
-    return { id: convId, userId: uId, error: err.message };
+  if (databaseUrl) {
+    const sql = `
+      INSERT INTO conversations (id, user_id, title, updated_at)
+      VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+      ON CONFLICT (id) DO UPDATE
+      SET title = EXCLUDED.title, updated_at = CURRENT_TIMESTAMP;
+    `;
+    try {
+      const pool = getPool(databaseUrl);
+      if (pool) {
+        await pool.query(sql, [convId, uId, cleanTitle]);
+        logger.info('Saved conversation to DB', { conversation_id: convId, user_id: uId, title: cleanTitle });
+      }
+      return { id: convId, userId: uId };
+    } catch (err) {
+      logger.error('Failed to save conversation to DB', { conversation_id: convId, error: err.message });
+      return { id: convId, userId: uId, error: err.message };
+    }
   }
+
+  return { id: convId, userId: uId };
 }
 
 /**
@@ -109,22 +195,197 @@ export async function saveMessage({
   const convId = toUuid(conversationId);
   const uId = toUuid(userId);
   const safeRole = ['user', 'assistant', 'system'].includes(role) ? role : 'user';
-  const safeContent = escapeSqlString(content || '');
 
-  const sql = `
-    INSERT INTO messages (id, conversation_id, user_id, role, content, created_at)
-    VALUES ('${msgId}', '${convId}', '${uId}', '${safeRole}', ${safeContent}, CURRENT_TIMESTAMP)
-    ON CONFLICT (id) DO UPDATE
-    SET content = EXCLUDED.content;
-  `;
+  // Sync to in-memory store
+  if (!inMemoryMessages.has(convId)) inMemoryMessages.set(convId, new Map());
+  const existing = inMemoryMessages.get(convId).get(msgId);
+  inMemoryMessages.get(convId).set(msgId, {
+    id: msgId,
+    conversation_id: convId,
+    user_id: uId,
+    role: safeRole,
+    content: content || '',
+    created_at: existing?.created_at || new Date().toISOString(),
+  });
 
-  try {
-    await runSql(sql, databaseUrl);
-    return { id: msgId, conversationId: convId };
-  } catch (err) {
-    console.error(`Failed to save ${safeRole} message to DB:`, err.message);
-    return { id: msgId, conversationId: convId, error: err.message };
+  if (databaseUrl) {
+    const sql = `
+      INSERT INTO messages (id, conversation_id, user_id, role, content, created_at)
+      VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+      ON CONFLICT (id) DO UPDATE
+      SET content = EXCLUDED.content;
+    `;
+    try {
+      const pool = getPool(databaseUrl);
+      if (pool) {
+        await pool.query(sql, [msgId, convId, uId, safeRole, content || '']);
+        logger.info(`Saved ${safeRole} message to DB`, {
+          message_id: msgId,
+          conversation_id: convId,
+          role: safeRole,
+          chars_length: (content || '').length,
+        });
+      }
+      return { id: msgId, conversationId: convId };
+    } catch (err) {
+      logger.error(`Failed to save ${safeRole} message to DB`, { message_id: msgId, conversation_id: convId, error: err.message });
+      return { id: msgId, conversationId: convId, error: err.message };
+    }
   }
+
+  return { id: msgId, conversationId: convId };
+}
+
+/**
+ * Fetch list of conversations for a user (lazy loading metadata).
+ */
+export async function getConversations({
+  userId = DEFAULT_USER_ID,
+  limit = 50,
+  offset = 0,
+  databaseUrl = process.env.DATABASE_URL,
+} = {}) {
+  const uId = toUuid(userId);
+  const numLimit = Math.max(1, Math.min(100, Number(limit) || 50));
+  const numOffset = Math.max(0, Number(offset) || 0);
+
+  if (databaseUrl) {
+    try {
+      const sql = `
+        SELECT id, user_id, title, updated_at, created_at
+        FROM conversations
+        WHERE user_id = $1
+        ORDER BY updated_at DESC
+        LIMIT $2 OFFSET $3;
+      `;
+      const pool = getPool(databaseUrl);
+      if (pool) {
+        const res = await pool.query(sql, [uId, numLimit, numOffset]);
+        const rows = res.rows || [];
+        for (const item of rows) {
+          inMemoryConversations.set(item.id, item);
+        }
+        return rows;
+      }
+    } catch (err) {
+      logger.error('Failed to get conversations from DB', { error: err.message });
+    }
+  }
+
+  // In-memory fallback
+  return Array.from(inMemoryConversations.values())
+    .filter(c => c.user_id === uId)
+    .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+    .slice(numOffset, numOffset + numLimit);
+}
+
+/**
+ * Fetch messages for a single conversation on demand (lazy loading chat history).
+ */
+export async function getMessages({
+  conversationId,
+  userId = DEFAULT_USER_ID,
+  limit = 100,
+  offset = 0,
+  databaseUrl = process.env.DATABASE_URL,
+} = {}) {
+  const convId = toUuid(conversationId);
+  const uId = toUuid(userId);
+  const numLimit = Math.max(1, Math.min(200, Number(limit) || 100));
+  const numOffset = Math.max(0, Number(offset) || 0);
+
+  if (databaseUrl) {
+    try {
+      const sql = `
+        SELECT id, conversation_id, user_id, role, content, created_at
+        FROM messages
+        WHERE conversation_id = $1 AND user_id = $2
+        ORDER BY created_at ASC
+        LIMIT $3 OFFSET $4;
+      `;
+      const pool = getPool(databaseUrl);
+      if (pool) {
+        const res = await pool.query(sql, [convId, uId, numLimit, numOffset]);
+        const rows = res.rows || [];
+        if (!inMemoryMessages.has(convId)) inMemoryMessages.set(convId, new Map());
+        for (const msg of rows) {
+          inMemoryMessages.get(convId).set(msg.id, msg);
+        }
+        return rows;
+      }
+    } catch (err) {
+      logger.error('Failed to get messages from DB', { conversation_id: convId, user_id: uId, error: err.message });
+    }
+  }
+
+  // In-memory fallback
+  const convMap = inMemoryMessages.get(convId);
+  if (!convMap) return [];
+  return Array.from(convMap.values())
+    .filter(m => m.user_id === uId)
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+    .slice(numOffset, numOffset + numLimit);
+}
+
+/**
+ * Delete a conversation and its messages.
+ */
+export async function deleteConversation({
+  conversationId,
+  userId = DEFAULT_USER_ID,
+  databaseUrl = process.env.DATABASE_URL,
+} = {}) {
+  const convId = toUuid(conversationId);
+  const uId = toUuid(userId);
+
+  inMemoryConversations.delete(convId);
+  inMemoryMessages.delete(convId);
+
+  if (databaseUrl) {
+    const sql = `DELETE FROM conversations WHERE id = $1 AND user_id = $2;`;
+    try {
+      const pool = getPool(databaseUrl);
+      if (pool) {
+        await pool.query(sql, [convId, uId]);
+      }
+    } catch (err) {
+      logger.error('Failed to delete conversation from DB', { conversation_id: convId, user_id: uId, error: err.message });
+    }
+  }
+  return { success: true };
+}
+
+/**
+ * Update conversation title in database.
+ */
+export async function updateConversationTitle({
+  conversationId,
+  userId = DEFAULT_USER_ID,
+  title,
+  databaseUrl = process.env.DATABASE_URL,
+} = {}) {
+  const convId = toUuid(conversationId);
+  const uId = toUuid(userId);
+  const cleanTitle = (title || 'New Conversation').slice(0, 255);
+
+  const existing = inMemoryConversations.get(convId);
+  if (existing) {
+    existing.title = cleanTitle;
+    existing.updated_at = new Date().toISOString();
+  }
+
+  if (databaseUrl) {
+    const sql = `UPDATE conversations SET title = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND user_id = $3;`;
+    try {
+      const pool = getPool(databaseUrl);
+      if (pool) {
+        await pool.query(sql, [cleanTitle, convId, uId]);
+      }
+    } catch (err) {
+      logger.error('Failed to update conversation title in DB', { conversation_id: convId, user_id: uId, error: err.message });
+    }
+  }
+  return { success: true, title: cleanTitle };
 }
 
 /**

@@ -1,6 +1,6 @@
 # Database Migrations Guide
 
-Teach4All uses a lightweight, transaction-safe migration runner built directly on PostgreSQL's standard tooling (`psql`). All migrations are stored as version-controlled `.sql` files in the [`migrations/`](./migrations) directory, and execution state is tracked in the database inside the `teach4all_migrations` table.
+Teach4All uses a lightweight, transaction-safe migration runner built directly on PostgreSQL's native driver (`pg`). All migrations are stored as version-controlled `.sql` files in the [`migrations/`](./migrations) directory, and execution state is tracked in the database inside the `teach4all_migrations` table.
 
 ---
 
@@ -11,7 +11,7 @@ Teach4All uses a lightweight, transaction-safe migration runner built directly o
 │       migrations/       │
 │  001_initial_schema.sql │
 │  002_update_limits.sql  │  ──> scripts/migrate.mjs ──> PostgreSQL Database
-│  003_your_change.sql    │       (via `psql` CLI)       (tracks in `teach4all_migrations`)
+│  003_your_change.sql    │       (via `pg` driver)      (tracks in `teach4all_migrations`)
 └─────────────────────────┘
 ```
 

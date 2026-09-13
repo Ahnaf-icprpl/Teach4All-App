@@ -23,7 +23,7 @@ These rules apply to all code files (`.js`, `.mjs`, `.css`) in the `src/` direct
 
 - No CDN scripts, stylesheets, or fonts in production.
 - All assets must be bundled or served from `dist/` after `npm run build`.
-- The only allowed external dependency is `vanjs-core` via npm.
+- The only allowed frontend external dependency is `vanjs-core` via npm; `pg` is the allowed database driver for server-side PostgreSQL persistence.
 - Development tools (Vite, Playwright) are devDependencies only.
 
 ## Offline-First Design

@@ -1,6 +1,8 @@
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { execFileSync } from 'node:child_process';
+import pg from 'pg';
+
+const { Client } = pg;
 
 /**
  * Minimal environment loader for .env files without external dependencies.
@@ -24,37 +26,59 @@ export function loadLocalEnv() {
 }
 
 /**
- * Execute SQL statements using psql.
+ * Determine SSL config from database URL.
  */
-export function execSql(databaseUrl, sql, { queryOnly = false } = {}) {
-  const args = [
-    databaseUrl,
-    '-v', 'ON_ERROR_STOP=1',
-    '-X',
-    '-q',
-  ];
-
-  if (queryOnly) {
-    args.push('-t', '-A', '-c', sql);
-    return execFileSync('psql', args, {
-      encoding: 'utf8',
-      env: { ...process.env },
-      stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim();
+export function getSslConfig(connectionString) {
+  if (!connectionString) return false;
+  const isLocalhost = connectionString.includes('localhost') || connectionString.includes('127.0.0.1');
+  if (isLocalhost && !connectionString.includes('sslmode=require')) {
+    return false;
   }
+  return { rejectUnauthorized: false };
+}
 
-  return execFileSync('psql', args, {
-    input: sql,
-    encoding: 'utf8',
-    env: { ...process.env },
-    stdio: ['pipe', 'pipe', 'pipe'],
+/**
+ * Create and connect a pg Client.
+ */
+export async function createClient(databaseUrl) {
+  const client = new Client({
+    connectionString: databaseUrl,
+    ssl: getSslConfig(databaseUrl),
   });
+  await client.connect();
+  return client;
+}
+
+/**
+ * Execute SQL statements using pg driver.
+ */
+export async function execSql(databaseUrl, sql, { queryOnly = false } = {}) {
+  const client = await createClient(databaseUrl);
+  try {
+    const res = await client.query(sql);
+    if (queryOnly) {
+      if (Array.isArray(res)) {
+        return res
+          .map(r => (r.rows || []).map(row => Object.values(row).join('|')).join('\n'))
+          .filter(Boolean)
+          .join('\n')
+          .trim();
+      }
+      if (res && res.rows && res.rows.length > 0) {
+        return res.rows.map(row => Object.values(row).join('|')).join('\n').trim();
+      }
+      return '';
+    }
+    return res;
+  } finally {
+    await client.end().catch(() => {});
+  }
 }
 
 /**
  * Initialize migration tracking table if not exists.
  */
-export function initMigrationsTable(databaseUrl, tableName = 'teach4all_migrations') {
+export async function initMigrationsTable(databaseUrl, tableName = 'teach4all_migrations', client = null) {
   const sanitizedTable = tableName.replace(/[^a-zA-Z0-9_]/g, '');
   const createTableSql = `
     CREATE TABLE IF NOT EXISTS ${sanitizedTable} (
@@ -63,16 +87,24 @@ export function initMigrationsTable(databaseUrl, tableName = 'teach4all_migratio
         applied_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
   `;
-  execSql(databaseUrl, createTableSql);
+  if (client) {
+    await client.query(createTableSql);
+  } else {
+    await execSql(databaseUrl, createTableSql);
+  }
 }
 
 /**
  * Fetch list of already executed migration file names from DB table.
  */
-export function getAppliedMigrations(databaseUrl, tableName = 'teach4all_migrations') {
+export async function getAppliedMigrations(databaseUrl, tableName = 'teach4all_migrations', client = null) {
   const sanitizedTable = tableName.replace(/[^a-zA-Z0-9_]/g, '');
-  initMigrationsTable(databaseUrl, sanitizedTable);
-  const raw = execSql(databaseUrl, `SELECT name FROM ${sanitizedTable} ORDER BY id ASC;`, { queryOnly: true });
+  if (client) {
+    await initMigrationsTable(databaseUrl, sanitizedTable, client);
+    const res = await client.query(`SELECT name FROM ${sanitizedTable} ORDER BY id ASC;`);
+    return new Set(res.rows.map(r => r.name.trim()).filter(Boolean));
+  }
+  const raw = await execSql(databaseUrl, `SELECT name FROM ${sanitizedTable} ORDER BY id ASC;`, { queryOnly: true });
   if (!raw) return new Set();
   return new Set(raw.split('\n').map(s => s.trim()).filter(Boolean));
 }
@@ -91,7 +123,7 @@ export function getMigrationFiles(migrationsDir) {
  * Execute pending migrations sequentially inside database transactions.
  * Skips already run migrations and stores state in a DB table.
  */
-export function runMigrations({
+export async function runMigrations({
   databaseUrl = process.env.DATABASE_URL,
   migrationsDir = resolve(process.cwd(), 'migrations'),
   tableName = process.env.MIGRATIONS_TABLE || 'teach4all_migrations',
@@ -108,56 +140,57 @@ export function runMigrations({
   logger.log(`State table:     ${sanitizedTable}`);
   logger.log(`Migrations dir:  ${migrationsDir}`);
 
-  initMigrationsTable(databaseUrl, sanitizedTable);
-  const appliedSet = getAppliedMigrations(databaseUrl, sanitizedTable);
-  const files = getMigrationFiles(migrationsDir);
+  const client = await createClient(databaseUrl);
+  try {
+    await initMigrationsTable(databaseUrl, sanitizedTable, client);
+    const appliedSet = await getAppliedMigrations(databaseUrl, sanitizedTable, client);
+    const files = getMigrationFiles(migrationsDir);
 
-  if (files.length === 0) {
-    logger.log('No migration files found in migrations directory.');
-    return { applied: [], skipped: [], total: 0 };
-  }
-
-  const applied = [];
-  const skipped = [];
-
-  for (const file of files) {
-    if (appliedSet.has(file)) {
-      skipped.push(file);
-      logger.log(`  [-] SKIP: ${file} (already executed)`);
-      continue;
+    if (files.length === 0) {
+      logger.log('No migration files found in migrations directory.');
+      return { applied: [], skipped: [], total: 0 };
     }
 
-    logger.log(`  [+] RUNNING: ${file}...`);
-    const filePath = join(migrationsDir, file);
-    const sqlContent = readFileSync(filePath, 'utf8');
+    const applied = [];
+    const skipped = [];
 
-    const transactionSql = `
-      BEGIN;
-      ${sqlContent}
-      INSERT INTO ${sanitizedTable} (name) VALUES ('${file.replace(/'/g, "''")}');
-      COMMIT;
-    `;
+    for (const file of files) {
+      if (appliedSet.has(file)) {
+        skipped.push(file);
+        logger.log(`  [-] SKIP: ${file} (already executed)`);
+        continue;
+      }
 
-    try {
-      execSql(databaseUrl, transactionSql);
-      applied.push(file);
-      logger.log(`  [✓] APPLIED: ${file}`);
-    } catch (err) {
-      logger.error(`\n[!] Migration failed on file: ${file}`);
-      if (err.stderr) logger.error(err.stderr.toString().trim());
-      else if (err.message) logger.error(err.message);
-      throw err;
+      logger.log(`  [+] RUNNING: ${file}...`);
+      const filePath = join(migrationsDir, file);
+      const sqlContent = readFileSync(filePath, 'utf8');
+
+      try {
+        await client.query('BEGIN');
+        await client.query(sqlContent);
+        await client.query(`INSERT INTO ${sanitizedTable} (name) VALUES ($1);`, [file]);
+        await client.query('COMMIT');
+        applied.push(file);
+        logger.log(`  [✓] APPLIED: ${file}`);
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        logger.error(`\n[!] Migration failed on file: ${file}`);
+        if (err.message) logger.error(err.message);
+        throw err;
+      }
     }
-  }
 
-  logger.log('---------------------------------------------');
-  if (applied.length > 0) {
-    logger.log(`Migration complete! Successfully applied ${applied.length} new migration(s).`);
-  } else {
-    logger.log('Database is up to date. No new migrations were needed.');
-  }
+    logger.log('---------------------------------------------');
+    if (applied.length > 0) {
+      logger.log(`Migration complete! Successfully applied ${applied.length} new migration(s).`);
+    } else {
+      logger.log('Database is up to date. No new migrations were needed.');
+    }
 
-  return { applied, skipped, total: files.length };
+    return { applied, skipped, total: files.length };
+  } finally {
+    await client.end().catch(() => {});
+  }
 }
 
 // CLI execution entrypoint
@@ -165,11 +198,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   loadLocalEnv();
   const dbUrl = process.env.DATABASE_URL;
 
-  try {
-    runMigrations({ databaseUrl: dbUrl });
-    process.exit(0);
-  } catch (error) {
-    console.error(`Migration error: ${error.message}`);
-    process.exit(1);
-  }
+  runMigrations({ databaseUrl: dbUrl })
+    .then(() => process.exit(0))
+    .catch((error) => {
+      console.error(`Migration error: ${error.message}`);
+      process.exit(1);
+    });
 }

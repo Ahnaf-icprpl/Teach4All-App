@@ -1,8 +1,5 @@
 import { getRedisClient } from './redis.js';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-
-const execFileAsync = promisify(execFile);
+import { query } from './db.js';
 
 /**
  * In-memory fallback rate-limiter in case Redis is unavailable or unconfigured.
@@ -20,19 +17,73 @@ setInterval(() => {
   }
 }, 60000).unref();
 
+/**
+ * Resolves the true client IP address with priority for Vercel Edge Network,
+ * Cloudflare, and standard reverse proxy forwarding headers.
+ *
+ * Header Priority:
+ * 1. x-vercel-forwarded-for (Vercel Edge Network verified client IP; cannot be spoofed)
+ * 2. cf-connecting-ip (Cloudflare verified client IP)
+ * 3. x-real-ip (Standard reverse proxy client IP)
+ * 4. x-forwarded-for (First IP in proxy chain)
+ * 5. Direct socket connection remoteAddress (normalized)
+ */
 export function getClientIp(req) {
+  if (!req) return '127.0.0.1';
   const headers = req.headers || {};
-  const forwarded = headers['x-forwarded-for'];
-  if (forwarded && typeof forwarded === 'string') {
-    const first = forwarded.split(',')[0].trim();
-    if (first) return first;
+
+  // 1. Vercel trusted edge client IP header
+  const vercelForwarded = headers['x-vercel-forwarded-for'];
+  if (vercelForwarded) {
+    const raw = Array.isArray(vercelForwarded) ? vercelForwarded[0] : vercelForwarded;
+    const ip = typeof raw === 'string' ? raw.split(',')[0].trim() : '';
+    if (ip) return ip.replace(/^::ffff:/, '');
   }
-  return (
-    headers['x-real-ip'] ||
-    req.socket?.remoteAddress ||
-    req.connection?.remoteAddress ||
-    '127.0.0.1'
-  );
+
+  // 2. Cloudflare connecting IP
+  const cfIp = headers['cf-connecting-ip'];
+  if (cfIp) {
+    const raw = Array.isArray(cfIp) ? cfIp[0] : cfIp;
+    const ip = typeof raw === 'string' ? raw.split(',')[0].trim() : '';
+    if (ip) return ip.replace(/^::ffff:/, '');
+  }
+
+  // 3. Standard reverse proxy real IP
+  const realIp = headers['x-real-ip'];
+  if (realIp) {
+    const raw = Array.isArray(realIp) ? realIp[0] : realIp;
+    const ip = typeof raw === 'string' ? raw.split(',')[0].trim() : '';
+    if (ip) return ip.replace(/^::ffff:/, '');
+  }
+
+  // 4. Standard X-Forwarded-For (first entry in comma-separated chain)
+  const forwarded = headers['x-forwarded-for'];
+  if (forwarded) {
+    const raw = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+    const ip = typeof raw === 'string' ? raw.split(',')[0].trim() : '';
+    if (ip) return ip.replace(/^::ffff:/, '');
+  }
+
+  // 5. Socket/connection remote address fallback
+  const remote = req.socket?.remoteAddress || req.connection?.remoteAddress;
+  if (remote) {
+    return remote.replace(/^::ffff:/, '');
+  }
+
+  return '127.0.0.1';
+}
+
+/**
+ * Extracts Vercel / Cloudflare edge location metadata for enhanced observability.
+ */
+export function getClientLocation(req) {
+  if (!req || !req.headers) return null;
+  const h = req.headers;
+  const country = h['x-vercel-ip-country'] || h['cf-ipcountry'] || null;
+  const city = h['x-vercel-ip-city'] || null;
+  const region = h['x-vercel-ip-country-region'] || null;
+  if (!country && !city && !region) return null;
+  return { country, city, region };
 }
 
 /**
@@ -155,25 +206,16 @@ export async function getEndpointConfig(endpoint = '/api/chat', {
   let config = { rateLimitPerIp: 120, burstLimit: 25, windowSeconds: 60 };
   if (databaseUrl) {
     try {
-      const sanitized = endpoint.replace(/'/g, "''");
-      const query = `SELECT rate_limit_per_ip, burst_limit, window_seconds FROM endpoint_rate_limits WHERE endpoint = '${sanitized}' OR endpoint = '*' ORDER BY (endpoint = '*') ASC LIMIT 1;`;
-      const { stdout } = await execFileAsync('psql', [
-        databaseUrl,
-        '-v', 'ON_ERROR_STOP=1',
-        '-X',
-        '-q',
-        '-t',
-        '-A',
-        '-c', query,
-      ]);
-      const lines = (stdout || '').trim().split('\n').map(l => l.trim()).filter(l => l && l.includes('|'));
-      const line = lines[0];
-      if (line) {
-        const parts = line.split('|');
+      const rows = await query(
+        `SELECT rate_limit_per_ip, burst_limit, window_seconds FROM endpoint_rate_limits WHERE endpoint = $1 OR endpoint = '*' ORDER BY (endpoint = '*') ASC LIMIT 1;`,
+        [endpoint],
+        databaseUrl
+      );
+      if (rows && rows[0]) {
         config = {
-          rateLimitPerIp: Number(parts[0]) || 120,
-          burstLimit: Number(parts[1]) || 25,
-          windowSeconds: Number(parts[2]) || 60,
+          rateLimitPerIp: Number(rows[0].rate_limit_per_ip) || 120,
+          burstLimit: Number(rows[0].burst_limit) || 25,
+          windowSeconds: Number(rows[0].window_seconds) || 60,
         };
       }
     } catch {
