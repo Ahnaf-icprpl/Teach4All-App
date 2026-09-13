@@ -191,9 +191,9 @@
     .welcome-description { font-size: 11px; margin-top: 16px; }
     .chat-stage { padding: 0 20px; }
     .composer-wrap { margin-top: 24px; }
-    .composer { border-radius: 14px; padding: 17px 13px 10px; }
-    .composer textarea { font-size: 16px; }
-    .composer-toolbar { margin-top: 14px; }
+    .composer { border-radius: 14px; padding: 15px 13px 10px; }
+    .composer textarea { font-size: 13.5px; line-height: 1.55; }
+    .composer-toolbar { margin-top: 12px; }
     .suggestions { width: 100%; margin-top: 22px; margin-bottom: 20px; }
     .suggestion-grid { grid-template-columns: 1fr; gap: 9px; width: 100%; }
     .suggestion-card {
@@ -252,7 +252,11 @@
       align-self: center;
     }
     .workspace-footer { padding-top: 14px; padding-bottom: max(17px, env(safe-area-inset-bottom)); font-size: 8px; }
-    .has-messages .composer-wrap { width: calc(100% - 32px); }
+    .has-messages .composer-wrap {
+      width: calc(100% - 32px);
+      margin-top: 8px;
+      margin-bottom: max(20px, calc(10px + env(safe-area-inset-bottom, 0px)));
+    }
     .message-content { padding: 18px 22px; }
     .message { font-size: 13px; }
     .has-messages .workspace-footer { display: none; }
@@ -261,6 +265,13 @@
     .chat-stage { padding: 0 14px; }
     .welcome h1 { font-size: 29px; }
     .welcome-description { font-size: 10px; }
+    .composer { border-radius: 13px; padding: 13px 11px 8px; }
+    .composer textarea { font-size: 12.5px; }
+    .has-messages .composer-wrap {
+      width: calc(100% - 24px);
+      margin-top: 6px;
+      margin-bottom: max(16px, calc(8px + env(safe-area-inset-bottom, 0px)));
+    }
     .suggestion-grid { gap: 8px; }
     .suggestion-card {
       grid-template-columns: 32px 1fr auto;

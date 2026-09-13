@@ -85,7 +85,7 @@
       font-size: 16px;
       font-weight: 600;
     }
-    .app-dialog input { font-size: 16px; }
+    .app-dialog input { font-size: 13.5px; }
     .dialog-wide .topic-dialog-content {
       padding: 16px 16px calc(24px + env(safe-area-inset-bottom, 0px));
       flex: 1;
