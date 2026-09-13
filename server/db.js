@@ -37,7 +37,7 @@ export function getPool(databaseUrl = process.env.DATABASE_URL) {
     });
 
     pool.on('error', (err) => {
-      console.error('Unexpected error on idle PostgreSQL client:', err.message);
+      logger.error('Unexpected error on idle PostgreSQL client', { error: err.message });
     });
 
     pools.set(databaseUrl, pool);
