@@ -9,6 +9,7 @@ import {
   renameConversationApi, TEST_USER_ID,
 } from './router.js';
 import { createReply } from './replies.js';
+import { isDevEnv } from './env.js';
 
 export { TEST_USER_ID };
 
@@ -34,7 +35,7 @@ export const storageError = van.state('');
 export const notice = van.state('');
 export const online = van.state(typeof navigator !== 'undefined' ? navigator.onLine : true);
 export const offlineReady = van.state(false);
-export const updateReady = van.state(false);
+export const updateReady = van.state(isDevEnv());
 export const modal = van.state(null);
 let toastTimer;
 

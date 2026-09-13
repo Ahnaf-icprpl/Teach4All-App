@@ -8,6 +8,7 @@ import {
   online, updateReady, newChat, focusComposer, currentChat,
 } from './state.js';
 import { registerOffline, applyUpdate } from './offline.js';
+import { isDevEnv } from './env.js';
 import './styles/base.css';
 import './styles/sidebar.css';
 import './styles/chat.css';
@@ -66,13 +67,14 @@ function Toast() {
   }, notice.val);
 }
 
-function UpdateBanner() {
+export function UpdateBanner() {
+  if (!isDevEnv()) return () => null;
   return () => updateReady.val
     ? div({ class: 'update-notice', role: 'status' },
         span('Versi terbaru Teach4All telah siap.'),
         button({ class: 'text-button', onclick: applyUpdate }, 'Muat ulang sekarang'),
       )
-    : div();
+    : null;
 }
 
 function App() {

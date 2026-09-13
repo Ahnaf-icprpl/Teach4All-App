@@ -1,4 +1,5 @@
 import { offlineReady, updateReady, toast } from './state.js';
+import { isDevEnv } from './env.js';
 
 let registration;
 
@@ -6,11 +7,13 @@ export async function registerOffline() {
   if (!import.meta.env.PROD || !('serviceWorker' in navigator)) return;
   try {
     registration = await navigator.serviceWorker.register('./sw.js', { scope: './' });
-    if (registration.waiting) updateReady.val = true;
+    if (registration.waiting && isDevEnv()) updateReady.val = true;
     registration.addEventListener('updatefound', () => {
       const worker = registration.installing;
       worker?.addEventListener('statechange', () => {
-        if (worker.state === 'installed' && navigator.serviceWorker.controller) updateReady.val = true;
+        if (worker.state === 'installed' && navigator.serviceWorker.controller && isDevEnv()) {
+          updateReady.val = true;
+        }
       });
     });
     await navigator.serviceWorker.ready;
@@ -21,7 +24,11 @@ export async function registerOffline() {
 }
 
 export function applyUpdate() {
-  if (!registration?.waiting) return;
+  updateReady.val = false;
+  if (!registration?.waiting) {
+    location.reload();
+    return;
+  }
   navigator.serviceWorker.addEventListener('controllerchange', () => location.reload(), { once: true });
   registration.waiting.postMessage({ type: 'SKIP_WAITING' });
 }
