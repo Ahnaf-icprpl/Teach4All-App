@@ -1,7 +1,14 @@
 import van from 'vanjs-core';
 import { icon } from '../icons.js';
 import { startTopicChat, toast } from '../state.js';
-import { fetchQuizDetails, fetchMaterialDetails, markQuizSolved, markMaterialSolved } from '../studyModules.js';
+import {
+  fetchQuizDetails,
+  fetchMaterialDetails,
+  markQuizSolved,
+  markMaterialSolved,
+  normalizeQuizQuestion,
+  normalizeMaterialSection,
+} from '../studyModules.js';
 import { t } from '../uiTexts.js';
 
 const { div, h2, h3, p, span, button } = van.tags;
@@ -32,7 +39,7 @@ export function QuizSolver(quizId, onBack) {
       );
     }
 
-    const questions = qData.questions || [];
+    const questions = (qData.questions || []).map(normalizeQuizQuestion).filter(Boolean);
     const totalQuestions = questions.length;
     const currentQ = questions[currentIndex.val] || {};
     const answeredCount = Object.keys(userAnswers.val).length;
@@ -102,7 +109,7 @@ export function QuizSolver(quizId, onBack) {
         ),
       ),
       div({ class: 'study-question-card' },
-        h3({ class: 'study-question-title' }, currentQ.questionText || ''),
+        h3({ class: 'study-question-title' }, currentQ.questionText || currentQ.question_text || ''),
         div({ class: 'study-options-list' },
           (currentQ.options || []).map(opt => {
             const isSelected = currentAnswer === opt.key;
@@ -182,7 +189,7 @@ export function MaterialReader(materialId, onBack) {
       );
     }
 
-    const sections = mData.sections || [];
+    const sections = (mData.sections || []).map(normalizeMaterialSection).filter(Boolean);
     const totalSections = sections.length;
     const currentSec = sections[currentSectionIndex.val] || {};
 
@@ -206,7 +213,7 @@ export function MaterialReader(materialId, onBack) {
         div({ class: 'study-material-header' },
           h2({ class: 'study-material-title' }, currentSec.title || mData.title),
           span({ class: 'study-material-read-time' },
-            `${currentSec.readTimeMinutes || 2} ${t('dialogs_meta_read_time_suffix')}`,
+            `${currentSec.readTimeMinutes || currentSec.read_time_minutes || 2} ${t('dialogs_meta_read_time_suffix')}`,
           ),
         ),
         div({ class: 'study-material-body' },

@@ -293,19 +293,90 @@ export async function markMaterialSolved(id, isSolved = true) {
   return updated;
 }
 
+export function normalizeQuizQuestion(q, idx = 0) {
+  if (!q) return null;
+  const questionNumber = q.question_number ?? q.questionNumber ?? (idx + 1);
+  const questionText = q.question_text ?? q.questionText ?? '';
+  const rawOpts = Array.isArray(q.options) ? q.options : [];
+  const rawCorrect = String(q.correct_answer ?? q.correctAnswer ?? '').trim();
+
+  const options = rawOpts.map((opt, optIdx) => {
+    const defaultKey = String.fromCharCode(65 + optIdx);
+    if (typeof opt === 'object' && opt !== null) {
+      return {
+        key: opt.key || defaultKey,
+        text: String(opt.text ?? opt.label ?? opt.value ?? ''),
+      };
+    }
+    return {
+      key: defaultKey,
+      text: String(opt || ''),
+    };
+  });
+
+  let correctAnswer = rawCorrect;
+  const matchByText = options.find(o => o.text.trim().toLowerCase() === rawCorrect.toLowerCase());
+  if (matchByText) {
+    correctAnswer = matchByText.key;
+  } else {
+    const matchByKey = options.find(o => o.key.toUpperCase() === rawCorrect.toUpperCase());
+    if (matchByKey) {
+      correctAnswer = matchByKey.key;
+    }
+  }
+
+  return {
+    questionNumber,
+    questionText,
+    question_number: questionNumber,
+    question_text: questionText,
+    options,
+    correctAnswer,
+    correct_answer: rawCorrect,
+    explanation: q.explanation || '',
+    points: Number(q.points) || 10,
+    is_solved: Boolean(q.is_solved ?? q.isSolved ?? false),
+  };
+}
+
+export function normalizeMaterialSection(s, idx = 0) {
+  if (!s) return null;
+  const sectionNumber = s.section_number ?? s.sectionNumber ?? (idx + 1);
+  const readTimeMinutes = Number(s.read_time_minutes ?? s.readTimeMinutes ?? 2);
+  return {
+    ...s,
+    sectionNumber,
+    section_number: sectionNumber,
+    readTimeMinutes,
+    read_time_minutes: readTimeMinutes,
+    title: s.title || `Bagian ${sectionNumber}`,
+    content: s.content || '',
+  };
+}
+
 export async function fetchQuizDetails(id) {
   if (!id) return null;
   try {
     const res = await fetch(`/api/quizzes?id=${id}`);
     if (res.ok) {
       const data = await res.json();
-      if (data?.quiz) return data.quiz;
+      if (data?.quiz) {
+        const raw = Array.isArray(data.quiz.questions) ? data.quiz.questions : [];
+        const questions = raw.map(normalizeQuizQuestion).filter(Boolean);
+        return {
+          ...data.quiz,
+          questions,
+          questionCount: questions.length,
+          question_count: questions.length,
+        };
+      }
     }
   } catch {}
   const localQuiz = quizzes.val.find(q => q.id === id) || INITIAL_QUIZZES.find(q => q.id === id);
   if (!localQuiz) return null;
-  const questions = SEED_QUIZ_QUESTIONS[id] || [];
-  return { ...localQuiz, questions };
+  const rawQuestions = SEED_QUIZ_QUESTIONS[id] || [];
+  const questions = rawQuestions.map(normalizeQuizQuestion).filter(Boolean);
+  return { ...localQuiz, questions, questionCount: questions.length, question_count: questions.length };
 }
 
 export async function fetchMaterialDetails(id) {
@@ -314,13 +385,23 @@ export async function fetchMaterialDetails(id) {
     const res = await fetch(`/api/materials?id=${id}`);
     if (res.ok) {
       const data = await res.json();
-      if (data?.material) return data.material;
+      if (data?.material) {
+        const raw = Array.isArray(data.material.sections) ? data.material.sections : [];
+        const sections = raw.map(normalizeMaterialSection).filter(Boolean);
+        return {
+          ...data.material,
+          sections,
+          sectionCount: sections.length,
+          section_count: sections.length,
+        };
+      }
     }
   } catch {}
   const localMat = materials.val.find(m => m.id === id) || INITIAL_MATERIALS.find(m => m.id === id);
   if (!localMat) return null;
-  const sections = SEED_MATERIAL_SECTIONS[id] || [];
-  return { ...localMat, sections };
+  const rawSections = SEED_MATERIAL_SECTIONS[id] || [];
+  const sections = rawSections.map(normalizeMaterialSection).filter(Boolean);
+  return { ...localMat, sections, sectionCount: sections.length, section_count: sections.length };
 }
 
 export function initStudyModules() {

@@ -34,6 +34,8 @@ import {
   fetchMaterialDetails,
   markQuizSolved,
   markMaterialSolved,
+  normalizeQuizQuestion,
+  normalizeMaterialSection,
   FALLBACK_QUIZZES,
   FALLBACK_MATERIALS,
 } from '../src/studyModules.js';
@@ -618,6 +620,52 @@ test('ui_texts in live database contains zero unused mock keys', async () => {
     DB_URL
   );
   assert.strictEqual(rows.length, 0, 'No mock keys should remain in ui_texts table');
+});
+
+test('normalizeQuizQuestion converts raw database questions with string options into interactive choices with keys', () => {
+  const dbQuestion = {
+    id: '123',
+    question_number: 1,
+    question_text: 'Apa kepanjangan dari CPU?',
+    options: [
+      'Central Personal Unit',
+      'Computer Processing Unit',
+      'Central Processing Unit',
+      'Control Program Unit',
+    ],
+    correct_answer: 'Central Processing Unit',
+    explanation: 'CPU adalah Central Processing Unit.',
+    points: 10,
+  };
+
+  const normalized = normalizeQuizQuestion(dbQuestion);
+  assert.strictEqual(normalized.questionNumber, 1);
+  assert.strictEqual(normalized.questionText, 'Apa kepanjangan dari CPU?');
+  assert.strictEqual(normalized.question_text, 'Apa kepanjangan dari CPU?');
+  assert.strictEqual(normalized.options.length, 4);
+  assert.deepStrictEqual(normalized.options[0], { key: 'A', text: 'Central Personal Unit' });
+  assert.deepStrictEqual(normalized.options[1], { key: 'B', text: 'Computer Processing Unit' });
+  assert.deepStrictEqual(normalized.options[2], { key: 'C', text: 'Central Processing Unit' });
+  assert.deepStrictEqual(normalized.options[3], { key: 'D', text: 'Control Program Unit' });
+  assert.strictEqual(normalized.correctAnswer, 'C');
+  assert.strictEqual(normalized.correct_answer, 'Central Processing Unit');
+});
+
+test('normalizeMaterialSection converts raw database sections with snake_case fields', () => {
+  const dbSection = {
+    id: '456',
+    section_number: 2,
+    title: 'Arsitektur Von Neumann',
+    content: 'Komponen utama meliputi ALU dan Control Unit.',
+    read_time_minutes: 3,
+  };
+
+  const normalized = normalizeMaterialSection(dbSection);
+  assert.strictEqual(normalized.sectionNumber, 2);
+  assert.strictEqual(normalized.section_number, 2);
+  assert.strictEqual(normalized.readTimeMinutes, 3);
+  assert.strictEqual(normalized.read_time_minutes, 3);
+  assert.strictEqual(normalized.title, 'Arsitektur Von Neumann');
 });
 
 
