@@ -13,7 +13,7 @@ import { t } from '../uiTexts.js';
 
 const { div, h2, h3, p, span, button } = van.tags;
 
-export function QuizSolver(quizId, onBack) {
+export function QuizSolver(quizId) {
   const loading = van.state(true);
   const quiz = van.state(null);
   const currentIndex = van.state(0);
@@ -35,7 +35,6 @@ export function QuizSolver(quizId, onBack) {
     if (!qData) {
       return div({ class: 'study-viewer-empty' },
         p(() => t('dialogs_quiz_not_found')),
-        button({ class: 'secondary-button', onclick: onBack }, icon('arrowRight'), span(() => t('dialogs_back_to_list'))),
       );
     }
 
@@ -89,10 +88,6 @@ export function QuizSolver(quizId, onBack) {
               class: 'secondary-button',
               onclick: () => startTopicChat('quiz', qData.prompt),
             }, icon('chat'), span(() => t('dialogs_btn_chat'))),
-            button({
-              class: 'secondary-button',
-              onclick: onBack,
-            }, span(() => t('dialogs_back_to_list'))),
           ),
         ),
       );
@@ -100,10 +95,6 @@ export function QuizSolver(quizId, onBack) {
 
     return div({ class: 'study-viewer-container' },
       div({ class: 'study-header-nav' },
-        button({ class: 'secondary-button study-back-btn', onclick: onBack },
-          icon('chevron', 'study-back-icon'),
-          span(() => t('dialogs_back_to_list')),
-        ),
         div({ class: 'study-progress-badge' },
           () => `${t('dialogs_quiz_question_label')} ${currentIndex.val + 1} ${t('dialogs_quiz_of_label')} ${totalQuestions}`,
         ),
@@ -165,7 +156,7 @@ export function QuizSolver(quizId, onBack) {
   };
 }
 
-export function MaterialReader(materialId, onBack) {
+export function MaterialReader(materialId) {
   const loading = van.state(true);
   const material = van.state(null);
   const currentSectionIndex = van.state(0);
@@ -185,7 +176,6 @@ export function MaterialReader(materialId, onBack) {
     if (!mData) {
       return div({ class: 'study-viewer-empty' },
         p(() => t('dialogs_material_not_found')),
-        button({ class: 'secondary-button', onclick: onBack }, span(() => t('dialogs_back_to_list'))),
       );
     }
 
@@ -201,10 +191,6 @@ export function MaterialReader(materialId, onBack) {
 
     return div({ class: 'study-viewer-container' },
       div({ class: 'study-header-nav' },
-        button({ class: 'secondary-button study-back-btn', onclick: onBack },
-          icon('chevron', 'study-back-icon'),
-          span(() => t('dialogs_back_to_list')),
-        ),
         div({ class: 'study-progress-badge' },
           () => `${t('dialogs_material_section_label')} ${currentSectionIndex.val + 1} ${t('dialogs_quiz_of_label')} ${totalSections}`,
         ),

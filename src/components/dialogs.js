@@ -211,8 +211,8 @@ export function Dialogs() {
     const content = current.type === 'tools' ? Tools()
       : current.type === 'conversation' ? Conversation(current.id)
       : (current.type === 'quiz' || current.type === 'material') ? TopicList(current.type)
-      : current.type === 'quiz-solver' ? QuizSolver(current.id, () => { modal.val = { type: 'quiz' }; })
-      : current.type === 'material-reader' ? MaterialReader(current.id, () => { modal.val = { type: 'material' }; })
+      : current.type === 'quiz-solver' ? QuizSolver(current.id)
+      : current.type === 'material-reader' ? MaterialReader(current.id)
       : Confirm(current.type, current.id);
     const isTopicDialog = current.type === 'quiz' || current.type === 'material' || current.type === 'quiz-solver' || current.type === 'material-reader';
     const isTopicList = current.type === 'quiz' || current.type === 'material';

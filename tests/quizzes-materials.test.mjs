@@ -668,4 +668,12 @@ test('normalizeMaterialSection converts raw database sections with snake_case fi
   assert.strictEqual(normalized.title, 'Arsitektur Von Neumann');
 });
 
+test('studyViewer component does not render kembali ke daftar button or reference dialogs_back_to_list', () => {
+  const source = readFileSync(resolve(process.cwd(), 'src/components/studyViewer.js'), 'utf8');
+  assert.strictEqual(source.includes('dialogs_back_to_list'), false, 'studyViewer.js must not reference dialogs_back_to_list');
+  assert.strictEqual(source.includes('study-back-btn'), false, 'studyViewer.js must not contain study-back-btn class');
+  assert.strictEqual(source.includes('onBack'), false, 'studyViewer.js must not expect or use onBack callback');
+});
+
+
 
