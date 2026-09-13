@@ -29,6 +29,7 @@ export const draft = van.state('');
 export const theme = van.state(initialTheme);
 export const webSearchEnabled = van.state(true);
 export const searchingWeb = van.state(false);
+export const buildingQuiz = van.state(false);
 export const loading = van.state(false);
 export const historyLoading = van.state(false);
 export const messagesLoading = van.state(false);
@@ -319,8 +320,11 @@ export function sendMessage() {
     return;
   }
 
-  searchingWeb.val = Boolean(webSearchEnabled.val && online.val);
+  const isQuizIntent = /\b(kuis|quiz|soal|latihan|evaluasi|test me)\b/i.test(userMessage.text || '');
+  buildingQuiz.val = Boolean(isQuizIntent);
+  searchingWeb.val = Boolean(webSearchEnabled.val && online.val && !isQuizIntent);
   sendApiMessage(messageHistory, (chunkText) => {
+    if (buildingQuiz.val) buildingQuiz.val = false;
     if (searchingWeb.val) searchingWeb.val = false;
     const updatedChats = chats.val.map(c => {
       if (c.id === chat.id) {
@@ -346,12 +350,20 @@ export function sendMessage() {
     assistantMessageId: assistantMessage.id,
     userId: TEST_USER_ID,
     webSearch: webSearchEnabled.val && online.val,
+    onStatus: (status) => {
+      if (status === 'building_quiz') {
+        buildingQuiz.val = true;
+        searchingWeb.val = false;
+      }
+    },
   }).then(() => {
+    buildingQuiz.val = false;
     searchingWeb.val = false;
     loading.val = false;
     persist();
     focusComposer();
   }).catch((error) => {
+    buildingQuiz.val = false;
     searchingWeb.val = false;
     loading.val = false;
     const errorMessage = error.message || t('state_send_failed');

@@ -88,6 +88,12 @@ export async function sendMessage(messages, onChunk, options = {}) {
 
         try {
           const json = JSON.parse(data);
+          if (json.type === 'quiz_status' && json.status === 'building') {
+            if (typeof options.onStatus === 'function') {
+              options.onStatus('building_quiz');
+            }
+            continue;
+          }
           const delta = json.choices?.[0]?.delta?.content || '';
           if (delta) {
             fullText += delta;

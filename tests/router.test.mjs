@@ -143,6 +143,50 @@ test('client sendMessage sends messages to /api/chat without any API key in payl
   }
 });
 
+test('client sendMessage handles quiz_status building event and invokes onStatus', async () => {
+  const originalFetch = globalThis.fetch;
+  let statusReceived = '';
+
+  globalThis.fetch = async () => {
+    const sseData = [
+      'data: {"type":"quiz_status","status":"building"}\n\n',
+      'data: {"choices":[{"delta":{"content":"Kuis siap!"}}]}\n\n',
+      'data: [DONE]\n\n',
+    ].join('');
+
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(sseData));
+        controller.close();
+      },
+    });
+
+    return new Response(stream, {
+      status: 200,
+      headers: { 'Content-Type': 'text/event-stream' },
+    });
+  };
+
+  try {
+    const receivedChunks = [];
+    const result = await sendMessage(
+      [{ role: 'user', text: 'buat kuis' }],
+      chunk => receivedChunks.push(chunk),
+      {
+        onStatus: status => {
+          statusReceived = status;
+        },
+      }
+    );
+
+    assert.strictEqual(statusReceived, 'building_quiz');
+    assert.strictEqual(result, 'Kuis siap!');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('client sendMessage handles server error response', async () => {
   const originalFetch = globalThis.fetch;
 

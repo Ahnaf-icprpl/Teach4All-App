@@ -396,6 +396,9 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
       }
 
       if (Object.keys(accumulatedToolCalls).length > 0) {
+        if (!res.writableEnded) {
+          res.write('data: {"type":"quiz_status","status":"building"}\n\n');
+        }
         await handleCompletedToolCalls({
           toolCallsMap: accumulatedToolCalls,
           serverEnv,

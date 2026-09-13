@@ -4,7 +4,7 @@ import { MAX_INPUT } from '../storage.js';
 import {
   currentChat, hasMessages, draft, setDraft, sendMessage, focusComposer,
   modal, toast, online, offlineReady, storageError, loading, messagesLoading,
-  webSearchEnabled, toggleWebSearch, searchingWeb,
+  webSearchEnabled, toggleWebSearch, searchingWeb, buildingQuiz,
 } from '../state.js';
 import { getModel } from '../router.js';
 import { renderMarkdown } from '../markdown.js';
@@ -81,16 +81,21 @@ function Messages() {
               message.text
                 ? renderMarkdown(message.text)
                 : (isGenerating
-                    ? (searchingWeb.val
-                        ? span({ class: 'searching-web-indicator' },
-                            icon('globe', 'spin-slow'),
-                            () => t('chat_web_search_status'),
+                    ? (buildingQuiz.val
+                        ? span({ class: 'searching-web-indicator building-quiz-indicator' },
+                            icon('bulb', 'spin-slow'),
+                            () => t('chat_quiz_building_status'),
                           )
-                        : span({ class: 'typing-indicator', 'aria-label': () => t('chat_typing_aria'), title: () => t('chat_typing_aria') },
-                            span({ class: 'typing-dot' }),
-                            span({ class: 'typing-dot' }),
-                            span({ class: 'typing-dot' }),
-                          ))
+                        : (searchingWeb.val
+                            ? span({ class: 'searching-web-indicator' },
+                                icon('globe', 'spin-slow'),
+                                () => t('chat_web_search_status'),
+                              )
+                            : span({ class: 'typing-indicator', 'aria-label': () => t('chat_typing_aria'), title: () => t('chat_typing_aria') },
+                                span({ class: 'typing-dot' }),
+                                span({ class: 'typing-dot' }),
+                                span({ class: 'typing-dot' }),
+                              )))
                     : '')
             ),
         message.role === 'assistant' && message.text && !loading.val

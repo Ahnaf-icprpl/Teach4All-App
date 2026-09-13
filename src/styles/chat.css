@@ -148,6 +148,8 @@
   .typing-indicator { display: inline-flex; align-items: center; gap: 5px; padding: 4px 2px; min-height: 22px; vertical-align: middle; }
   .searching-web-indicator { display: inline-flex; align-items: center; gap: 7px; padding: 5px 12px; border-radius: 12px; background: rgba(184, 80, 66, 0.08); border: 1px solid rgba(184, 80, 66, 0.2); font-size: 11.5px; color: var(--slate-gray); font-weight: 500; }
   .searching-web-indicator .icon { width: 14px; height: 14px; color: var(--terracotta); }
+  .building-quiz-indicator { background: rgba(43, 90, 158, 0.08); border-color: rgba(43, 90, 158, 0.2); }
+  .building-quiz-indicator .icon { color: #2b5a9e; }
   .spin-slow { animation: spin 3s linear infinite; }
   .typing-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--terracotta); opacity: 0.3; animation: typing-pulse 1.3s infinite ease-in-out; }
   .typing-dot:nth-child(1) { animation-delay: 0s; }
