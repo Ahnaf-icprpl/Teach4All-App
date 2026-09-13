@@ -462,7 +462,6 @@ export function createChatMiddleware(serverEnv = {}) {
     }
 
     if (
-      req.headers.accept?.includes('text/html') &&
       url !== '/' &&
       url !== '/index.html' &&
       url !== '/404.html' &&
@@ -471,6 +470,7 @@ export function createChatMiddleware(serverEnv = {}) {
       !url.startsWith('/node_modules/') &&
       !url.includes('.')
     ) {
+      logger.warn(`Route not found (404): ${url}`, { endpoint: url, method, client_ip: clientIp });
       const { load404HtmlTemplate } = await import('./ssr.js');
       const p404 = load404HtmlTemplate();
       res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
