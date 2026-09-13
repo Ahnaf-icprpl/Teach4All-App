@@ -77,7 +77,7 @@ test('diagnoseAndValidateQuizArgs detects correct_answer mismatch and provides a
       {
         question_text: 'Bagian sel yang memproduksi energi?',
         options: ['Ribosom', 'Nukleus', 'Mitokondria', 'Vakuola'],
-        correct_answer: 'Klorofil', // Does not match any option
+        correct_answer: 9, // Out of bounds index
         explanation: 'Mitokondria adalah tempat respirasi seluler.',
       },
     ],
@@ -85,25 +85,26 @@ test('diagnoseAndValidateQuizArgs detects correct_answer mismatch and provides a
 
   assert.strictEqual(res.valid, false);
   assert.strictEqual(res.errorType, 'VALIDATION_ERROR');
-  assert.ok(res.errors.some(e => e.includes('does not match any options')));
-  assert.ok(res.diagnostic.includes('Klorofil'));
+  assert.ok(res.errors.some(e => e.includes('valid 0-based option index')));
+  assert.ok(res.diagnostic.includes('0 to 3'));
 });
 
-test('diagnoseAndValidateQuizArgs normalizes option prefix matching for correct_answer', () => {
+test('diagnoseAndValidateQuizArgs normalizes option index/id for correct_answer', () => {
   const res = diagnoseAndValidateQuizArgs({
     title: 'Kuis Biologi Sel',
     questions: [
       {
         question_text: 'Bagian sel yang memproduksi energi?',
         options: ['Ribosom', 'Nukleus', 'Mitokondria', 'Vakuola'],
-        correct_answer: 'C. Mitokondria', // Model prefixed with 'C. '
+        correct_answer: 2, // Index for Mitokondria
         explanation: 'Mitokondria adalah tempat respirasi seluler.',
       },
     ],
   });
 
   assert.strictEqual(res.valid, true);
-  assert.strictEqual(res.data.questions[0].correct_answer, 'Mitokondria');
+  assert.strictEqual(res.data.questions[0].correct_answer, '2');
+  assert.deepStrictEqual(res.data.questions[0].options[2], { id: 2, text: 'Mitokondria' });
 });
 
 test('handleCompletedToolCalls sends diagnostic error and recalls model when validation fails', async () => {
@@ -120,7 +121,7 @@ test('handleCompletedToolCalls sends diagnostic error and recalls model when val
 
       // Simulate model returning corrected tool call in the recall turn
       const sseChunks = [
-        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_recalled_1","function":{"name":"create_quiz","arguments":"{\\"title\\":\\"Kuis Diperbaiki\\",\\"category\\":\\"Sains\\",\\"summary\\":\\"Ringkasan\\",\\"questions\\":[{\\"question_text\\":\\"Apa rumus air?\\",\\"options\\":[\\"H2O\\",\\"CO2\\",\\"O2\\",\\"NaCl\\"],\\"correct_answer\\":\\"H2O\\",\\"explanation\\":\\"Air adalah H2O.\\"}]}"}}]}}]}\n\n',
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_recalled_1","function":{"name":"create_quiz","arguments":"{\\"title\\":\\"Kuis Diperbaiki\\",\\"category\\":\\"Sains\\",\\"summary\\":\\"Ringkasan\\",\\"questions\\":[{\\"question_text\\":\\"Apa rumus air?\\",\\"options\\":[\\"H2O\\",\\"CO2\\",\\"O2\\",\\"NaCl\\"],\\"correct_answer\\":0,\\"explanation\\":\\"Air adalah H2O.\\"}]}"}}]}}]}\n\n',
         'data: [DONE]\n\n',
       ].join('');
 
@@ -150,7 +151,7 @@ test('handleCompletedToolCalls sends diagnostic error and recalls model when val
       },
     };
 
-    // First call has validation error (mismatched correct_answer)
+    // First call has validation error (out of bounds correct_answer index)
     const badToolCall = {
       id: 'call_initial_failed',
       function: {
@@ -161,7 +162,7 @@ test('handleCompletedToolCalls sends diagnostic error and recalls model when val
             {
               question_text: 'Apa rumus air?',
               options: ['H2O', 'CO2', 'O2', 'NaCl'],
-              correct_answer: 'C6H12O6', // Mismatch!
+              correct_answer: 9, // Mismatch index
               explanation: 'Air adalah H2O.',
             },
           ],
@@ -191,7 +192,7 @@ test('handleCompletedToolCalls sends diagnostic error and recalls model when val
     const parsedToolContent = JSON.parse(toolMsg.content);
     assert.strictEqual(parsedToolContent.status, 'error');
     assert.ok(parsedToolContent.diagnostic.includes('Algorithmic Validation Failed'));
-    assert.ok(parsedToolContent.diagnostic.includes('C6H12O6'));
+    assert.ok(parsedToolContent.diagnostic.includes('valid 0-based option index'));
 
     // Verify final output rendered the quiz card from the corrected recall call
     const allWritten = writtenData.join('');

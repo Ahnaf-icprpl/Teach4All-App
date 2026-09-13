@@ -27,7 +27,7 @@ export const QUIZ_TOOL_SYSTEM_PROMPT = `### QUIZ TOOL CALLING GUIDELINES (\`crea
   * \`questions\` (array of objects): Array of questions, where each question contains:
     - \`question_text\` (string): Clear, educational question.
     - \`options\` (array of 4 strings): Exactly 4 distinct choices as plain text without letter prefixes (e.g. ["Mitokondria", "Ribosom", "Nukleus", "Vakuola"]).
-    - \`correct_answer\` (string): The correct choice text. It MUST EXACTLY MATCH one of the strings inside \`options\`.
+    - \`correct_answer\` (integer): 0-based index of the correct choice in \`options\` (0 for the 1st choice, 1 for the 2nd choice, 2 for the 3rd choice, 3 for the 4th choice). Never output letters (A, B, C, D) or full text.
     - \`explanation\` (string): Comprehensive explanation of why this choice is correct and key learning takeaways.
     - \`points\` (number): Score points for the question (default: 10).
 
@@ -37,7 +37,7 @@ export const QUIZ_TOOL_SYSTEM_PROMPT = `### QUIZ TOOL CALLING GUIDELINES (\`crea
 - Accompany the generated card with a brief, encouraging confirmation message in the appropriate language inviting the user to start the quiz.
 
 5. **ALGORITHMIC ERROR RECOVERY & RECALL (Pemulihan Error & Panggilan Ulang)**:
-- If a tool call fails validation (e.g. invalid JSON, missing properties, or \`correct_answer\` mismatch), the server responds with an algorithmic diagnostic detailing the specific issues.
+- If a tool call fails validation (e.g. invalid JSON, missing properties, or \`correct_answer\` index out of bounds), the server responds with an algorithmic diagnostic detailing the specific issues.
 - Read the diagnostic feedback carefully, correct the parameters, and immediately recall \`create_quiz\` with valid arguments.`;
 
 export const SYSTEM_PROMPT = `${GENERAL_SYSTEM_PROMPT}\n\n${QUIZ_TOOL_SYSTEM_PROMPT}`;

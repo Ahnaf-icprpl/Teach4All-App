@@ -227,56 +227,45 @@ export function diagnoseAndValidateQuizArgs(rawArgs) {
         return;
       }
 
-      const opts = rawOpts.map(o => String(o).trim()).filter(Boolean);
+      const opts = rawOpts.map(o => stripOptionPrefix(String(o).trim())).filter(Boolean);
       if (opts.length < 2) {
         errors.push(`Question #${qNum}: 'options' must contain at least 2 distinct choices (found ${opts.length}).`);
         return;
       }
 
-      // correct_answer matching & coercion
-      const rawAns = String(q.correct_answer || '').trim();
-      if (!rawAns) {
-        errors.push(`Question #${qNum}: Missing 'correct_answer'.`);
-        return;
-      }
+      // Resolve correct_answer by option index/id (0-based)
+      const rawAns = q.correct_answer ?? q.correct_answer_index ?? q.correct_option_id;
+      let correctIndex = -1;
 
-      let matchedAnswer = '';
-      // 1. Exact match
-      if (opts.includes(rawAns)) {
-        matchedAnswer = rawAns;
-      } else {
-        // 2. Case-insensitive match
-        const ci = opts.find(o => o.toLowerCase() === rawAns.toLowerCase());
-        if (ci) {
-          matchedAnswer = ci;
+      if (typeof rawAns === 'number' && Number.isInteger(rawAns)) {
+        if (rawAns >= 0 && rawAns < opts.length) {
+          correctIndex = rawAns;
+        } else if (rawAns === opts.length && opts.length > 0) {
+          correctIndex = rawAns - 1;
+        }
+      } else if (typeof rawAns === 'string' && /^\d+$/.test(rawAns.trim())) {
+        const num = parseInt(rawAns.trim(), 10);
+        if (num >= 0 && num < opts.length) {
+          correctIndex = num;
+        } else if (num === opts.length && opts.length > 0) {
+          correctIndex = num - 1;
+        }
+      } else if (rawAns !== undefined && rawAns !== null && String(rawAns).trim()) {
+        const cleanAns = stripOptionPrefix(String(rawAns).trim()).toLowerCase();
+        const letterIdx = ['a', 'b', 'c', 'd'].indexOf(cleanAns);
+        if (letterIdx >= 0 && letterIdx < opts.length) {
+          correctIndex = letterIdx;
         } else {
-          // 3. Choice letter / index matching (e.g. 'A' -> opts[0], 'B' -> opts[1])
-          const letterIdx = ['a', 'b', 'c', 'd'].indexOf(rawAns.toLowerCase());
-          if (letterIdx >= 0 && letterIdx < opts.length) {
-            matchedAnswer = opts[letterIdx];
-          } else {
-            const numIdx = parseInt(rawAns, 10) - 1;
-            if (!isNaN(numIdx) && numIdx >= 0 && numIdx < opts.length) {
-              matchedAnswer = opts[numIdx];
-            } else {
-              // 4. Prefix stripped match (e.g. "C. Mitokondria" vs "Mitokondria")
-              const strippedAns = stripOptionPrefix(rawAns);
-              if (strippedAns) {
-                const foundStripped = opts.find(
-                  o => stripOptionPrefix(o).toLowerCase() === strippedAns.toLowerCase()
-                );
-                if (foundStripped) {
-                  matchedAnswer = foundStripped;
-                }
-              }
-            }
+          const foundIdx = opts.findIndex(o => o.toLowerCase() === cleanAns);
+          if (foundIdx !== -1) {
+            correctIndex = foundIdx;
           }
         }
       }
 
-      if (!matchedAnswer) {
+      if (correctIndex === -1 || correctIndex >= opts.length) {
         errors.push(
-          `Question #${qNum}: 'correct_answer' ("${rawAns}") does not match any options: [${opts.map(o => `"${o}"`).join(', ')}]. 'correct_answer' must be identical to one of the choices in 'options'.`
+          `Question #${qNum}: 'correct_answer' must be a valid 0-based option index (0 to ${opts.length - 1}). Received: ${JSON.stringify(rawAns)}.`
         );
         return;
       }
@@ -288,12 +277,17 @@ export function diagnoseAndValidateQuizArgs(rawArgs) {
 
       const points = Number(q.points) || 10;
 
+      const formattedOptions = opts.map((optText, optIdx) => ({
+        id: optIdx,
+        text: optText,
+      }));
+
       validatedQuestions.push({
         question_number: qNum,
         question_text: qText,
         question_type: 'multiple_choice',
-        options: opts,
-        correct_answer: matchedAnswer,
+        options: formattedOptions,
+        correct_answer: String(correctIndex),
         explanation,
         points,
         is_solved: false,
@@ -339,6 +333,6 @@ export function formatAlgorithmicDiagnostic(errors = []) {
     '',
     'Required Action:',
     '- Fix the specified issues and call create_quiz again with corrected parameters.',
-    '- Ensure all choices in options are distinct and correct_answer matches one of the options exactly.',
+    '- Ensure all choices in options are distinct and correct_answer is a valid 0-based option index (0, 1, 2, or 3).',
   ].join('\n');
 }

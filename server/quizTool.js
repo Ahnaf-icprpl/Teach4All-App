@@ -56,11 +56,11 @@ export function buildQuizTool(serverEnv = {}) {
                 options: {
                   type: 'array',
                   items: { type: 'string' },
-                  description: 'Tepat 4 opsi jawaban unik',
+                  description: 'Tepat 4 opsi jawaban unik tanpa awalan huruf ABCD',
                 },
                 correct_answer: {
-                  type: 'string',
-                  description: 'Teks opsi jawaban yang benar (harus persis cocok dengan salah satu isi di options)',
+                  type: 'integer',
+                  description: 'Indeks 0-based opsi jawaban yang benar dari array options (0 untuk pilihan pertama, 1 untuk pilihan kedua, 2 untuk ketiga, 3 untuk keempat). Bukan huruf ABCD.',
                 },
                 explanation: {
                   type: 'string',

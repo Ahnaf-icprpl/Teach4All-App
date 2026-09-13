@@ -579,7 +579,7 @@ test('fetchQuizDetails and fetchMaterialDetails return complete structured data 
   assert.ok(Array.isArray(quiz.questions), 'Quiz must have questions array');
   assert.ok(quiz.questions.length > 0, 'Quiz must contain questions');
   assert.ok(quiz.questions[0].options?.length >= 3, 'Question must have options');
-  assert.ok(quiz.questions[0].correctAnswer, 'Question must have correctAnswer');
+  assert.ok(quiz.questions[0].correctAnswer !== undefined, 'Question must have correctAnswer');
   assert.ok(quiz.questions[0].explanation, 'Question must have explanation');
 
   const seedMaterialId = '00000000-0000-0000-0002-000000000001';
@@ -622,7 +622,7 @@ test('ui_texts in live database contains zero unused mock keys', async () => {
   assert.strictEqual(rows.length, 0, 'No mock keys should remain in ui_texts table');
 });
 
-test('normalizeQuizQuestion converts raw database questions with string options into interactive choices with keys', () => {
+test('normalizeQuizQuestion converts raw database questions with string options into interactive choices with option id/index', () => {
   const dbQuestion = {
     id: '123',
     question_number: 1,
@@ -633,7 +633,7 @@ test('normalizeQuizQuestion converts raw database questions with string options 
       'Central Processing Unit',
       'Control Program Unit',
     ],
-    correct_answer: 'Central Processing Unit',
+    correct_answer: '2',
     explanation: 'CPU adalah Central Processing Unit.',
     points: 10,
   };
@@ -643,12 +643,30 @@ test('normalizeQuizQuestion converts raw database questions with string options 
   assert.strictEqual(normalized.questionText, 'Apa kepanjangan dari CPU?');
   assert.strictEqual(normalized.question_text, 'Apa kepanjangan dari CPU?');
   assert.strictEqual(normalized.options.length, 4);
-  assert.deepStrictEqual(normalized.options[0], { key: 'A', text: 'Central Personal Unit' });
-  assert.deepStrictEqual(normalized.options[1], { key: 'B', text: 'Computer Processing Unit' });
-  assert.deepStrictEqual(normalized.options[2], { key: 'C', text: 'Central Processing Unit' });
-  assert.deepStrictEqual(normalized.options[3], { key: 'D', text: 'Control Program Unit' });
-  assert.strictEqual(normalized.correctAnswer, 'C');
-  assert.strictEqual(normalized.correct_answer, 'Central Processing Unit');
+  assert.deepStrictEqual(normalized.options[0], { id: 0, text: 'Central Personal Unit' });
+  assert.deepStrictEqual(normalized.options[1], { id: 1, text: 'Computer Processing Unit' });
+  assert.deepStrictEqual(normalized.options[2], { id: 2, text: 'Central Processing Unit' });
+  assert.deepStrictEqual(normalized.options[3], { id: 3, text: 'Control Program Unit' });
+  assert.strictEqual(normalized.correctAnswer, 2);
+  assert.strictEqual(normalized.correct_answer, 2);
+});
+
+test('migration 019 converts quiz question options to explicit id/text and correct_answer to 0-based index', async () => {
+  const filePath = resolve(process.cwd(), 'migrations/019_migrate_quiz_answers_to_option_index.sql');
+  assert.strictEqual(existsSync(filePath), true, 'migration file 019 must exist');
+
+  if (!DB_URL) return;
+  const rows = await query('SELECT id, options, correct_answer FROM quiz_questions LIMIT 10;', [], DB_URL);
+  for (const r of rows) {
+    assert.ok(Array.isArray(r.options), 'options must be an array');
+    for (const opt of r.options) {
+      assert.ok(typeof opt.id === 'number', 'option must have numeric id');
+      assert.ok(typeof opt.text === 'string', 'option must have text');
+    }
+    assert.ok(/^\d+$/.test(String(r.correct_answer)), 'correct_answer must be numeric index');
+    const idx = parseInt(r.correct_answer, 10);
+    assert.ok(idx >= 0 && idx < r.options.length, 'correct_answer must point to valid option index');
+  }
 });
 
 test('normalizeMaterialSection converts raw database sections with snake_case fields', () => {

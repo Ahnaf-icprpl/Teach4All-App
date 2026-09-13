@@ -298,30 +298,37 @@ export function normalizeQuizQuestion(q, idx = 0) {
   const questionNumber = q.question_number ?? q.questionNumber ?? (idx + 1);
   const questionText = q.question_text ?? q.questionText ?? '';
   const rawOpts = Array.isArray(q.options) ? q.options : [];
-  const rawCorrect = String(q.correct_answer ?? q.correctAnswer ?? '').trim();
+  const rawCorrect = q.correct_answer ?? q.correctAnswer;
 
   const options = rawOpts.map((opt, optIdx) => {
-    const defaultKey = String.fromCharCode(65 + optIdx);
     if (typeof opt === 'object' && opt !== null) {
+      const idVal = opt.id !== undefined ? Number(opt.id) : optIdx;
       return {
-        key: opt.key || defaultKey,
+        id: Number.isInteger(idVal) ? idVal : optIdx,
         text: String(opt.text ?? opt.label ?? opt.value ?? ''),
       };
     }
     return {
-      key: defaultKey,
+      id: optIdx,
       text: String(opt || ''),
     };
   });
 
-  let correctAnswer = rawCorrect;
-  const matchByText = options.find(o => o.text.trim().toLowerCase() === rawCorrect.toLowerCase());
-  if (matchByText) {
-    correctAnswer = matchByText.key;
-  } else {
-    const matchByKey = options.find(o => o.key.toUpperCase() === rawCorrect.toUpperCase());
-    if (matchByKey) {
-      correctAnswer = matchByKey.key;
+  let correctAnswer = 0;
+  if (typeof rawCorrect === 'number' && Number.isInteger(rawCorrect)) {
+    correctAnswer = rawCorrect;
+  } else if (typeof rawCorrect === 'string' && /^\d+$/.test(rawCorrect.trim())) {
+    correctAnswer = parseInt(rawCorrect.trim(), 10);
+  } else if (rawCorrect !== undefined && rawCorrect !== null) {
+    const cleanCorrect = String(rawCorrect).trim();
+    const foundById = options.find(o => String(o.id) === cleanCorrect);
+    if (foundById) {
+      correctAnswer = foundById.id;
+    } else {
+      const foundByText = options.find(o => o.text.trim().toLowerCase() === cleanCorrect.toLowerCase());
+      if (foundByText) {
+        correctAnswer = foundByText.id;
+      }
     }
   }
 
@@ -332,7 +339,7 @@ export function normalizeQuizQuestion(q, idx = 0) {
     question_text: questionText,
     options,
     correctAnswer,
-    correct_answer: rawCorrect,
+    correct_answer: correctAnswer,
     explanation: q.explanation || '',
     points: Number(q.points) || 10,
     is_solved: Boolean(q.is_solved ?? q.isSolved ?? false),

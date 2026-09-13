@@ -102,28 +102,29 @@ export function QuizSolver(quizId) {
       div({ class: 'study-question-card' },
         h3({ class: 'study-question-title' }, currentQ.questionText || currentQ.question_text || ''),
         div({ class: 'study-options-list' },
-          (currentQ.options || []).map(opt => {
-            const isSelected = currentAnswer === opt.key;
-            const isCorrect = opt.key === currentQ.correctAnswer;
+          (currentQ.options || []).map((opt, optIndex) => {
+            const hasAnswered = currentAnswer !== undefined && currentAnswer !== null;
+            const isSelected = hasAnswered && currentAnswer === opt.id;
+            const isCorrect = opt.id === currentQ.correctAnswer;
             let optClass = 'study-option-button';
-            if (currentAnswer) {
+            if (hasAnswered) {
               if (isCorrect) optClass += ' option-correct';
               else if (isSelected) optClass += ' option-incorrect';
             }
             return button({
               class: optClass,
-              disabled: Boolean(currentAnswer),
+              disabled: hasAnswered,
               onclick: () => {
-                if (currentAnswer) return;
-                userAnswers.val = { ...userAnswers.val, [currentIndex.val]: opt.key };
+                if (hasAnswered) return;
+                userAnswers.val = { ...userAnswers.val, [currentIndex.val]: opt.id };
               },
             },
-            span({ class: 'study-option-key' }, opt.key),
+            span({ class: 'study-option-key' }, String(opt.id !== undefined ? Number(opt.id) + 1 : optIndex + 1)),
             span({ class: 'study-option-text' }, opt.text),
             );
           }),
         ),
-        currentAnswer ? div({
+        (currentAnswer !== undefined && currentAnswer !== null) ? div({
           class: `study-feedback-box ${currentAnswer === currentQ.correctAnswer ? 'feedback-success' : 'feedback-error'}`,
         },
         div({ class: 'study-feedback-heading' },
