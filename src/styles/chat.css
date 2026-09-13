@@ -8,7 +8,7 @@
   .welcome h1 { font-size: clamp(35px, 3.5vw, 49px); font-weight: 450; line-height: 1.2; letter-spacing: -2px; color: var(--near-black); }
   .accent-word { color: var(--terracotta); }
   .welcome-description { margin-top: 20px; color: var(--medium-gray); font-size: 13px; line-height: 1.9; letter-spacing: .03px; }
-  .composer-wrap { width: 100%; max-width: 720px; flex-shrink: 0; margin-top: 35px; }
+  .composer-wrap { width: 100%; max-width: 780px; flex-shrink: 0; margin-top: 35px; }
   .composer { background: var(--off-white); border: 1px solid var(--muted-gray); border-radius: 17px; padding: 20px 17px 12px; box-shadow: var(--shadow); transition: border-color .15s, box-shadow .15s; }
   .composer:focus-within { border-color: var(--terracotta); box-shadow: 0 0 0 3px rgba(159, 81, 58, 0.12), var(--shadow); }
   .composer textarea { display: block; width: 100%; padding: 0 3px; border: 0; outline: none; background: transparent; resize: none; min-height: 29px; max-height: 180px; font-size: 14px; line-height: 1.65; scrollbar-width: thin; color: var(--near-black); }
@@ -23,7 +23,7 @@
   .send-button .icon { width: 20px; height: 20px; }
   .send-button .is-loading { animation: spin 1s linear infinite; }
   .input-count { font-size: 9px; color: var(--medium-gray); }
-  .suggestions { width: 100%; max-width: 720px; margin-top: 32px; margin-bottom: 24px; }
+  .suggestions { width: 100%; max-width: 780px; margin-top: 32px; margin-bottom: 24px; }
   .suggestions-label { display: flex; align-items: center; gap: 12px; font-size: 10px; color: var(--medium-gray); margin-bottom: 13px; }
   .little-line { height: 1px; background: var(--muted-gray); flex: 1; opacity: .75; }
   .suggestion-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
@@ -98,7 +98,7 @@
   .copy-button { margin-top: 9px; width: 28px; height: 28px; color: var(--slate-gray); }
   .copy-button .icon { width: 14px; height: 14px; }
   .message-history-loader { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 48px 0; color: var(--medium-gray); font-size: 12.5px; }
-  .has-messages .composer-wrap { margin-top: 10px; width: calc(100% - 80px); }
+  .has-messages .composer-wrap { margin-top: 10px; width: calc(100% - 48px); max-width: 800px; }
   .has-messages .workspace-footer { padding-top: 14px; padding-bottom: 17px; }
   [data-theme="dark"] .composer { border-color: var(--line); background: var(--surface); }
   [data-theme="dark"] .welcome-symbol { background: var(--surface); }
@@ -189,7 +189,7 @@
     .welcome-symbol { height: 49px; width: 49px; border-radius: 16px; margin-bottom: 18px; }
     .welcome-symbol .icon { height: 29px; width: 29px; }
     .welcome-description { font-size: 11px; margin-top: 16px; }
-    .chat-stage { padding: 0 20px; }
+    .chat-stage { padding: 0 14px; }
     .composer-wrap { margin-top: 24px; }
     .composer { border-radius: 14px; padding: 15px 13px 10px; }
     .composer textarea { font-size: 13.5px; line-height: 1.55; }
@@ -253,7 +253,7 @@
     }
     .workspace-footer { padding-top: 14px; padding-bottom: max(17px, env(safe-area-inset-bottom)); font-size: 8px; }
     .has-messages .composer-wrap {
-      width: calc(100% - 32px);
+      width: calc(100% - 20px);
       margin-top: 8px;
       margin-bottom: max(20px, calc(10px + env(safe-area-inset-bottom, 0px)));
     }
@@ -262,13 +262,13 @@
     .has-messages .workspace-footer { display: none; }
   }
   @media (max-width: 370px) {
-    .chat-stage { padding: 0 14px; }
+    .chat-stage { padding: 0 10px; }
     .welcome h1 { font-size: 29px; }
     .welcome-description { font-size: 10px; }
     .composer { border-radius: 13px; padding: 13px 11px 8px; }
     .composer textarea { font-size: 12.5px; }
     .has-messages .composer-wrap {
-      width: calc(100% - 24px);
+      width: calc(100% - 14px);
       margin-top: 6px;
       margin-bottom: max(16px, calc(8px + env(safe-area-inset-bottom, 0px)));
     }
