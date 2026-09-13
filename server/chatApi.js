@@ -166,6 +166,14 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
   // Non-blocking initialization of conversation and user message in DB
   streamWriter.init().catch(() => {});
 
+  const promptText = lastUserMsg ? (lastUserMsg.text || lastUserMsg.content || '') : '';
+  logger.info('Chat stream requested', {
+    endpoint: '/api/chat',
+    conversation_id: conversationId,
+    model,
+    prompt: promptText,
+  });
+
   const formattedMessages = formatMessages(messages);
   const controller = new AbortController();
   req.on('close', () => {

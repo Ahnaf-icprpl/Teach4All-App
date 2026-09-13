@@ -199,6 +199,7 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
     endpoint: '/api/title',
     conversation_id: conversationId,
     title: finalTitle,
+    prompt: firstUserText,
   });
 
   res.writeHead(200, { 'Content-Type': 'application/json' });

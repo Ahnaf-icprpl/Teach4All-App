@@ -61,6 +61,9 @@ import {
   logger,
   toOtlpValue,
   toOtlpAttributes,
+  truncateText,
+  sanitizeAttributes,
+  DEFAULT_MAX_LOG_TEXT_LENGTH,
   SEVERITY_LEVELS,
   DEFAULT_GRAFANA_INSTANCE_ID,
   DEFAULT_GRAFANA_API_KEY,
@@ -922,6 +925,95 @@ test('GrafanaLogger configures tokens, formats OTLP payloads, and sends Basic Au
     assert.strictEqual(logRecords[2].severityNumber, 17);
 
     assert.strictEqual(testLogger.queue.length, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('truncateText, sanitizeAttributes, and GrafanaLogger ALWAYS truncate giant user prompts and external texts', async () => {
+  assert.strictEqual(DEFAULT_MAX_LOG_TEXT_LENGTH, 500);
+
+  // 1. Short text remains unchanged
+  assert.strictEqual(truncateText('short user prompt'), 'short user prompt');
+
+  // 2. Giant user prompt (e.g. 5,000 characters) is truncated cleanly
+  const giantPrompt = 'Pelajari rumus fisika kuantum '.repeat(200); // 6,000 chars
+  const truncatedPrompt = truncateText(giantPrompt, 100);
+  assert.strictEqual(truncatedPrompt.length, 100 + '... [truncated]'.length);
+  assert.ok(truncatedPrompt.endsWith('... [truncated]'));
+  assert.strictEqual(truncatedPrompt.startsWith(giantPrompt.slice(0, 100)), true);
+
+  // 3. Null / undefined / non-string handling
+  assert.strictEqual(truncateText(null), '');
+  assert.strictEqual(truncateText(undefined), '');
+  assert.strictEqual(truncateText(12345), '12345');
+
+  // 4. sanitizeAttributes truncates giant strings and nested objects while preserving numbers/booleans
+  const rawAttributes = {
+    client_ip: '127.0.0.1',
+    status: 200,
+    active: true,
+    user_prompt: 'A'.repeat(2000),
+    nested: {
+      inner_prompt: 'B'.repeat(3000),
+      count: 42,
+    },
+  };
+
+  const sanitized = sanitizeAttributes(rawAttributes, 200);
+  assert.strictEqual(sanitized.client_ip, '127.0.0.1');
+  assert.strictEqual(sanitized.status, 200);
+  assert.strictEqual(sanitized.active, true);
+  assert.strictEqual(sanitized.user_prompt.length, 200 + '... [truncated]'.length);
+  assert.ok(sanitized.user_prompt.endsWith('... [truncated]'));
+  assert.strictEqual(sanitized.nested.inner_prompt.length, 200 + '... [truncated]'.length);
+  assert.strictEqual(sanitized.nested.count, 42);
+
+  // 5. toOtlpValue and toOtlpAttributes truncate string values and stringified JSON
+  const otlpVal = toOtlpValue('C'.repeat(1500), 300);
+  assert.strictEqual(otlpVal.stringValue.length, 300 + '... [truncated]'.length);
+
+  const otlpObj = toOtlpValue({ giant: 'D'.repeat(1500) }, 300);
+  assert.ok(otlpObj.stringValue.endsWith('... [truncated]'));
+
+  // 6. GrafanaLogger record truncation on log call
+  let deliveredBody = null;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, options) => {
+    deliveredBody = JSON.parse(options.body);
+    return new Response('', { status: 204 });
+  };
+
+  try {
+    const customLogger = new GrafanaLogger({
+      instanceId: '1828340',
+      apiKey: 'test-token',
+      otlpUrl: 'https://test-gateway.grafana.net/otlp/v1/logs',
+      serviceName: 'teach4all-test',
+      enableConsole: false,
+      forceSendInTest: true,
+      maxTextLength: 150,
+    });
+
+    // Send a giant message and giant prompt attribute
+    const giantMsg = 'E'.repeat(4000);
+    const giantUserAttr = 'F'.repeat(5000);
+
+    customLogger.info(giantMsg, { prompt: giantUserAttr });
+    await customLogger.flush();
+
+    assert.ok(deliveredBody);
+    const logRecord = deliveredBody.resourceLogs[0].scopeLogs[0].logRecords[0];
+
+    // Message body is safely truncated
+    assert.strictEqual(logRecord.body.stringValue.length, 150 + '... [truncated]'.length);
+    assert.ok(logRecord.body.stringValue.endsWith('... [truncated]'));
+
+    // Prompt attribute is safely truncated
+    const promptAttr = logRecord.attributes.find(a => a.key === 'prompt');
+    assert.ok(promptAttr);
+    assert.strictEqual(promptAttr.value.stringValue.length, 150 + '... [truncated]'.length);
+    assert.ok(promptAttr.value.stringValue.endsWith('... [truncated]'));
   } finally {
     globalThis.fetch = originalFetch;
   }

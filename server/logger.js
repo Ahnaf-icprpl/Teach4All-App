@@ -42,10 +42,63 @@ export const SEVERITY_LEVELS = {
   error: { text: 'ERROR', number: 17 },
 };
 
+export const DEFAULT_MAX_LOG_TEXT_LENGTH = 500;
+
+/**
+ * Truncate arbitrary text to prevent massive external payloads (such as large user
+ * prompts, file contents, or verbose stack traces) from bloating application logs.
+ */
+export function truncateText(value, maxLength = DEFAULT_MAX_LOG_TEXT_LENGTH) {
+  if (value === null || value === undefined) return '';
+  const str = typeof value === 'string' ? value : String(value);
+  if (str.length <= maxLength) return str;
+  return `${str.slice(0, maxLength)}... [truncated]`;
+}
+
+/**
+ * Recursively sanitizes and truncates external attribute values.
+ */
+export function sanitizeAttributeValue(value, maxLength = DEFAULT_MAX_LOG_TEXT_LENGTH, depth = 0) {
+  if (value === null || value === undefined) return value;
+  if (typeof value === 'boolean' || typeof value === 'number') return value;
+  if (typeof value === 'string') {
+    return truncateText(value, maxLength);
+  }
+  if (typeof value === 'object') {
+    if (depth > 2) {
+      return truncateText(JSON.stringify(value), maxLength);
+    }
+    if (Array.isArray(value)) {
+      return value.slice(0, 10).map(item => sanitizeAttributeValue(item, maxLength, depth + 1));
+    }
+    const sanitized = {};
+    for (const [k, v] of Object.entries(value)) {
+      if (v !== undefined) {
+        sanitized[k] = sanitizeAttributeValue(v, maxLength, depth + 1);
+      }
+    }
+    return sanitized;
+  }
+  return truncateText(String(value), maxLength);
+}
+
+/**
+ * Sanitize all attributes by truncating long strings/nested objects.
+ */
+export function sanitizeAttributes(attrs = {}, maxLength = DEFAULT_MAX_LOG_TEXT_LENGTH) {
+  const result = {};
+  for (const [key, value] of Object.entries(attrs)) {
+    if (value !== undefined) {
+      result[key] = sanitizeAttributeValue(value, maxLength);
+    }
+  }
+  return result;
+}
+
 /**
  * Convert arbitrary JavaScript values into valid OpenTelemetry attribute values.
  */
-export function toOtlpValue(value) {
+export function toOtlpValue(value, maxLength = DEFAULT_MAX_LOG_TEXT_LENGTH) {
   if (value === null || value === undefined) return { stringValue: '' };
   if (typeof value === 'boolean') return { boolValue: value };
   if (typeof value === 'number') {
@@ -55,23 +108,23 @@ export function toOtlpValue(value) {
   }
   if (typeof value === 'object') {
     try {
-      return { stringValue: JSON.stringify(value) };
+      return { stringValue: truncateText(JSON.stringify(value), maxLength) };
     } catch {
-      return { stringValue: String(value) };
+      return { stringValue: truncateText(String(value), maxLength) };
     }
   }
-  return { stringValue: String(value) };
+  return { stringValue: truncateText(String(value), maxLength) };
 }
 
 /**
  * Convert key-value pairs into OpenTelemetry KeyValue attribute objects.
  */
-export function toOtlpAttributes(attrs = {}) {
+export function toOtlpAttributes(attrs = {}, maxLength = DEFAULT_MAX_LOG_TEXT_LENGTH) {
   return Object.entries(attrs)
     .filter(([_, v]) => v !== undefined)
     .map(([key, value]) => ({
       key,
-      value: toOtlpValue(value),
+      value: toOtlpValue(value, maxLength),
     }));
 }
 
@@ -85,6 +138,7 @@ export class GrafanaLogger {
     flushIntervalMs = 1000,
     enableConsole = true,
     forceSendInTest = false,
+    maxTextLength = Number(process.env.GRAFANA_MAX_TEXT_LENGTH) || DEFAULT_MAX_LOG_TEXT_LENGTH,
   } = {}) {
     this.instanceId = instanceId;
     this.apiKey = apiKey;
@@ -94,6 +148,7 @@ export class GrafanaLogger {
     this.flushIntervalMs = flushIntervalMs;
     this.enableConsole = enableConsole;
     this.forceSendInTest = forceSendInTest;
+    this.maxTextLength = maxTextLength;
 
     this.queue = [];
     this.flushTimer = null;
@@ -120,6 +175,9 @@ export class GrafanaLogger {
     const sev = SEVERITY_LEVELS[level?.toLowerCase()] || SEVERITY_LEVELS.info;
     const nowUnixNano = String(BigInt(Date.now()) * 1000000n);
 
+    const safeMessage = truncateText(message, this.maxTextLength);
+    const sanitizedAttrs = sanitizeAttributes(attributes, this.maxTextLength);
+
     if (this.enableConsole) {
       const consoleFn =
         level === 'error'
@@ -127,9 +185,9 @@ export class GrafanaLogger {
           : level === 'warn'
             ? console.warn
             : console.log;
-      const attrKeys = Object.keys(attributes);
-      const suffix = attrKeys.length > 0 ? ` ${JSON.stringify(attributes)}` : '';
-      consoleFn(`[${sev.text}] ${message}${suffix}`);
+      const attrKeys = Object.keys(sanitizedAttrs);
+      const suffix = attrKeys.length > 0 ? ` ${JSON.stringify(sanitizedAttrs)}` : '';
+      consoleFn(`[${sev.text}] ${safeMessage}${suffix}`);
     }
 
     const record = {
@@ -137,8 +195,8 @@ export class GrafanaLogger {
       observedTimeUnixNano: nowUnixNano,
       severityNumber: sev.number,
       severityText: sev.text,
-      body: { stringValue: typeof message === 'string' ? message : JSON.stringify(message) },
-      attributes: toOtlpAttributes(attributes),
+      body: { stringValue: safeMessage },
+      attributes: toOtlpAttributes(sanitizedAttrs, this.maxTextLength),
     };
 
     this.queue.push(record);
