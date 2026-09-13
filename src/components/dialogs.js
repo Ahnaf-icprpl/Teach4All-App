@@ -1,26 +1,14 @@
 import van from 'vanjs-core';
 import { icon } from '../icons.js';
 import {
-  modal, chats, theme, setTheme, apiKey, setApiKeyValue, newChat, exportWorkspace,
-  clearWorkspace, renameChat, deleteChat, storageError, toast,
+  modal, chats, theme, setTheme, newChat, exportWorkspace,
+  clearWorkspace, renameChat, deleteChat, storageError,
 } from '../state.js';
-import { getModel, isPlaceholderKey } from '../router.js';
+import { getModel } from '../router.js';
 
 const { dialog, div, h2, h3, p, span, button, label, select, option, form, input, kbd } = van.tags;
 
 function Settings() {
-  const currentKey = apiKey.val || '';
-  const keyInput = input({
-    id: 'api-key-input', type: 'password', placeholder: 'sk-or-...',
-    autocomplete: 'off', value: currentKey,
-  });
-
-  const getStatusText = () => {
-    if (!apiKey.val) return 'No API key set. OpenRouter calls will fail without a key.';
-    if (isPlaceholderKey(apiKey.val)) return 'Using placeholder key from .env. Add your real OpenRouter key above to receive live AI responses.';
-    return 'OpenRouter API key is configured and active.';
-  };
-
   return div({ class: 'settings-content' },
     div({ class: 'setting-row' },
       div(h3('Appearance'), p('Make this space feel like yours.')),
@@ -32,23 +20,6 @@ function Settings() {
         h3('AI Model & Provider'),
         p(`OpenRouter · ${getModel()}`),
       ),
-    ),
-    div({ class: 'setting-row' },
-      div(
-        h3('OpenRouter API key'),
-        p('Required for live responses. Get your key at openrouter.ai/keys'),
-      ),
-      button({
-        class: 'secondary-button',
-        onclick: () => {
-          setApiKeyValue(keyInput.value.trim());
-          toast('API key saved.');
-        },
-      }, 'Save key'),
-    ),
-    div({ class: 'api-key-form' },
-      keyInput,
-      p({ class: () => `settings-note ${isPlaceholderKey(apiKey.val) ? 'warning-text' : ''}` }, getStatusText),
     ),
     div({ class: 'setting-row' }, div(h3('Your conversations'), p(`${chats.val.length} saved on this browser. No account needed.`)),
       button({ class: 'secondary-button', onclick: exportWorkspace }, icon('download'), 'Export')),
@@ -63,7 +34,7 @@ function Settings() {
 function Tools() {
   const closeAnd = action => () => { modal.val = null; action(); };
   return div({ class: 'tools-content' },
-    button({ class: 'tool-row', onclick: closeAnd(newChat) }, icon('plus'), span('Start a new conversation'), kbd('⌘ ⇧ O')),
+    button({ class: 'tool-row', onclick: closeAnd(newChat) }, icon('plus'), span('Start a new conversation'), kbd('⇧ ⌘ O')),
     button({ class: 'tool-row', onclick: closeAnd(exportWorkspace) }, icon('download'), span('Export your workspace')),
     h3('A few handy shortcuts'),
     p({ class: 'shortcut-row' }, span('Search conversations'), kbd('Ctrl / ⌘ K')),

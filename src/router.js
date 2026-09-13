@@ -1,24 +1,9 @@
-function getEnv(key) {
-  try {
-    if (typeof import.meta !== 'undefined' && import.meta?.env?.[key]) {
-      return import.meta.env[key];
-    }
-  } catch {}
-  try {
-    if (typeof process !== 'undefined' && process?.env?.[key]) {
-      return process.env[key];
-    }
-  } catch {}
-  return '';
-}
-
-export const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 export const DEFAULT_MODEL = 'google/gemini-2.5-flash-lite';
-export const STORAGE_KEY = 'teach4all.openrouter-key.v1';
+export const CHAT_API_URL = './api/chat';
 export const TIMEOUT_MS = 35000;
 
 export function getModel() {
-  return getEnv('OPENROUTER_MODEL') || DEFAULT_MODEL;
+  return DEFAULT_MODEL;
 }
 
 export function isPlaceholderKey(key) {
@@ -27,64 +12,21 @@ export function isPlaceholderKey(key) {
   return !trimmed || trimmed.toLowerCase().includes('placeholder');
 }
 
-export function getApiKey(storage) {
-  try {
-    const storedKey = storage?.getItem(STORAGE_KEY) || '';
-    if (storedKey.trim()) return storedKey.trim();
-  } catch {}
-  return getEnv('OPENROUTER_API_KEY') || '';
-}
-
-export function setApiKey(storage, key) {
-  try {
-    if (key && key.trim()) {
-      storage?.setItem(STORAGE_KEY, key.trim());
-    } else {
-      storage?.removeItem(STORAGE_KEY);
-    }
-    return '';
-  } catch {
-    return 'Your browser is blocking storage access. The API key will not persist.';
-  }
-}
-
-export async function sendMessage(messages, apiKey, onChunk) {
-  const effectiveKey = (apiKey || getApiKey()).trim();
-
-  if (!effectiveKey) {
-    throw new Error('OpenRouter API key is required. Add it in Settings or configure your .env file.');
+export async function sendMessage(messages, onChunk) {
+  if (!Array.isArray(messages) || messages.length === 0) {
+    throw new Error('Messages are required.');
   }
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
-  const formattedMessages = [
-    {
-      role: 'system',
-      content: 'You are Teach4All, an encouraging, accessible learning companion. Explain ideas clearly, provide intuitive examples, and help users learn step by step.',
-    },
-    ...messages
-      .filter(m => m && m.text && m.text.trim())
-      .map(m => ({
-        role: m.role === 'assistant' ? 'assistant' : 'user',
-        content: m.text.trim(),
-      })),
-  ];
-
   try {
-    const response = await fetch(OPENROUTER_API_URL, {
+    const response = await fetch(CHAT_API_URL, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${effectiveKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': typeof location !== 'undefined' ? location.origin : 'http://localhost',
-        'X-Title': 'Teach4All',
       },
-      body: JSON.stringify({
-        model: getModel(),
-        messages: formattedMessages,
-        stream: true,
-      }),
+      body: JSON.stringify({ messages }),
       signal: controller.signal,
     });
 
@@ -102,23 +44,11 @@ export async function sendMessage(messages, apiKey, onChunk) {
         } catch {}
       }
 
-      if (response.status === 401) {
-        if (isPlaceholderKey(effectiveKey)) {
-          throw new Error('Placeholder API key in use. Please enter your actual OpenRouter API key in Settings or .env.');
-        }
-        throw new Error(serverMessage ? `OpenRouter authentication error: ${serverMessage}` : 'Invalid OpenRouter API key. Check Settings or .env file.');
-      }
-      if (response.status === 402) {
-        throw new Error('Insufficient OpenRouter credits. Please check your account balance at openrouter.ai.');
-      }
-      if (response.status === 429) {
-        throw new Error('OpenRouter rate limit reached. Please wait a moment and try again.');
-      }
-      throw new Error(`OpenRouter error (${response.status}): ${serverMessage || 'Request failed'}`);
+      throw new Error(serverMessage || `Server error (${response.status})`);
     }
 
     if (!response.body) {
-      throw new Error('No response received from OpenRouter.');
+      throw new Error('No response received from server.');
     }
 
     const reader = response.body.getReader();

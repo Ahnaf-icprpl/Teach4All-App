@@ -3,9 +3,9 @@ import { icon } from '../icons.js';
 import { MAX_INPUT } from '../storage.js';
 import {
   currentChat, hasMessages, draft, setDraft, sendMessage, focusComposer,
-  modal, toast, online, offlineReady, storageError, loading, apiKey,
+  modal, toast, online, offlineReady, storageError, loading,
 } from '../state.js';
-import { getModel, isPlaceholderKey } from '../router.js';
+import { getModel } from '../router.js';
 
 const { div, section, h1, h2, p, span, button, textarea, form, article } = van.tags;
 const prompts = [
@@ -20,11 +20,15 @@ function Welcome() {
     div({ class: 'welcome-symbol' }, icon('mountain'), span({ class: 'symbol-dot' })),
     div({ class: 'welcome-eyebrow' }, span(), 'A SPACE FOR CURIOSITY'),
     h1({ id: 'welcome-title' }, 'A little curiosity.', van.tags.br(), 'A world of ', span({ class: 'accent-word' }, 'possibility.')),
-    p({ class: 'welcome-description' }, 'Ask a question. Untangle an idea. Learn something new.', van.tags.br(), 'Wherever you are, this is a good place to start.'),
+    p({ class: 'welcome-description' },
+      'Ask a question. Untangle an idea. Learn something new.',
+      van.tags.br(),
+      'Wherever you are, this is a good place to start.',
+    ),
   );
 }
 
-async function copyMessage(text) {
+async function copyText(text) {
   try {
     await navigator.clipboard.writeText(text);
     toast('Response copied.');
@@ -36,6 +40,7 @@ async function copyMessage(text) {
 function Messages() {
   const chat = currentChat();
   const messagesList = chat?.messages || [];
+
   return div({ class: 'message-content' },
     ...messagesList.map((message, idx) => {
       const isLastAssistant = message.role === 'assistant' && idx === messagesList.length - 1;
@@ -56,7 +61,7 @@ function Messages() {
               class: 'icon-button copy-button',
               'aria-label': 'Copy response',
               title: 'Copy response',
-              onclick: () => copyMessage(message.text),
+              onclick: () => copyText(message.text),
             }, icon('copy'))
           : null,
       );
@@ -65,32 +70,51 @@ function Messages() {
 }
 
 function Composer() {
-  const input = textarea({
-    id: 'message-input', placeholder: 'What’s on your mind?', rows: 1, maxlength: MAX_INPUT,
-    'aria-label': 'Message Teach4All', 'aria-describedby': 'composer-note',
+  const autoResize = () => {
+    draft.val; // track dependency
+    requestAnimationFrame(() => {
+      inputEl.style.height = 'auto';
+      inputEl.style.height = `${Math.min(inputEl.scrollHeight, 180)}px`;
+    });
+  };
+
+  const inputEl = textarea({
+    id: 'message-input',
+    placeholder: 'What’s on your mind?',
+    rows: 1,
+    maxlength: MAX_INPUT,
+    'aria-label': 'Message Teach4All',
+    'aria-describedby': 'composer-note',
     value: () => draft.val,
     oninput: event => setDraft(event.target.value),
     onkeydown: event => {
-      if (event.key === 'Enter' && !event.shiftKey && !event.isComposing
-        && !window.matchMedia('(pointer: coarse)').matches) {
-        event.preventDefault();
-        sendMessage();
+      if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+        if (!window.matchMedia('(pointer: coarse)').matches) {
+          event.preventDefault();
+          sendMessage();
+        }
       }
     },
   });
-  van.derive(() => {
-    draft.val;
-    requestAnimationFrame(() => {
-      input.style.height = 'auto';
-      input.style.height = `${Math.min(input.scrollHeight, 180)}px`;
-    });
-  });
+
+  van.derive(autoResize);
+
   return div({ class: 'composer-wrap' },
-    form({ class: 'composer', onsubmit: event => { event.preventDefault(); sendMessage(); } },
-      input,
+    form({
+      class: 'composer',
+      onsubmit: event => {
+        event.preventDefault();
+        sendMessage();
+      },
+    },
+      inputEl,
       div({ class: 'composer-toolbar' },
         div({ class: 'composer-tools' },
-          button({ type: 'button', class: 'icon-button add-button', 'aria-label': 'Chat tools', title: 'Chat tools', onclick: () => { modal.val = { type: 'tools' }; } }, icon('plus')),
+          button({
+            type: 'button', class: 'icon-button add-button',
+            'aria-label': 'Chat tools', title: 'Chat tools',
+            onclick: () => { modal.val = { type: 'tools' }; },
+          }, icon('plus')),
           span({ class: 'toolbar-divider' }),
           span({ class: 'companion-button' }, icon('globe'), 'OpenRouter companion'),
         ),
@@ -103,11 +127,7 @@ function Composer() {
     ),
     div({ class: 'composer-note', id: 'composer-note' },
       icon('leaf'), span('Light on data. Big on possibility.'), span({ class: 'note-dot' }, '·'),
-      () => span(
-        isPlaceholderKey(apiKey.val)
-          ? `OpenRouter (${getModel()}) · Placeholder key`
-          : `OpenRouter (${getModel()})`
-      ),
+      span(`OpenRouter (${getModel()})`),
     ),
   );
 }
@@ -128,16 +148,27 @@ function Suggestions() {
 
 export function Chat() {
   return div({ class: () => `workspace ${hasMessages() ? 'has-messages' : 'is-welcome'}` },
-    () => storageError.val ? div({ class: 'storage-warning', role: 'alert' }, icon('info'),
-      span(storageError.val), button({ class: 'text-button', onclick: () => { modal.val = { type: 'settings' }; } }, 'Settings')) : div(),
+    () => storageError.val
+      ? div({ class: 'storage-warning', role: 'alert' },
+          icon('info'), span(storageError.val),
+          button({ class: 'text-button', onclick: () => { modal.val = { type: 'settings' }; } }, 'Settings'))
+      : div(),
     () => !online.val && !offlineReady.val
-      ? div({ class: 'connection-warning', role: 'status' }, 'You’re offline. This tab still works, but offline reload hasn’t been prepared yet.') : div(),
+      ? div({ class: 'connection-warning', role: 'status' },
+          'You’re offline. This tab still works, but offline reload hasn’t been prepared yet.')
+      : div(),
     div({ class: 'chat-stage' },
       Welcome(),
-      div({ class: 'messages', id: 'messages', role: 'log', 'aria-label': 'Conversation', 'aria-live': 'polite', tabindex: '0' }, Messages),
+      div({
+        class: 'messages', id: 'messages', role: 'log',
+        'aria-label': 'Conversation', 'aria-live': 'polite', tabindex: '0',
+      }, Messages),
       Composer(),
       Suggestions(),
     ),
-    div({ class: 'workspace-footer' }, icon('mountain'), span('Learning has no boundaries. Neither should you.')),
+    div({ class: 'workspace-footer' },
+      icon('mountain'),
+      span('Learning has no boundaries. Neither should you.'),
+    ),
   );
 }

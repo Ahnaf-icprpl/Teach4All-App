@@ -1,16 +1,18 @@
 import van from 'vanjs-core';
 import { loadWorkspace, saveWorkspace, emptyWorkspace, MAX_CHATS } from './storage.js';
-import { getApiKey, setApiKey as saveApiKey, sendMessage as sendApiMessage } from './router.js';
+import { sendMessage as sendApiMessage } from './router.js';
 
 let storage;
-try { storage = window.localStorage; } catch { /* The UI reports unavailable storage. */ }
+try {
+  storage = window.localStorage;
+  storage?.removeItem('teach4all.openrouter-key.v1');
+} catch { /* The UI reports unavailable storage. */ }
 const loaded = loadWorkspace(storage);
 let storagePaused = Boolean(loaded.error);
 export const chats = van.state(loaded.data.chats);
 export const activeId = van.state(loaded.data.activeId);
 export const draft = van.state(loaded.data.draft);
 export const theme = van.state(loaded.data.theme);
-export const apiKey = van.state(getApiKey(storage));
 export const loading = van.state(false);
 export const sidebarOpen = van.state(false);
 export const sidebarCollapsed = van.state(false);
@@ -103,7 +105,7 @@ export function sendMessage() {
 
   const messageHistory = chat.messages.concat(userMessage);
   
-  sendApiMessage(messageHistory, apiKey.val, (chunkText) => {
+  sendApiMessage(messageHistory, (chunkText) => {
     const updatedChats = chats.val.map(c => {
       if (c.id === chat.id) {
         return {
@@ -189,13 +191,6 @@ export function exportWorkspace() {
 
 export function setTheme(value) {
   theme.val = value;
-  persist();
-}
-
-export function setApiKeyValue(key) {
-  const error = saveApiKey(storage, key);
-  apiKey.val = getApiKey(storage);
-  if (error) toast(error);
   persist();
 }
 

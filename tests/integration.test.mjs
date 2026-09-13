@@ -86,3 +86,22 @@ test('manifest.webmanifest valid JSON', () => {
   assert(manifest.start_url, 'should have start_url');
   assert(manifest.icons, 'should have icons');
 });
+
+test('client code never references OPENROUTER_API_KEY or embeds secret tokens', () => {
+  const root = 'src';
+  function walk(dir, files = []) {
+    for (const name of readdirSync(dir)) {
+      const path = join(dir, name);
+      if (statSync(path).isDirectory()) walk(path, files);
+      else if (name.endsWith('.js')) files.push(path);
+    }
+    return files;
+  }
+
+  const files = walk(root);
+  for (const file of files) {
+    const content = readFileSync(file, 'utf8');
+    assert(!content.includes('OPENROUTER_API_KEY'), `${file} must not reference OPENROUTER_API_KEY`);
+    assert(!content.includes('sk-or-'), `${file} must not contain any OpenRouter API key tokens`);
+  }
+});

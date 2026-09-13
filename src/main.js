@@ -22,7 +22,8 @@ const isDark = () => theme.val === 'dark' || (theme.val === 'system' && darkMode
 van.derive(() => {
   const dark = isDark();
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-  document.querySelector('meta[name="theme-color"]').content = dark ? '#1c211e' : '#f9faf7';
+  const metaTheme = document.querySelector('meta[name="theme-color"]');
+  if (metaTheme) metaTheme.content = dark ? '#1A232E' : '#F2EEE1';
 });
 
 function Topbar() {
@@ -33,68 +34,73 @@ function Topbar() {
         'aria-expanded': () => String(sidebarOpen.val || !sidebarCollapsed.val),
         onclick: () => { sidebarOpen.val = true; sidebarCollapsed.val = false; },
       }, icon('panel')),
+      button({
+        class: 'icon-button', 'aria-label': 'New conversation', title: 'New conversation (⇧ ⌘ O)',
+        onclick: newChat,
+      }, icon('compose')),
+      span({ class: 'topbar-divider' }),
       div({ class: 'workspace-title' },
-        () => span(currentChat()?.title || 'Your learning companion')),
+        icon('spark'),
+        () => span(currentChat()?.title || 'New conversation'),
+      ),
     ),
     div({ class: 'topbar-right' },
-      div({
-        class: () => `connection-badge ${!online.val ? 'offline-badge' : ''}`,
-        role: 'status',
-      }, () => icon(!online.val ? 'offline' : offlineReady.val ? 'check' : 'leaf'),
-      () => span(!online.val ? 'Working offline' : offlineReady.val ? 'Offline ready' : 'Local-first')),
-      span({ class: 'topbar-divider' }),
+      () => !online.val
+        ? span({ class: 'connection-badge offline-badge', role: 'status' }, icon('signalOff'), 'Offline mode')
+        : offlineReady.val
+          ? span({ class: 'connection-badge', role: 'status' }, icon('checkCircle'), 'Ready offline')
+          : span({ class: 'connection-badge', role: 'status' }, icon('globe'), 'Teach4All'),
       button({
         class: 'icon-button theme-toggle', 'aria-label': () => `Switch to ${isDark() ? 'light' : 'dark'} theme`,
         onclick: () => setTheme(isDark() ? 'light' : 'dark'),
-      }, () => icon(isDark() ? 'moon' : 'sun')),
+      }, () => icon(isDark() ? 'sun' : 'moon')),
+      button({
+        class: 'icon-button', 'aria-label': 'Workspace options', title: 'Settings',
+        onclick: () => { modal.val = { type: 'settings' }; },
+      }, icon('settings')),
     ),
   );
 }
 
-van.add(document.body,
-  a({ class: 'skip-link', href: '#message-input' }, 'Skip to message'),
-  div({ class: () => `app ${sidebarOpen.val ? 'sidebar-is-open' : ''} ${sidebarCollapsed.val ? 'sidebar-is-collapsed' : ''}` },
-    button({ class: 'sidebar-scrim', 'aria-label': 'Close sidebar', tabindex: '-1', onclick: () => { sidebarOpen.val = false; } }),
-    Sidebar(), main({ class: 'main', id: 'main' }, Topbar(), Chat()),
-  ),
-  Dialogs(),
-  div({ class: () => `toast ${notice.val ? 'is-visible' : ''}`, role: 'status', 'aria-live': 'polite' }, () => notice.val),
-  () => updateReady.val ? div({ class: 'update-notice', role: 'status' }, span('A fresh version is ready.'),
-    button({ class: 'text-button', onclick: applyUpdate }, 'Update & reload')) : div(),
-);
+function Toast() {
+  return () => div({
+    class: () => `toast ${notice.val ? 'is-visible' : ''}`,
+    role: 'status', 'aria-live': 'polite',
+  }, notice.val);
+}
 
-const mobile = window.matchMedia('(max-width: 760px)');
-const syncSidebar = () => {
-  const sidebar = document.getElementById('sidebar');
-  sidebar.inert = mobile.matches ? !sidebarOpen.val : sidebarCollapsed.val;
-};
-mobile.addEventListener('change', syncSidebar);
-van.derive(syncSidebar);
+function UpdateBanner() {
+  return () => updateReady.val
+    ? div({ class: 'update-notice', role: 'status' },
+        span('A refreshed version of Teach4All is ready.'),
+        button({ class: 'text-button', onclick: applyUpdate }, 'Refresh now'),
+      )
+    : div();
+}
 
-document.addEventListener('keydown', event => {
-  if (modal.val) return;
-  const editable = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
-  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
-    event.preventDefault();
-    sidebarOpen.val = true;
-    sidebarCollapsed.val = false;
-    requestAnimationFrame(() => document.getElementById('chat-search').focus());
-  } else if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'o') {
-    event.preventDefault();
-    newChat();
-  } else if (event.key === '/' && !editable) {
-    event.preventDefault();
-    focusComposer();
-  } else if (event.key === 'Escape' && sidebarOpen.val) {
-    sidebarOpen.val = false;
-    document.querySelector('.open-sidebar').focus();
-  } else if (event.key === 'Tab' && mobile.matches && sidebarOpen.val) {
-    const items = [...document.querySelectorAll('.sidebar button, .sidebar input')].filter(el => !el.disabled);
-    const first = items[0];
-    const last = items.at(-1);
-    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-    if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-  }
-});
+function App() {
+  return div({
+    class: () => [
+      'app',
+      sidebarOpen.val ? 'sidebar-is-open' : '',
+      sidebarCollapsed.val ? 'sidebar-is-collapsed' : '',
+    ].filter(Boolean).join(' '),
+  },
+    a({ href: '#message-input', class: 'skip-link' }, 'Skip to message composer'),
+    Sidebar(),
+    div({
+      class: 'sidebar-scrim', 'aria-hidden': 'true',
+      onclick: () => { sidebarOpen.val = false; },
+    }),
+    main({ class: 'main', id: 'main' },
+      Topbar(),
+      Chat(),
+    ),
+    Toast(),
+    UpdateBanner(),
+    Dialogs(),
+  );
+}
 
+van.add(document.body, App());
 registerOffline();

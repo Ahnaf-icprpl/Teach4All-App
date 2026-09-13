@@ -1,19 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert';
+import { EventEmitter } from 'node:events';
 import {
   getModel,
   isPlaceholderKey,
-  getApiKey,
-  setApiKey,
   sendMessage,
-  OPENROUTER_API_URL,
+  CHAT_API_URL,
   DEFAULT_MODEL,
 } from '../src/router.js';
+import {
+  handleChatRequest,
+  createChatMiddleware,
+  formatMessages,
+  DEFAULT_MODEL as SERVER_DEFAULT_MODEL,
+  OPENROUTER_API_URL,
+} from '../server/chatApi.js';
 
 test('router uses google/gemini-2.5-flash-lite by default', () => {
   assert.strictEqual(DEFAULT_MODEL, 'google/gemini-2.5-flash-lite');
-  const model = getModel();
-  assert.ok(model.includes('gemini-2.5-flash-lite'), `Model was ${model}`);
+  assert.strictEqual(SERVER_DEFAULT_MODEL, 'google/gemini-2.5-flash-lite');
+  assert.strictEqual(getModel(), DEFAULT_MODEL);
 });
 
 test('isPlaceholderKey identifies empty or placeholder keys', () => {
@@ -25,31 +31,7 @@ test('isPlaceholderKey identifies empty or placeholder keys', () => {
   assert.strictEqual(isPlaceholderKey('sk-or-v1-abcdef1234567890'), false);
 });
 
-test('storage getApiKey and setApiKey work properly', () => {
-  const mockStorage = {
-    _data: {},
-    getItem(k) { return this._data[k] || null; },
-    setItem(k, v) { this._data[k] = String(v); },
-    removeItem(k) { delete this._data[k]; },
-  };
-
-  assert.strictEqual(setApiKey(mockStorage, 'sk-or-test-key-123'), '');
-  assert.strictEqual(getApiKey(mockStorage), 'sk-or-test-key-123');
-
-  assert.strictEqual(setApiKey(mockStorage, ''), '');
-  assert.strictEqual(mockStorage.getItem('teach4all.openrouter-key.v1'), null);
-});
-
-test('sendMessage throws if no API key is provided', async () => {
-  await assert.rejects(
-    async () => {
-      await sendMessage([{ role: 'user', text: 'Hello' }], '', () => {});
-    },
-    /OpenRouter API key is required/
-  );
-});
-
-test('sendMessage sends proper payload to OpenRouter and streams chunks', async () => {
+test('client sendMessage sends messages to /api/chat without any API key in payload', async () => {
   const originalFetch = globalThis.fetch;
   let interceptedUrl = '';
   let interceptedOptions = null;
@@ -81,20 +63,21 @@ test('sendMessage sends proper payload to OpenRouter and streams chunks', async 
   try {
     const receivedChunks = [];
     const result = await sendMessage(
-      [{ role: 'user', text: 'Hi' }],
-      'sk-or-real-test-key',
+      [{ role: 'user', text: 'Hi there' }],
       chunk => receivedChunks.push(chunk)
     );
 
-    assert.strictEqual(interceptedUrl, OPENROUTER_API_URL);
+    assert.strictEqual(interceptedUrl, CHAT_API_URL);
     assert.strictEqual(interceptedOptions.method, 'POST');
-    assert.strictEqual(interceptedOptions.headers['Authorization'], 'Bearer sk-or-real-test-key');
     assert.strictEqual(interceptedOptions.headers['Content-Type'], 'application/json');
+    // Ensure no Authorization header is sent from client
+    assert.strictEqual(interceptedOptions.headers['Authorization'], undefined);
 
     const body = JSON.parse(interceptedOptions.body);
-    assert.strictEqual(body.model, 'google/gemini-2.5-flash-lite');
-    assert.strictEqual(body.stream, true);
-    assert.ok(body.messages.some(m => m.content === 'Hi'));
+    assert.ok(Array.isArray(body.messages));
+    assert.strictEqual(body.messages[0].text, 'Hi there');
+    // Ensure no apiKey property is sent from client
+    assert.strictEqual(body.apiKey, undefined);
 
     assert.strictEqual(result, 'Hello world!');
     assert.deepStrictEqual(receivedChunks, ['Hello', 'Hello world!']);
@@ -103,51 +86,160 @@ test('sendMessage sends proper payload to OpenRouter and streams chunks', async 
   }
 });
 
-test('sendMessage handles placeholder 401 error with informative message', async () => {
+test('client sendMessage handles server error response', async () => {
   const originalFetch = globalThis.fetch;
 
   globalThis.fetch = async () => {
     return new Response(
-      JSON.stringify({ error: { message: 'User not found', code: 401 } }),
-      { status: 401, headers: { 'Content-Type': 'application/json' } }
+      JSON.stringify({ error: { message: 'OpenRouter API key is not configured on the server.' } }),
+      { status: 503, headers: { 'Content-Type': 'application/json' } }
     );
   };
 
   try {
     await assert.rejects(
       async () => {
-        await sendMessage(
-          [{ role: 'user', text: 'test' }],
-          'sk-or-placeholder-key-replace-with-your-actual-key',
-          () => {}
-        );
+        await sendMessage([{ role: 'user', text: 'test' }], () => {});
       },
-      /Placeholder API key in use/
+      /OpenRouter API key is not configured on the server/
     );
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test('sendMessage handles 429 rate limit and 402 credits errors', async () => {
+function createMockReqRes({ method = 'POST', url = '/api/chat', body = null } = {}) {
+  const req = new EventEmitter();
+  req.method = method;
+  req.url = url;
+
+  const res = {
+    statusCode: 200,
+    headers: {},
+    body: '',
+    ended: false,
+    headersSent: false,
+    writeHead(status, headers = {}) {
+      this.statusCode = status;
+      this.headers = { ...this.headers, ...headers };
+      this.headersSent = true;
+    },
+    write(chunk) {
+      this.body += (typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString());
+    },
+    end(chunk = '') {
+      if (chunk) this.write(chunk);
+      this.ended = true;
+    },
+  };
+
+  process.nextTick(() => {
+    if (body !== null) {
+      req.emit('data', typeof body === 'string' ? body : JSON.stringify(body));
+    }
+    req.emit('end');
+  });
+
+  return { req, res };
+}
+
+test('server handleChatRequest rejects non-POST requests with 405', async () => {
+  const { req, res } = createMockReqRes({ method: 'GET' });
+  await handleChatRequest(req, res, { OPENROUTER_API_KEY: 'sk-or-real' });
+
+  assert.strictEqual(res.statusCode, 405);
+  const data = JSON.parse(res.body);
+  assert.strictEqual(data.error.message, 'Method Not Allowed');
+});
+
+test('server handleChatRequest rejects missing or placeholder API keys with 503 and never leaks key', async () => {
+  const placeholderKey = 'sk-or-placeholder-key-replace-with-your-actual-key';
+  const { req, res } = createMockReqRes({
+    body: { messages: [{ role: 'user', text: 'test' }] },
+  });
+
+  await handleChatRequest(req, res, { OPENROUTER_API_KEY: placeholderKey });
+
+  assert.strictEqual(res.statusCode, 503);
+  assert.ok(!res.body.includes(placeholderKey), 'Must not leak placeholder key in response');
+  const data = JSON.parse(res.body);
+  assert.ok(data.error.message.includes('not configured on the server'));
+});
+
+test('server handleChatRequest sends Bearer key to OpenRouter on server and streams SSE', async () => {
   const originalFetch = globalThis.fetch;
+  let interceptedUrl = '';
+  let interceptedOptions = null;
+
+  globalThis.fetch = async (url, options) => {
+    interceptedUrl = url;
+    interceptedOptions = options;
+
+    const sseData = [
+      'data: {"choices":[{"delta":{"content":"Server"}}]}\n\n',
+      'data: {"choices":[{"delta":{"content":" streaming"}}]}\\n\\n',
+      'data: [DONE]\n\n',
+    ].join('');
+
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(sseData));
+        controller.close();
+      },
+    });
+
+    return new Response(stream, {
+      status: 200,
+      headers: { 'Content-Type': 'text/event-stream' },
+    });
+  };
 
   try {
-    globalThis.fetch = async () => new Response('', { status: 429 });
-    await assert.rejects(
-      async () => {
-        await sendMessage([{ role: 'user', text: 'test' }], 'sk-valid-key', () => {});
-      },
-      /rate limit reached/
-    );
+    const { req, res } = createMockReqRes({
+      body: { messages: [{ role: 'user', text: 'Hello server' }] },
+    });
 
-    globalThis.fetch = async () => new Response('', { status: 402 });
-    await assert.rejects(
-      async () => {
-        await sendMessage([{ role: 'user', text: 'test' }], 'sk-valid-key', () => {});
-      },
-      /Insufficient OpenRouter credits/
+    await handleChatRequest(req, res, {
+      OPENROUTER_API_KEY: 'sk-or-server-secret-key-12345',
+      OPENROUTER_MODEL: 'google/gemini-2.5-flash-lite',
+    });
+
+    assert.strictEqual(interceptedUrl, OPENROUTER_API_URL);
+    assert.strictEqual(interceptedOptions.headers['Authorization'], 'Bearer sk-or-server-secret-key-12345');
+    assert.strictEqual(res.statusCode, 200);
+    assert.strictEqual(res.headers['Content-Type'], 'text/event-stream');
+    assert.ok(res.body.includes('Server'));
+    assert.ok(res.body.includes('streaming'));
+    assert.strictEqual(res.ended, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('server handleChatRequest masks upstream 401 error without exposing server key', async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = async () => {
+    return new Response(
+      JSON.stringify({ error: { message: 'Invalid API key provided' } }),
+      { status: 401, headers: { 'Content-Type': 'application/json' } }
     );
+  };
+
+  try {
+    const { req, res } = createMockReqRes({
+      body: { messages: [{ role: 'user', text: 'Hello server' }] },
+    });
+
+    await handleChatRequest(req, res, {
+      OPENROUTER_API_KEY: 'sk-or-invalid-secret-key',
+    });
+
+    assert.strictEqual(res.statusCode, 401);
+    assert.ok(!res.body.includes('sk-or-invalid-secret-key'));
+    const data = JSON.parse(res.body);
+    assert.ok(data.error.message.includes('Server authentication error'));
   } finally {
     globalThis.fetch = originalFetch;
   }
