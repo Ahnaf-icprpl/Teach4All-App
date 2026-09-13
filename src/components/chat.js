@@ -104,6 +104,7 @@ function Composer() {
 
   const inputEl = textarea({
     id: 'message-input',
+    autofocus: true,
     placeholder: 'Apa yang sedang Anda pikirkan?',
     rows: 1,
     maxlength: MAX_INPUT,

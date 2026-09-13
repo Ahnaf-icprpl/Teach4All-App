@@ -15,14 +15,9 @@
   .danger-button { background: var(--terracotta); color: var(--off-white); }
   .danger-button:hover { background: var(--terracotta-hover); }
   .danger-text, .app-dialog .warning-text { color: var(--terracotta); }
-  .app-dialog .tools-note { font-size: 10px; margin-top: 15px; color: var(--muted); }
   .tool-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 13px 10px; border-radius: 8px; font-size: 12px; text-align: left; color: var(--text); }
   .tool-row:hover { background: var(--hover); }
   .tool-row > .icon { width: 17px; height: 17px; color: var(--terracotta); }
-  .tool-row kbd { margin-left: auto; font-size: 10px; color: var(--muted); }
-  .tools-content h3 { margin-top: 24px; margin-bottom: 12px; padding-top: 18px; color: var(--text); }
-  .shortcut-row { display: flex; align-items: center; justify-content: space-between; padding: 5px 0; }
-  .shortcut-row kbd { border: 0; border-radius: 4px; padding: 1px 6px; font-size: 10px; background: var(--soft-beige); color: var(--text); }
   .field-label { display: block; font-size: 12px; font-weight: 500; margin-bottom: 10px; color: var(--text); }
   .app-dialog input { width: 100%; background: var(--bg); border: 0; border-radius: 8px; padding: 11px; font-size: 13px; color: var(--text); }
   .dialog-actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 24px; }

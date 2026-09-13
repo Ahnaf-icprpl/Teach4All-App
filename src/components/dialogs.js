@@ -5,19 +5,13 @@ import {
   clearWorkspace, renameChat, deleteChat,
 } from '../state.js';
 
-const { dialog, div, h2, h3, p, span, button, label, form, input, kbd } = van.tags;
+const { dialog, div, h2, h3, p, span, button, label, form, input } = van.tags;
 
 function Tools() {
   const closeAnd = action => () => { modal.val = null; action(); };
   return div({ class: 'tools-content' },
-    button({ class: 'tool-row', onclick: closeAnd(newChat) }, icon('plus'), span('Mulai percakapan baru'), kbd('⇧ ⌘ O')),
+    button({ class: 'tool-row', onclick: closeAnd(newChat) }, icon('plus'), span('Mulai percakapan baru')),
     button({ class: 'tool-row', onclick: closeAnd(exportWorkspace) }, icon('download'), span('Ekspor ruang kerja Anda')),
-    h3('Pintasan yang berguna'),
-    p({ class: 'shortcut-row' }, span('Cari percakapan'), kbd('Ctrl / ⌘ K')),
-    p({ class: 'shortcut-row' }, span('Fokus ke kolom pesan'), kbd('/')),
-    p({ class: 'shortcut-row' }, span('Kirim pesan'), kbd('Enter')),
-    p({ class: 'shortcut-row' }, span('Buat baris baru'), kbd('Shift + Enter')),
-    p({ class: 'tools-note' }, 'Pada layar sentuh, tekan Enter untuk membuat baris baru. Ketuk ikon panah untuk mengirim.'),
   );
 }
 
@@ -48,7 +42,7 @@ function Confirm(type, id) {
 
 export function Dialogs() {
   const titles = {
-    tools: 'Alat & Pintasan',
+    tools: 'Alat percakapan',
     conversation: 'Opsi percakapan', clear: 'Hapus ruang kerja Anda?', delete: 'Hapus percakapan ini?',
   };
   return () => {

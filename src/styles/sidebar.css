@@ -7,10 +7,9 @@
   .brand-number { color: var(--dusty-terracotta); font-style: italic; font-weight: 400; margin: 0 -1px; }
   .close-sidebar { display: none; color: var(--sidebar-muted); }
   .sidebar-actions { display: flex; flex-direction: column; gap: 9px; padding-bottom: 12px; }
-  .new-chat-button { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 9px 12px; border: 0; border-radius: 9px; font-size: 13px; font-weight: 550; background: var(--sidebar-card); color: var(--sidebar-text); box-shadow: 0 1px 3px rgba(0, 0, 0, .18); }
+  .new-chat-button { display: flex; align-items: center; justify-content: flex-start; gap: 8px; width: 100%; padding: 9px 12px; border: 0; border-radius: 9px; font-size: 13px; font-weight: 550; background: var(--sidebar-card); color: var(--sidebar-text); box-shadow: 0 1px 3px rgba(0, 0, 0, .18); }
   .new-chat-button:hover { background: #354350; }
   .new-chat-button .icon { width: 16px; height: 16px; color: var(--dusty-terracotta); }
-  .new-chat-button kbd { font-size: 10px; color: var(--sidebar-muted); border: 0; padding: 1px 5px; border-radius: 4px; font-family: inherit; background: rgba(0, 0, 0, .2); }
   .sidebar-quick-links { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .quick-action-button { display: flex; align-items: center; justify-content: center; gap: 7px; padding: 8px 10px; border: 0; border-radius: 8px; font-size: 12px; font-weight: 550; background: var(--sidebar-card); color: var(--sidebar-text); transition: background .15s; }
   .quick-action-button:hover { background: #354350; }
@@ -19,7 +18,6 @@
   .search-field .icon { width: 14px; height: 14px; color: var(--sidebar-muted); flex-shrink: 0; }
   .search-field input { border: 0; outline: 0; background: transparent; padding: 7px 0; font-size: 11.5px; width: 100%; color: var(--sidebar-text); }
   .search-field input::placeholder { color: var(--sidebar-muted); }
-  .search-field kbd { font-size: 9.5px; color: var(--sidebar-muted); }
   .history { flex: 1; overflow-y: auto; margin-top: 8px; min-height: 80px; }
   .section-heading { display: flex; align-items: center; justify-content: space-between; padding: 6px 6px 7px; }
   .section-heading h2 { font-size: 9px; letter-spacing: 1.1px; text-transform: uppercase; color: var(--sidebar-muted); font-weight: 600; }
@@ -51,7 +49,6 @@
     .sidebar { width: 236px; padding: 0 13px; }
     .brand { font-size: 19px; }
     .search-field { padding: 0 6px; gap: 6px; }
-    .search-field kbd { display: none; }
   }
   @media (max-width: 760px) {
     .sidebar { width: 280px; max-width: 85vw; padding-bottom: env(safe-area-inset-bottom); }

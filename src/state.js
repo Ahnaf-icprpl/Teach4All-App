@@ -59,7 +59,15 @@ export function toast(message) {
 }
 
 export function focusComposer() {
-  requestAnimationFrame(() => document.getElementById('message-input')?.focus());
+  requestAnimationFrame(() => {
+    const el = document.getElementById('message-input');
+    if (el) {
+      el.focus();
+      if (typeof el.selectionStart === 'number') {
+        el.selectionStart = el.selectionEnd = el.value.length;
+      }
+    }
+  });
 }
 
 export function newChat() {

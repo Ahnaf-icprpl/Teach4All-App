@@ -5,7 +5,7 @@ import {
   sidebarCollapsed, search, setDraft, focusComposer, historyLoading,
 } from '../state.js';
 
-const { aside, div, nav, button, span, input, kbd, h2, p } = van.tags;
+const { aside, div, nav, button, span, input, h2, p } = van.tags;
 
 function emptyHistory() {
   return div({ class: 'empty-history' },
@@ -79,7 +79,7 @@ export function Sidebar() {
     ),
     div({ class: 'sidebar-actions' },
       button({ class: 'new-chat-button', onclick: newChat },
-        icon('plus'), span('Obrolan baru'), kbd({ 'aria-label': 'Ctrl atau Command + Shift + O' }, '⇧ ⌘ O')),
+        icon('plus'), span('Obrolan baru')),
       div({ class: 'sidebar-quick-links' },
         button({
           class: 'quick-action-button',
@@ -105,7 +105,7 @@ export function Sidebar() {
           id: 'chat-search', type: 'search', placeholder: 'Cari percakapan',
           'aria-label': 'Cari percakapan', value: () => search.val,
           oninput: event => { search.val = event.target.value; },
-        }), kbd('⌘ K'),
+        }),
       ),
     ),
     nav({ class: 'history', 'aria-label': 'Riwayat percakapan tersimpan' },

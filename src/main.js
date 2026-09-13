@@ -35,7 +35,7 @@ function Topbar() {
         onclick: () => { sidebarOpen.val = true; sidebarCollapsed.val = false; },
       }, icon('menu')),
       button({
-        class: 'icon-button', 'aria-label': 'Percakapan baru', title: 'Percakapan baru (⇧ ⌘ O)',
+        class: 'icon-button', 'aria-label': 'Percakapan baru', title: 'Percakapan baru',
         onclick: newChat,
       }, icon('compose')),
       span({ class: 'topbar-divider' }),
@@ -100,3 +100,8 @@ function App() {
 
 van.add(document.body, App());
 registerOffline();
+focusComposer();
+if (typeof window !== 'undefined' && document.readyState !== 'complete') {
+  window.addEventListener('load', focusComposer, { once: true });
+}
+
