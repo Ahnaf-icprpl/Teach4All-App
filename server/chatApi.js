@@ -166,12 +166,19 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
   // Non-blocking initialization of conversation and user message in DB
   streamWriter.init().catch(() => {});
 
+  const startTime = Date.now();
   const promptText = lastUserMsg ? (lastUserMsg.text || lastUserMsg.content || '') : '';
+  const cachedProvider = conversationId ? await getConversationProvider(conversationId, { redisClient }) : null;
+  const providerRouting = buildProviderRoutingPayload(conversationId, cachedProvider);
+
   logger.info('Chat stream requested', {
     endpoint: '/api/chat',
     conversation_id: conversationId,
+    client_ip: clientIp,
     model,
     prompt: promptText,
+    messages_count: messages.length,
+    cached_provider: cachedProvider || 'none',
   });
 
   const formattedMessages = formatMessages(messages);
