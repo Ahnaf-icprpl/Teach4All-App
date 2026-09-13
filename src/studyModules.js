@@ -1,5 +1,6 @@
 import van from 'vanjs-core';
 import { QUIZZES_STORAGE_KEY, MATERIALS_STORAGE_KEY } from './storage.js';
+import { SEED_QUIZ_QUESTIONS, SEED_MATERIAL_SECTIONS } from './studySeedData.js';
 
 export const INITIAL_QUIZZES = [
   {
@@ -290,6 +291,36 @@ export async function markMaterialSolved(id, isSolved = true) {
     });
   } catch {}
   return updated;
+}
+
+export async function fetchQuizDetails(id) {
+  if (!id) return null;
+  try {
+    const res = await fetch(`/api/quizzes?id=${id}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.quiz) return data.quiz;
+    }
+  } catch {}
+  const localQuiz = quizzes.val.find(q => q.id === id) || INITIAL_QUIZZES.find(q => q.id === id);
+  if (!localQuiz) return null;
+  const questions = SEED_QUIZ_QUESTIONS[id] || [];
+  return { ...localQuiz, questions };
+}
+
+export async function fetchMaterialDetails(id) {
+  if (!id) return null;
+  try {
+    const res = await fetch(`/api/materials?id=${id}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.material) return data.material;
+    }
+  } catch {}
+  const localMat = materials.val.find(m => m.id === id) || INITIAL_MATERIALS.find(m => m.id === id);
+  if (!localMat) return null;
+  const sections = SEED_MATERIAL_SECTIONS[id] || [];
+  return { ...localMat, sections };
 }
 
 export function initStudyModules() {

@@ -17,6 +17,7 @@ import {
   getMaterialById,
   createMaterial,
   setMaterialSolvedStatus,
+  query,
   runSql,
   DEFAULT_USER_ID,
 } from '../server/db.js';
@@ -29,6 +30,8 @@ import {
   materials,
   fetchQuizzes,
   fetchMaterials,
+  fetchQuizDetails,
+  fetchMaterialDetails,
   markQuizSolved,
   markMaterialSolved,
   FALLBACK_QUIZZES,
@@ -548,3 +551,53 @@ test('client markQuizSolved and markMaterialSolved update state and localStorage
     globalThis.fetch = originalFetch;
   }
 });
+
+test('migration 013 defines interactive study UI text keys without fallback', () => {
+  const filePath = resolve(process.cwd(), 'migrations/013_add_interactive_study_ui_texts.sql');
+  assert.strictEqual(existsSync(filePath), true, 'migration file 013 must exist');
+
+  const sql = readFileSync(filePath, 'utf8');
+  assert.ok(sql.includes('dialogs_filter_all'), 'Must define filter all key');
+  assert.ok(sql.includes('dialogs_filter_unsolved'), 'Must define filter unsolved key');
+  assert.ok(sql.includes('dialogs_filter_solved'), 'Must define filter solved key');
+  assert.ok(sql.includes('dialogs_btn_solve'), 'Must define solve button key');
+  assert.ok(sql.includes('dialogs_btn_read'), 'Must define read button key');
+  assert.ok(sql.includes('dialogs_btn_chat'), 'Must define chat button key');
+  assert.ok(sql.includes('dialogs_quiz_loading'), 'Must define quiz loading key');
+  assert.ok(sql.includes('dialogs_material_loading'), 'Must define material loading key');
+  assert.ok(sql.includes('dialogs_toast_quiz_solved'), 'Must define toast quiz solved key');
+  assert.ok(sql.includes('dialogs_toast_material_solved'), 'Must define toast material solved key');
+});
+
+test('fetchQuizDetails and fetchMaterialDetails return complete structured data with questions and sections', async () => {
+  const seedQuizId = '00000000-0000-0000-0001-000000000001';
+  const quiz = await fetchQuizDetails(seedQuizId);
+  assert.ok(quiz, 'Quiz must be found');
+  assert.strictEqual(quiz.id, seedQuizId);
+  assert.ok(Array.isArray(quiz.questions), 'Quiz must have questions array');
+  assert.ok(quiz.questions.length > 0, 'Quiz must contain questions');
+  assert.ok(quiz.questions[0].options?.length >= 3, 'Question must have options');
+  assert.ok(quiz.questions[0].correctAnswer, 'Question must have correctAnswer');
+  assert.ok(quiz.questions[0].explanation, 'Question must have explanation');
+
+  const seedMaterialId = '00000000-0000-0000-0002-000000000001';
+  const material = await fetchMaterialDetails(seedMaterialId);
+  assert.ok(material, 'Material must be found');
+  assert.strictEqual(material.id, seedMaterialId);
+  assert.ok(Array.isArray(material.sections), 'Material must have sections array');
+  assert.ok(material.sections.length > 0, 'Material must contain sections');
+  assert.ok(material.sections[0].title, 'Section must have title');
+  assert.ok(material.sections[0].content, 'Section must have content');
+  assert.ok(material.sections[0].readTimeMinutes > 0, 'Section must have readTimeMinutes');
+});
+
+test('UI text keys from migration 013 exist in live database', async () => {
+  if (!DB_URL) return;
+  const rows = await query(
+    "SELECT key, value FROM ui_texts WHERE key IN ('dialogs_filter_all', 'dialogs_filter_unsolved', 'dialogs_filter_solved', 'dialogs_btn_solve', 'dialogs_btn_read', 'dialogs_btn_chat');",
+    [],
+    DB_URL
+  );
+  assert.strictEqual(rows.length, 6, 'All 6 interactive study UI text keys must exist in database');
+});
+
