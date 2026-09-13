@@ -165,6 +165,12 @@ export class GrafanaLogger {
     this.forceSendInTest = forceSendInTest;
     this.maxTextLength = maxTextLength;
     this._explicitEnv = env;
+    this.isServerless = Boolean(
+      process.env.VERCEL ||
+      process.env.AWS_LAMBDA_FUNCTION_NAME ||
+      process.env.SERVERLESS
+    );
+    this._warnedMissingKey = false;
 
     this.queue = [];
     this.flushTimer = null;
@@ -300,6 +306,10 @@ export class GrafanaLogger {
     const url = this.otlpUrl || process.env.GRAFANA_OTLP_URL;
 
     if (!instanceId || !apiKey || !url || records.length === 0) {
+      if (!apiKey && this.enableConsole && !this._warnedMissingKey) {
+        this._warnedMissingKey = true;
+        console.warn('[GrafanaLogger] Warning: GRAFANA_API_KEY is not set. Logs will not be sent to Grafana Cloud. Please configure GRAFANA_API_KEY in your deployment environment variables.');
+      }
       return;
     }
 
@@ -336,6 +346,13 @@ export class GrafanaLogger {
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(5000),
     });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      if (this.enableConsole) {
+        console.error(`[GrafanaLogger] Grafana OTLP responded with status ${res.status}: ${errText}`);
+      }
+    }
 
     return res;
   }
