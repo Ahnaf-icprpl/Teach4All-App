@@ -50,10 +50,16 @@ export function buildWebSearchTool(serverEnv = {}) {
 /**
  * Determines whether web search should be provided to the model.
  * Defaults to true unless explicitly turned off by the client.
+ * For quiz creation requests, web search is mandatory and always enabled.
  * @param {any} webSearchParam
+ * @param {object} [options]
+ * @param {boolean} [options.isQuiz]
  * @returns {boolean}
  */
-export function isWebSearchRequested(webSearchParam) {
+export function isWebSearchRequested(webSearchParam, { isQuiz = false } = {}) {
+  if (isQuiz) {
+    return true;
+  }
   if (webSearchParam === false || webSearchParam === 'false' || webSearchParam === 0) {
     return false;
   }

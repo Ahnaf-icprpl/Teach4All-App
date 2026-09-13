@@ -215,6 +215,36 @@ test('DevNotice component and logic adheres to environment checks and UI texts',
   appEnvState.val = 'development';
 });
 
+test('migration 017 defines copy prompt UI text without fallback', () => {
+  const filePath = resolve(process.cwd(), 'migrations/017_add_copy_prompt_ui_text.sql');
+  assert.strictEqual(existsSync(filePath), true, 'migration file 017 must exist');
+
+  const sql = readFileSync(filePath, 'utf8');
+  assert.ok(sql.includes('chat_copy_prompt_aria'), 'must define chat_copy_prompt_aria');
+});
+
+test('Chat component includes copy prompt button for user messages', () => {
+  const chatSource = readFileSync(resolve(process.cwd(), 'src/components/chat.js'), 'utf8');
+  assert.ok(chatSource.includes('copy-prompt-button'), 'must render copy-prompt-button');
+  assert.ok(chatSource.includes("t('chat_copy_prompt_aria')"), 'must reference chat_copy_prompt_aria via t()');
+});
+
+test('migration 018 defines quiz building status UI text without fallback', () => {
+  const filePath = resolve(process.cwd(), 'migrations/018_add_quiz_building_ui_text.sql');
+  assert.strictEqual(existsSync(filePath), true, 'migration file 018 must exist');
+
+  const sql = readFileSync(filePath, 'utf8');
+  assert.ok(sql.includes('chat_quiz_building_status'), 'must define chat_quiz_building_status');
+});
+
+test('Chat component includes animated building-quiz-indicator with bulb icon and status text', () => {
+  const chatSource = readFileSync(resolve(process.cwd(), 'src/components/chat.js'), 'utf8');
+  assert.ok(chatSource.includes('building-quiz-indicator'), 'must render building-quiz-indicator');
+  assert.ok(chatSource.includes("t('chat_quiz_building_status')"), 'must reference chat_quiz_building_status via t()');
+  assert.ok(chatSource.includes("icon('bulb', 'spin-slow')"), 'must render spinning bulb icon');
+  assert.ok(chatSource.includes("icon('globe', 'spin-slow')"), 'must render spinning globe icon for web grounding');
+});
+
 
 
 

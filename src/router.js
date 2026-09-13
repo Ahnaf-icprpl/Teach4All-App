@@ -26,6 +26,14 @@ export async function sendMessage(messages, onChunk, options = {}) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
+  if (options.signal) {
+    if (options.signal.aborted) {
+      controller.abort();
+    } else {
+      options.signal.addEventListener('abort', () => controller.abort(), { once: true });
+    }
+  }
+
   try {
     const payload = {
       messages,
@@ -88,6 +96,12 @@ export async function sendMessage(messages, onChunk, options = {}) {
 
         try {
           const json = JSON.parse(data);
+          if (json.type === 'quiz_status' && json.status === 'building') {
+            if (typeof options.onStatus === 'function') {
+              options.onStatus('building_quiz');
+            }
+            continue;
+          }
           const delta = json.choices?.[0]?.delta?.content || '';
           if (delta) {
             fullText += delta;
@@ -121,6 +135,9 @@ export async function sendMessage(messages, onChunk, options = {}) {
   } catch (error) {
     clearTimeout(timeoutId);
     if (error.name === 'AbortError') {
+      if (options.signal?.aborted) {
+        throw new Error('Request was cancelled.');
+      }
       throw new Error('Request timed out. Please check your connection and try again.');
     }
     throw error;
@@ -166,7 +183,7 @@ export async function generateTitle(messages, options = {}) {
   }
 }
 
-export async function fetchConversations({ userId = TEST_USER_ID, limit = 50, offset = 0, query = '' } = {}) {
+export async function fetchConversations({ userId = TEST_USER_ID, limit = 20, offset = 0, query = '' } = {}) {
   let url = `${CONVERSATIONS_API_URL}?userId=${encodeURIComponent(userId)}&limit=${limit}&offset=${offset}`;
   if (query && typeof query === 'string' && query.trim()) {
     url += `&q=${encodeURIComponent(query.trim())}`;

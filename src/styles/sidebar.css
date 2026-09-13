@@ -34,6 +34,11 @@
   .chat-options { width: 28px; height: 28px; flex-shrink: 0; margin-right: 3px; opacity: 0; color: var(--sidebar-muted); }
   .chat-options .icon { width: 17px; }
   .chat-item:hover .chat-options, .chat-item:focus-within .chat-options, .chat-item.is-active .chat-options { opacity: 1; }
+  .chat-list-load-more { padding: 8px 4px 12px; display: flex; justify-content: center; align-items: center; }
+  .load-more-button { width: 100%; padding: 7px 10px; font-size: 11.5px; font-weight: 500; color: var(--sidebar-muted); background: var(--sidebar-card); border: 0; border-radius: 7px; cursor: pointer; text-align: center; transition: background .15s, color .15s; }
+  .load-more-button:hover, .load-more-button:focus-visible { background: #354350; color: var(--sidebar-text); }
+  .history-loading-more { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 6px 10px; font-size: 11px; color: var(--sidebar-muted); }
+  .loading-more-text { font-size: 11px; }
   .sidebar-bottom { flex-shrink: 0; margin-top: auto; }
   .profile-button { width: 100%; display: flex; align-items: center; gap: 10px; border: 0; padding: 16px 5px 18px; text-align: left; color: var(--sidebar-text); }
   .profile-button:hover .profile-name { color: var(--dusty-terracotta); }

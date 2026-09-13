@@ -207,6 +207,10 @@ export async function saveMessage({
     content: content || '',
     created_at: existing?.created_at || new Date().toISOString(),
   });
+  const inMemConv = inMemoryConversations.get(convId);
+  if (inMemConv) {
+    inMemConv.updated_at = new Date().toISOString();
+  }
 
   if (databaseUrl) {
     const sql = `
@@ -219,6 +223,7 @@ export async function saveMessage({
       const pool = getPool(databaseUrl);
       if (pool) {
         await pool.query(sql, [msgId, convId, uId, safeRole, content || '']);
+        await pool.query('UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = $1;', [convId]);
         logger.info(`Saved ${safeRole} message to DB`, {
           message_id: msgId,
           conversation_id: convId,
@@ -259,24 +264,29 @@ export async function getConversations({
         let params;
         if (trimmedQuery) {
           sql = `
-            SELECT DISTINCT c.id, c.user_id, c.title, c.updated_at, c.created_at
+            SELECT c.id, c.user_id, c.title,
+              GREATEST(c.updated_at, c.created_at, COALESCE((SELECT MAX(m2.created_at) FROM messages m2 WHERE m2.conversation_id = c.id), c.updated_at)) AS updated_at,
+              c.created_at
             FROM conversations c
-            LEFT JOIN messages m ON m.conversation_id = c.id
             WHERE c.user_id = $1
               AND (
                 c.title ILIKE $2
-                OR m.content ILIKE $2
+                OR EXISTS (
+                  SELECT 1 FROM messages m WHERE m.conversation_id = c.id AND m.content ILIKE $2
+                )
               )
-            ORDER BY c.updated_at DESC
+            ORDER BY GREATEST(c.updated_at, c.created_at, COALESCE((SELECT MAX(m2.created_at) FROM messages m2 WHERE m2.conversation_id = c.id), c.updated_at)) DESC
             LIMIT $3 OFFSET $4;
           `;
           params = [uId, `%${trimmedQuery}%`, numLimit, numOffset];
         } else {
           sql = `
-            SELECT id, user_id, title, updated_at, created_at
-            FROM conversations
-            WHERE user_id = $1
-            ORDER BY updated_at DESC
+            SELECT c.id, c.user_id, c.title,
+              GREATEST(c.updated_at, c.created_at, COALESCE((SELECT MAX(m.created_at) FROM messages m WHERE m.conversation_id = c.id), c.updated_at)) AS updated_at,
+              c.created_at
+            FROM conversations c
+            WHERE c.user_id = $1
+            ORDER BY GREATEST(c.updated_at, c.created_at, COALESCE((SELECT MAX(m.created_at) FROM messages m WHERE m.conversation_id = c.id), c.updated_at)) DESC
             LIMIT $2 OFFSET $3;
           `;
           params = [uId, numLimit, numOffset];
@@ -309,8 +319,20 @@ export async function getConversations({
     });
   }
 
+  const getLatestInteractionTime = (c) => {
+    let t = new Date(c.updated_at || c.created_at || 0).getTime();
+    const msgs = inMemoryMessages.get(c.id);
+    if (msgs) {
+      for (const m of msgs.values()) {
+        const mt = new Date(m.created_at || 0).getTime();
+        if (mt > t) t = mt;
+      }
+    }
+    return t;
+  };
+
   return list
-    .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+    .sort((a, b) => getLatestInteractionTime(b) - getLatestInteractionTime(a))
     .slice(numOffset, numOffset + numLimit);
 }
 
@@ -421,6 +443,34 @@ export async function updateConversationTitle({
     }
   }
   return { success: true, title: cleanTitle };
+}
+
+/**
+ * Delete a specific message by ID from database and memory.
+ */
+export async function deleteMessage(id, { databaseUrl = process.env.DATABASE_URL } = {}) {
+  const msgId = toUuid(id);
+  if (!msgId) return { success: false };
+
+  for (const convMap of inMemoryMessages.values()) {
+    if (convMap.has(msgId)) {
+      convMap.delete(msgId);
+      break;
+    }
+  }
+
+  if (databaseUrl) {
+    try {
+      const sql = `DELETE FROM messages WHERE id = $1;`;
+      const pool = getPool(databaseUrl);
+      if (pool) {
+        await pool.query(sql, [msgId]);
+      }
+    } catch (err) {
+      logger.error('Failed to delete message from DB', { message_id: msgId, error: err.message });
+    }
+  }
+  return { success: true };
 }
 
 /**
@@ -573,17 +623,21 @@ export class ConversationStreamWriter {
    */
   async abort() {
     this.finished = true;
-    if (!this.databaseUrl || !this.accumulatedContent) return;
+    if (!this.databaseUrl) return;
 
     try {
-      await saveMessage({
-        id: this.assistantMessageId,
-        conversationId: this.conversationId,
-        userId: this.userId,
-        role: 'assistant',
-        content: this.accumulatedContent,
-        databaseUrl: this.databaseUrl,
-      });
+      if (this.accumulatedContent) {
+        await saveMessage({
+          id: this.assistantMessageId,
+          conversationId: this.conversationId,
+          userId: this.userId,
+          role: 'assistant',
+          content: this.accumulatedContent,
+          databaseUrl: this.databaseUrl,
+        });
+      } else {
+        await deleteMessage(this.assistantMessageId, { databaseUrl: this.databaseUrl });
+      }
     } catch {}
   }
 }
@@ -679,6 +733,23 @@ export async function createQuiz(quiz, questions = [], { databaseUrl } = {}) {
     const insertedQuestions = [];
     for (let i = 0; i < qList.length; i++) {
       const q = qList[i];
+      const rawOptions = Array.isArray(q.options) ? q.options : [];
+      const normalizedOptions = rawOptions.map((opt, idx) => {
+        if (opt && typeof opt === 'object' && typeof opt.text === 'string') {
+          return { id: typeof opt.id === 'number' ? opt.id : idx, text: opt.text };
+        }
+        return { id: idx, text: String(opt || '') };
+      });
+      let ans = q.correctAnswer ?? q.correct_answer ?? 0;
+      if (typeof ans === 'string' && /^[A-Za-z]$/.test(ans.trim())) {
+        const charIdx = ans.trim().toUpperCase().charCodeAt(0) - 65;
+        if (charIdx >= 0 && charIdx < normalizedOptions.length) {
+          ans = charIdx;
+        }
+      }
+      ans = parseInt(ans, 10);
+      if (isNaN(ans) || ans < 0 || ans >= (normalizedOptions.length || 1)) ans = 0;
+
       const qqRes = await client.query(
         `INSERT INTO quiz_questions (quiz_id, question_number, question_text, question_type, options, correct_answer, explanation, points, is_solved)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -688,8 +759,8 @@ export async function createQuiz(quiz, questions = [], { databaseUrl } = {}) {
           q.questionNumber || q.question_number || i + 1,
           q.questionText || q.question_text,
           q.questionType || q.question_type || 'multiple_choice',
-          JSON.stringify(q.options || []),
-          q.correctAnswer || q.correct_answer,
+          JSON.stringify(normalizedOptions),
+          String(ans),
           q.explanation || '',
           q.points ?? 10,
           Boolean(q.isSolved ?? q.is_solved ?? false),

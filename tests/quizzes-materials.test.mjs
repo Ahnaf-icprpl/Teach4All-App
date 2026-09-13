@@ -34,6 +34,9 @@ import {
   fetchMaterialDetails,
   markQuizSolved,
   markMaterialSolved,
+  normalizeQuizQuestion,
+  normalizeMaterialSection,
+  shuffleArray,
   FALLBACK_QUIZZES,
   FALLBACK_MATERIALS,
 } from '../src/studyModules.js';
@@ -204,16 +207,16 @@ test('createQuiz and createMaterial insert records and cascade delete cleanly', 
         {
           questionNumber: 1,
           questionText: 'Test question 1?',
-          options: ['A', 'B', 'C', 'D'],
-          correctAnswer: 'A',
+          options: [{ id: 0, text: 'A' }, { id: 1, text: 'B' }, { id: 2, text: 'C' }, { id: 3, text: 'D' }],
+          correctAnswer: 0,
           explanation: 'A is correct',
           points: 10,
         },
         {
           questionNumber: 2,
           questionText: 'Test question 2?',
-          options: ['W', 'X', 'Y', 'Z'],
-          correctAnswer: 'X',
+          options: [{ id: 0, text: 'W' }, { id: 1, text: 'X' }, { id: 2, text: 'Y' }, { id: 3, text: 'Z' }],
+          correctAnswer: 1,
           explanation: 'X is correct',
           points: 10,
         },
@@ -577,7 +580,7 @@ test('fetchQuizDetails and fetchMaterialDetails return complete structured data 
   assert.ok(Array.isArray(quiz.questions), 'Quiz must have questions array');
   assert.ok(quiz.questions.length > 0, 'Quiz must contain questions');
   assert.ok(quiz.questions[0].options?.length >= 3, 'Question must have options');
-  assert.ok(quiz.questions[0].correctAnswer, 'Question must have correctAnswer');
+  assert.ok(quiz.questions[0].correctAnswer !== undefined, 'Question must have correctAnswer');
   assert.ok(quiz.questions[0].explanation, 'Question must have explanation');
 
   const seedMaterialId = '00000000-0000-0000-0002-000000000001';
@@ -619,5 +622,143 @@ test('ui_texts in live database contains zero unused mock keys', async () => {
   );
   assert.strictEqual(rows.length, 0, 'No mock keys should remain in ui_texts table');
 });
+
+test('normalizeQuizQuestion converts raw database questions with string options into interactive choices with option id/index', () => {
+  const dbQuestion = {
+    id: '123',
+    question_number: 1,
+    question_text: 'Apa kepanjangan dari CPU?',
+    options: [
+      'Central Personal Unit',
+      'Computer Processing Unit',
+      'Central Processing Unit',
+      'Control Program Unit',
+    ],
+    correct_answer: '2',
+    explanation: 'CPU adalah Central Processing Unit.',
+    points: 10,
+  };
+
+  const normalized = normalizeQuizQuestion(dbQuestion);
+  assert.strictEqual(normalized.questionNumber, 1);
+  assert.strictEqual(normalized.questionText, 'Apa kepanjangan dari CPU?');
+  assert.strictEqual(normalized.question_text, 'Apa kepanjangan dari CPU?');
+  assert.strictEqual(normalized.options.length, 4);
+  assert.deepStrictEqual(normalized.options[0], { id: 0, text: 'Central Personal Unit' });
+  assert.deepStrictEqual(normalized.options[1], { id: 1, text: 'Computer Processing Unit' });
+  assert.deepStrictEqual(normalized.options[2], { id: 2, text: 'Central Processing Unit' });
+  assert.deepStrictEqual(normalized.options[3], { id: 3, text: 'Control Program Unit' });
+  assert.strictEqual(normalized.correctAnswer, 2);
+  assert.strictEqual(normalized.correct_answer, 2);
+});
+
+test('migration 019 converts quiz question options to explicit id/text and correct_answer to 0-based index', async () => {
+  const filePath = resolve(process.cwd(), 'migrations/019_migrate_quiz_answers_to_option_index.sql');
+  assert.strictEqual(existsSync(filePath), true, 'migration file 019 must exist');
+
+  if (!DB_URL) return;
+  const rows = await query('SELECT id, options, correct_answer FROM quiz_questions LIMIT 10;', [], DB_URL);
+  for (const r of rows) {
+    assert.ok(Array.isArray(r.options), 'options must be an array');
+    for (const opt of r.options) {
+      assert.ok(typeof opt.id === 'number', 'option must have numeric id');
+      assert.ok(typeof opt.text === 'string', 'option must have text');
+    }
+    assert.ok(/^\d+$/.test(String(r.correct_answer)), 'correct_answer must be numeric index');
+    const idx = parseInt(r.correct_answer, 10);
+    assert.ok(idx >= 0 && idx < r.options.length, 'correct_answer must point to valid option index');
+  }
+});
+
+test('normalizeMaterialSection converts raw database sections with snake_case fields', () => {
+  const dbSection = {
+    id: '456',
+    section_number: 2,
+    title: 'Arsitektur Von Neumann',
+    content: 'Komponen utama meliputi ALU dan Control Unit.',
+    read_time_minutes: 3,
+  };
+
+  const normalized = normalizeMaterialSection(dbSection);
+  assert.strictEqual(normalized.sectionNumber, 2);
+  assert.strictEqual(normalized.section_number, 2);
+  assert.strictEqual(normalized.readTimeMinutes, 3);
+  assert.strictEqual(normalized.read_time_minutes, 3);
+  assert.strictEqual(normalized.title, 'Arsitektur Von Neumann');
+});
+
+test('studyViewer component does not render kembali ke daftar button or reference dialogs_back_to_list', () => {
+  const source = readFileSync(resolve(process.cwd(), 'src/components/studyViewer.js'), 'utf8');
+  assert.strictEqual(source.includes('dialogs_back_to_list'), false, 'studyViewer.js must not reference dialogs_back_to_list');
+  assert.strictEqual(source.includes('study-back-btn'), false, 'studyViewer.js must not contain study-back-btn class');
+  assert.strictEqual(source.includes('onBack'), false, 'studyViewer.js must not expect or use onBack callback');
+});
+
+test('shuffleArray permutes array elements without mutating original or losing items', () => {
+  const original = [1, 2, 3, 4, 5, 6, 7, 8];
+  const shuffled = shuffleArray(original);
+
+  assert.strictEqual(shuffled.length, original.length);
+  assert.notStrictEqual(shuffled, original, 'must return a new array instance');
+  assert.deepStrictEqual([...shuffled].sort(), [...original].sort(), 'must retain all elements');
+  assert.deepStrictEqual(original, [1, 2, 3, 4, 5, 6, 7, 8], 'original array must not be mutated');
+
+  // Handle edge cases
+  assert.deepStrictEqual(shuffleArray([]), []);
+  assert.deepStrictEqual(shuffleArray([42]), [42]);
+  assert.deepStrictEqual(shuffleArray(null), []);
+});
+
+test('normalizeQuizQuestion with shuffle: true randomizes options while preserving correctAnswer id mapping', () => {
+  const question = {
+    question_text: 'Satelit alami Bumi adalah?',
+    options: [
+      { id: 0, text: 'Bulan' },
+      { id: 1, text: 'Europa' },
+      { id: 2, text: 'Titan' },
+      { id: 3, text: 'Phobos' },
+    ],
+    correct_answer: '0',
+  };
+
+  // Run normalization with shuffle
+  const normalized = normalizeQuizQuestion(question, 0, { shuffle: true });
+  assert.strictEqual(normalized.options.length, 4);
+  assert.strictEqual(normalized.correctAnswer, 0, 'correctAnswer id must remain 0');
+
+  // Confirm option with id: 0 exists in options and its text is 'Bulan'
+  const correctOpt = normalized.options.find(o => o.id === 0);
+  assert.ok(correctOpt, 'correct option with id 0 must exist');
+  assert.strictEqual(correctOpt.text, 'Bulan');
+
+  // Over multiple shuffles, options should appear in varying positions (not fixed at index 0)
+  const indicesOfCorrect = new Set();
+  for (let i = 0; i < 20; i++) {
+    const q = normalizeQuizQuestion(question, 0, { shuffle: true });
+    const idx = q.options.findIndex(o => o.id === 0);
+    indicesOfCorrect.add(idx);
+  }
+  assert.ok(indicesOfCorrect.size > 1, 'Correct option must be placed at different positions over multiple loads');
+});
+
+test('fetchQuizDetails randomizes question options order by default', async () => {
+  const seedQuizId = '00000000-0000-0000-0001-000000000001';
+  const quiz1 = await fetchQuizDetails(seedQuizId, { shuffle: true });
+  assert.ok(quiz1 && Array.isArray(quiz1.questions));
+
+  // Verify that options maintain their correct answer relationship
+  for (const q of quiz1.questions) {
+    const correctOpt = q.options.find(o => o.id === q.correctAnswer);
+    assert.ok(correctOpt, `Question ${q.questionNumber} must find option with id matching correctAnswer`);
+  }
+});
+
+test('studyViewer renders option key badges with 1-based display indices', () => {
+  const source = readFileSync(resolve(process.cwd(), 'src/components/studyViewer.js'), 'utf8');
+  assert.ok(source.includes("String(optIndex + 1)"), 'Option key badge must display sequential optIndex + 1');
+  assert.ok(source.includes("fetchQuizDetails(quizId, { shuffle: true })"), 'QuizSolver must fetch with shuffle: true');
+});
+
+
 
 

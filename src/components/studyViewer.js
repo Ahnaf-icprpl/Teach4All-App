@@ -1,19 +1,27 @@
 import van from 'vanjs-core';
 import { icon } from '../icons.js';
 import { startTopicChat, toast } from '../state.js';
-import { fetchQuizDetails, fetchMaterialDetails, markQuizSolved, markMaterialSolved } from '../studyModules.js';
+import {
+  fetchQuizDetails,
+  fetchMaterialDetails,
+  markQuizSolved,
+  markMaterialSolved,
+  normalizeQuizQuestion,
+  normalizeMaterialSection,
+  shuffleArray,
+} from '../studyModules.js';
 import { t } from '../uiTexts.js';
 
 const { div, h2, h3, p, span, button } = van.tags;
 
-export function QuizSolver(quizId, onBack) {
+export function QuizSolver(quizId) {
   const loading = van.state(true);
   const quiz = van.state(null);
   const currentIndex = van.state(0);
   const userAnswers = van.state({});
   const isCompleted = van.state(false);
 
-  fetchQuizDetails(quizId).then(data => {
+  fetchQuizDetails(quizId, { shuffle: true }).then(data => {
     quiz.val = data;
     loading.val = false;
   }).catch(() => {
@@ -28,11 +36,10 @@ export function QuizSolver(quizId, onBack) {
     if (!qData) {
       return div({ class: 'study-viewer-empty' },
         p(() => t('dialogs_quiz_not_found')),
-        button({ class: 'secondary-button', onclick: onBack }, icon('arrowRight'), span(() => t('dialogs_back_to_list'))),
       );
     }
 
-    const questions = qData.questions || [];
+    const questions = Array.isArray(qData.questions) ? qData.questions : [];
     const totalQuestions = questions.length;
     const currentQ = questions[currentIndex.val] || {};
     const answeredCount = Object.keys(userAnswers.val).length;
@@ -76,16 +83,21 @@ export function QuizSolver(quizId, onBack) {
                 userAnswers.val = {};
                 currentIndex.val = 0;
                 isCompleted.val = false;
+                if (quiz.val && Array.isArray(quiz.val.questions)) {
+                  quiz.val = {
+                    ...quiz.val,
+                    questions: quiz.val.questions.map(q => ({
+                      ...q,
+                      options: shuffleArray(q.options),
+                    })),
+                  };
+                }
               },
             }, icon('compose'), span(() => t('dialogs_quiz_restart_btn'))),
             button({
               class: 'secondary-button',
               onclick: () => startTopicChat('quiz', qData.prompt),
             }, icon('chat'), span(() => t('dialogs_btn_chat'))),
-            button({
-              class: 'secondary-button',
-              onclick: onBack,
-            }, span(() => t('dialogs_back_to_list'))),
           ),
         ),
       );
@@ -93,39 +105,36 @@ export function QuizSolver(quizId, onBack) {
 
     return div({ class: 'study-viewer-container' },
       div({ class: 'study-header-nav' },
-        button({ class: 'secondary-button study-back-btn', onclick: onBack },
-          icon('chevron', 'study-back-icon'),
-          span(() => t('dialogs_back_to_list')),
-        ),
         div({ class: 'study-progress-badge' },
           () => `${t('dialogs_quiz_question_label')} ${currentIndex.val + 1} ${t('dialogs_quiz_of_label')} ${totalQuestions}`,
         ),
       ),
       div({ class: 'study-question-card' },
-        h3({ class: 'study-question-title' }, currentQ.questionText || ''),
+        h3({ class: 'study-question-title' }, currentQ.questionText || currentQ.question_text || ''),
         div({ class: 'study-options-list' },
-          (currentQ.options || []).map(opt => {
-            const isSelected = currentAnswer === opt.key;
-            const isCorrect = opt.key === currentQ.correctAnswer;
+          (currentQ.options || []).map((opt, optIndex) => {
+            const hasAnswered = currentAnswer !== undefined && currentAnswer !== null;
+            const isSelected = hasAnswered && currentAnswer === opt.id;
+            const isCorrect = opt.id === currentQ.correctAnswer;
             let optClass = 'study-option-button';
-            if (currentAnswer) {
+            if (hasAnswered) {
               if (isCorrect) optClass += ' option-correct';
               else if (isSelected) optClass += ' option-incorrect';
             }
             return button({
               class: optClass,
-              disabled: Boolean(currentAnswer),
+              disabled: hasAnswered,
               onclick: () => {
-                if (currentAnswer) return;
-                userAnswers.val = { ...userAnswers.val, [currentIndex.val]: opt.key };
+                if (hasAnswered) return;
+                userAnswers.val = { ...userAnswers.val, [currentIndex.val]: opt.id };
               },
             },
-            span({ class: 'study-option-key' }, opt.key),
+            span({ class: 'study-option-key' }, String(optIndex + 1)),
             span({ class: 'study-option-text' }, opt.text),
             );
           }),
         ),
-        currentAnswer ? div({
+        (currentAnswer !== undefined && currentAnswer !== null) ? div({
           class: `study-feedback-box ${currentAnswer === currentQ.correctAnswer ? 'feedback-success' : 'feedback-error'}`,
         },
         div({ class: 'study-feedback-heading' },
@@ -158,7 +167,7 @@ export function QuizSolver(quizId, onBack) {
   };
 }
 
-export function MaterialReader(materialId, onBack) {
+export function MaterialReader(materialId) {
   const loading = van.state(true);
   const material = van.state(null);
   const currentSectionIndex = van.state(0);
@@ -178,11 +187,10 @@ export function MaterialReader(materialId, onBack) {
     if (!mData) {
       return div({ class: 'study-viewer-empty' },
         p(() => t('dialogs_material_not_found')),
-        button({ class: 'secondary-button', onclick: onBack }, span(() => t('dialogs_back_to_list'))),
       );
     }
 
-    const sections = mData.sections || [];
+    const sections = (mData.sections || []).map(normalizeMaterialSection).filter(Boolean);
     const totalSections = sections.length;
     const currentSec = sections[currentSectionIndex.val] || {};
 
@@ -194,10 +202,6 @@ export function MaterialReader(materialId, onBack) {
 
     return div({ class: 'study-viewer-container' },
       div({ class: 'study-header-nav' },
-        button({ class: 'secondary-button study-back-btn', onclick: onBack },
-          icon('chevron', 'study-back-icon'),
-          span(() => t('dialogs_back_to_list')),
-        ),
         div({ class: 'study-progress-badge' },
           () => `${t('dialogs_material_section_label')} ${currentSectionIndex.val + 1} ${t('dialogs_quiz_of_label')} ${totalSections}`,
         ),
@@ -206,7 +210,7 @@ export function MaterialReader(materialId, onBack) {
         div({ class: 'study-material-header' },
           h2({ class: 'study-material-title' }, currentSec.title || mData.title),
           span({ class: 'study-material-read-time' },
-            `${currentSec.readTimeMinutes || 2} ${t('dialogs_meta_read_time_suffix')}`,
+            `${currentSec.readTimeMinutes || currentSec.read_time_minutes || 2} ${t('dialogs_meta_read_time_suffix')}`,
           ),
         ),
         div({ class: 'study-material-body' },

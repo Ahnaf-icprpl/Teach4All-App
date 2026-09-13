@@ -24,6 +24,7 @@ import { handleMaterialsRequest } from './materialsApi.js';
 import { logger, logDevRequest } from './logger.js';
 import { metrics } from './metrics.js';
 import { buildWebSearchPlugin, buildWebSearchTool, isWebSearchRequested } from './webSearch.js';
+import { buildQuizTool, accumulateToolCalls, handleCompletedToolCalls } from './quizTool.js';
 import { createChatMiddleware, dispatchApi } from './chatMiddleware.js';
 
 export const DEFAULT_MODEL = 'google/gemini-2.5-flash-lite';
@@ -203,8 +204,12 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
   const cachedProvider = conversationId ? await getConversationProvider(conversationId, { redisClient }) : null;
   const providerRouting = buildProviderRoutingPayload(conversationId, cachedProvider);
 
-  const enableSearch = isWebSearchRequested(webSearch);
+  const isQuizRequest = (promptText && /\b(kuis|quiz|soal|latihan|evaluasi|test me)\b/i.test(promptText)) ||
+    (Array.isArray(messages) && messages.some(m => m && m.role === 'user' && /\b(kuis|quiz|soal|latihan|evaluasi|test me)\b/i.test(m.text || m.content || '')));
+
+  const enableSearch = isWebSearchRequested(webSearch, { isQuiz: isQuizRequest });
   const webPlugin = enableSearch ? buildWebSearchPlugin(serverEnv) : null;
+  const quizTool = buildQuizTool(serverEnv);
 
   const clientLoc = getClientLocation(req);
   logger.info('Chat stream requested', {
@@ -218,6 +223,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
     messages_count: messages.length,
     cached_provider: cachedProvider || 'none',
     web_search: enableSearch ? (webPlugin?.engine || 'parallel') : 'disabled',
+    tools_count: 1,
   });
 
   const formattedMessages = formatMessages(messages);
@@ -244,6 +250,8 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
         messages: formattedMessages,
         stream: true,
         user: userId || clientIp,
+        tools: [quizTool],
+        ...(isQuizRequest ? { tool_choice: { type: 'function', function: { name: 'create_quiz' } } } : {}),
         ...(webPlugin ? { plugins: [webPlugin] } : {}),
         ...providerRouting,
       }),
@@ -314,6 +322,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
     let chunkCount = 0;
     let bytesStreamed = 0;
     let accumulatedText = '';
+    const accumulatedToolCalls = {};
     const citations = [];
 
     try {
@@ -322,7 +331,6 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
         if (done) break;
         chunkCount++;
         if (value) bytesStreamed += value.length;
-        res.write(value);
 
         // Stream text deltas to DB asynchronously
         sseBuffer += decoder.decode(value, { stream: true });
@@ -345,7 +353,12 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
             const delta = json.choices?.[0]?.delta?.content || '';
             if (delta) {
               accumulatedText += delta;
+              res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: delta } }] })}\n\n`);
               streamWriter.writeChunk(delta);
+            }
+            const toolCallsDelta = json.choices?.[0]?.delta?.tool_calls;
+            if (toolCallsDelta) {
+              accumulateToolCalls(accumulatedToolCalls, toolCallsDelta);
             }
             const anns = json.choices?.[0]?.delta?.annotations || [];
             for (const ann of anns) {
@@ -367,7 +380,14 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
             const delta = json.choices?.[0]?.delta?.content || '';
             if (delta) {
               accumulatedText += delta;
-              streamWriter.writeChunk(delta);
+              if (!isQuizRequest) {
+                res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: delta } }] })}\n\n`);
+                streamWriter.writeChunk(delta);
+              }
+            }
+            const toolCallsDelta = json.choices?.[0]?.delta?.tool_calls;
+            if (toolCallsDelta) {
+              accumulateToolCalls(accumulatedToolCalls, toolCallsDelta);
             }
             const anns = json.choices?.[0]?.delta?.annotations || [];
             for (const ann of anns) {
@@ -381,11 +401,63 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
         }
       }
 
+      if (Object.keys(accumulatedToolCalls).length > 0) {
+        if (!res.writableEnded) {
+          res.write('data: {"type":"quiz_status","status":"building"}\n\n');
+        }
+        await handleCompletedToolCalls({
+          toolCallsMap: accumulatedToolCalls,
+          serverEnv,
+          userId,
+          clientIp,
+          conversationId,
+          formattedMessages,
+          streamWriter,
+          res,
+          controller,
+          apiKey,
+          model,
+          providerRouting,
+        });
+      } else if (isQuizRequest && apiKey && !controller.signal.aborted) {
+        if (!res.writableEnded) {
+          res.write('data: {"type":"quiz_status","status":"building"}\n\n');
+        }
+        await handleCompletedToolCalls({
+          toolCallsMap: {
+            0: {
+              id: `call_quiz_${Date.now()}_init`,
+              type: 'function',
+              function: { name: 'create_quiz', arguments: '{}' },
+            },
+          },
+          serverEnv,
+          userId,
+          clientIp,
+          conversationId,
+          formattedMessages: [
+            ...formattedMessages,
+            { role: 'assistant', content: accumulatedText || 'Attempted to respond in text.' },
+            { role: 'user', content: 'CRITICAL INSTRUCTION: You must NOT answer in plain conversational text or apologies. You MUST call the create_quiz function immediately with arguments: title, category, summary, difficulty, icon, color, and questions.' },
+          ],
+          streamWriter,
+          res,
+          controller,
+          apiKey,
+          model,
+          providerRouting,
+        });
+      }
+
       if (citations.length > 0 && !accumulatedText.includes('http')) {
         const sourcesBlock = '\n\n**Sumber:**\n' + citations.map(c => `- [${c.title || c.url}](${c.url})`).join('\n');
         accumulatedText += sourcesBlock;
         res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: sourcesBlock } }] })}\n\n`);
         streamWriter.writeChunk(sourcesBlock);
+      }
+
+      if (!res.writableEnded) {
+        res.write('data: [DONE]\n\n');
       }
 
       await streamWriter.finish();

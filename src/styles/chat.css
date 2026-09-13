@@ -44,8 +44,7 @@
   .suggestion-detail { font-size: 11.5px; color: var(--medium-gray); margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   .suggestion-arrow { position: absolute; right: 12px; top: 20px; height: 13px; width: 13px; color: var(--terracotta); opacity: 0; transform: translateX(-4px); transition: opacity .15s, transform .15s; }
   .suggestion-card:hover .suggestion-arrow, .suggestion-card:focus-visible .suggestion-arrow { opacity: 1; transform: translateX(0); }
-  .workspace-footer { display: flex; align-items: center; justify-content: center; gap: 7px; color: var(--medium-gray); font-size: 9px; letter-spacing: .1px; padding: 20px 15px 23px; flex-shrink: 0; }
-  .workspace-footer .icon { width: 15px; height: 15px; opacity: .8; color: var(--dusty-terracotta); }
+  .workspace-footer { display: flex; align-items: center; justify-content: center; text-align: center; color: var(--medium-gray); font-size: 14px; font-weight: 500; letter-spacing: .15px; padding: 20px 15px 24px; flex-shrink: 0; }
   .messages { display: none; width: 100%; flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; outline-offset: -2px; }
   .has-messages .welcome, .has-messages .suggestions { display: none; }
   .has-messages .chat-stage { padding: 0; overflow: hidden; }
@@ -53,9 +52,12 @@
   .message-content { max-width: 800px; margin: auto; padding: 24px 40px 16px; }
   .message { margin-bottom: 30px; font-size: 14px; line-height: 1.85; }
   .message-user { display: flex; justify-content: flex-end; margin-bottom: 32px; }
-  .message-user .message-text { max-width: 85%; padding: 12px 19px; border-radius: 19px 19px 5px 19px; background: var(--off-white); border: 0; color: var(--near-black); box-shadow: 0 1px 3px rgba(34, 46, 60, 0.04); }
+  .user-message-bubble-wrap { display: inline-flex; align-items: flex-end; justify-content: flex-end; gap: 8px; max-width: 85%; }
+  .user-message-bubble-wrap .message-text { max-width: 100%; padding: 12px 19px; border-radius: 19px 19px 5px 19px; background: var(--off-white); border: 0; color: var(--near-black); box-shadow: 0 1px 3px rgba(34, 46, 60, 0.04); white-space: pre-wrap; }
+  .copy-prompt-button { order: -1; opacity: 0; transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease; flex-shrink: 0; margin-bottom: 4px; }
+  .message-user:hover .copy-prompt-button, .copy-prompt-button:focus-visible { opacity: 1; }
+  @media (hover: none) { .copy-prompt-button { opacity: 0.65; } }
   .message-text { overflow-wrap: anywhere; color: var(--near-black); }
-  .message-user .message-text { white-space: pre-wrap; }
   .markdown-body { display: flex; flex-direction: column; gap: 9px; }
   .markdown-p { margin: 0; line-height: 1.75; }
   .markdown-heading { font-weight: 600; line-height: 1.35; color: inherit; margin: 6px 0 2px; }
@@ -84,6 +86,57 @@
   .markdown-link { color: var(--terracotta); text-decoration: underline; text-underline-offset: 2px; }
   .markdown-link:hover { opacity: 0.85; }
   .strikethrough { text-decoration: line-through; opacity: 0.75; }
+  .chat-quiz-card {
+    margin: 14px 0;
+    padding: 16px 18px;
+    background: var(--off-white);
+    border: 1px solid var(--muted-gray);
+    border-left: 4px solid var(--terracotta);
+    border-radius: 14px;
+    box-shadow: 0 2px 6px rgba(34, 46, 60, 0.04);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .chat-quiz-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .chat-quiz-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 9px;
+    background: rgba(184, 80, 66, 0.08);
+    color: var(--terracotta);
+    border-radius: 9999px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .chat-quiz-badge .icon { width: 13px; height: 13px; }
+  .chat-quiz-count { font-size: 11px; color: var(--medium-gray); font-weight: 500; }
+  .chat-quiz-title { margin: 2px 0 0; font-size: 15px; font-weight: 650; color: var(--near-black); line-height: 1.35; }
+  .chat-quiz-start-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    margin-top: 4px;
+    padding: 8px 16px;
+    background: var(--terracotta);
+    color: #ffffff;
+    border: 0;
+    border-radius: 9px;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    align-self: flex-start;
+    transition: background 0.15s, transform 0.15s;
+  }
+  .chat-quiz-start-btn:hover { background: var(--terracotta-hover); transform: translateY(-1px); }
+  .chat-quiz-start-btn .icon { width: 15px; height: 15px; }
   .message-error .message-text { color: var(--terracotta); background: rgba(159, 81, 58, 0.08); padding: 12px 16px; border-radius: 12px; border: 0; }
   .assistant-label { display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 12px; margin-bottom: 13px; color: var(--near-black); }
   .assistant-mark { display: inline-flex; align-items: center; justify-content: center; width: 29px; height: 29px; border-radius: 9px; background: var(--gold-amber); color: var(--off-white); }
@@ -94,6 +147,8 @@
   .typing-indicator { display: inline-flex; align-items: center; gap: 5px; padding: 4px 2px; min-height: 22px; vertical-align: middle; }
   .searching-web-indicator { display: inline-flex; align-items: center; gap: 7px; padding: 5px 12px; border-radius: 12px; background: rgba(184, 80, 66, 0.08); border: 1px solid rgba(184, 80, 66, 0.2); font-size: 11.5px; color: var(--slate-gray); font-weight: 500; }
   .searching-web-indicator .icon { width: 14px; height: 14px; color: var(--terracotta); }
+  .building-quiz-indicator { background: rgba(43, 90, 158, 0.08); border-color: rgba(43, 90, 158, 0.2); }
+  .building-quiz-indicator .icon { color: #2b5a9e; }
   .spin-slow { animation: spin 3s linear infinite; }
   .typing-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--terracotta); opacity: 0.3; animation: typing-pulse 1.3s infinite ease-in-out; }
   .typing-dot:nth-child(1) { animation-delay: 0s; }
@@ -259,7 +314,7 @@
       transform: none;
       align-self: center;
     }
-    .workspace-footer { padding-top: 14px; padding-bottom: max(17px, env(safe-area-inset-bottom)); font-size: 8px; }
+    .workspace-footer { padding-top: 14px; padding-bottom: max(17px, env(safe-area-inset-bottom)); font-size: 12.5px; }
     .has-messages .composer-wrap {
       width: calc(100% - 20px);
       margin-top: 8px;

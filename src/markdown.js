@@ -1,6 +1,8 @@
 import van from 'vanjs-core';
 import { icon } from './icons.js';
-import { toast } from './state.js';
+import { toast, modal } from './state.js';
+import { fetchQuizzes } from './studyModules.js';
+import { t } from './uiTexts.js';
 
 const {
   div, p, h1, h2, h3, h4, ul, ol, li, pre, code,
@@ -72,6 +74,42 @@ export function renderMarkdown(content) {
 
   while (i < lines.length) {
     const line = lines[i];
+
+    // Interactive Quiz Card marker (:::quiz-card{...}:::)
+    const quizMatch = line.trim().match(/^:::quiz-card\{([^}]+)\}:::$/);
+    if (quizMatch) {
+      const attrsStr = quizMatch[1];
+      const attrs = {};
+      const attrRegex = /(\w+)="([^"]*)"/g;
+      let m;
+      while ((m = attrRegex.exec(attrsStr)) !== null) {
+        attrs[m[1]] = m[2];
+      }
+      const quizId = attrs.id;
+      const title = attrs.title || 'Kuis Interaktif';
+      const category = attrs.category || 'Kuis';
+      const count = attrs.count || '20';
+
+      elements.push(
+        div({ class: 'chat-quiz-card' },
+          div({ class: 'chat-quiz-card-header' },
+            div({ class: 'chat-quiz-badge' }, icon('bulb'), span(category)),
+            span({ class: 'chat-quiz-count' }, () => `${count} ${t('dialogs_meta_questions_suffix')}`),
+          ),
+          h3({ class: 'chat-quiz-title' }, title),
+          button({
+            type: 'button',
+            class: 'chat-quiz-start-btn',
+            onclick: () => {
+              fetchQuizzes().catch(() => {});
+              modal.val = { type: 'quiz-solver', id: quizId };
+            },
+          }, icon('play'), span(() => t('dialogs_quiz_start_button'))),
+        )
+      );
+      i++;
+      continue;
+    }
 
     // 1. Fenced code blocks (```lang ... ```)
     if (line.trim().startsWith('```')) {

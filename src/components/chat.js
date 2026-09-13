@@ -4,7 +4,7 @@ import { MAX_INPUT } from '../storage.js';
 import {
   currentChat, hasMessages, draft, setDraft, sendMessage, focusComposer,
   modal, toast, online, offlineReady, storageError, loading, messagesLoading,
-  webSearchEnabled, toggleWebSearch, searchingWeb,
+  webSearchEnabled, toggleWebSearch, searchingWeb, buildingQuiz,
 } from '../state.js';
 import { getModel } from '../router.js';
 import { renderMarkdown } from '../markdown.js';
@@ -64,22 +64,41 @@ function Messages() {
               isError ? span({ class: 'demo-label error-label' }, () => t('chat_notice_label')) : null,
             )
           : h2({ class: 'sr-only' }, () => t('chat_user_aria')),
-        div({ class: 'message-text' },
-          message.text
-            ? renderMarkdown(message.text)
-            : (isGenerating
-                ? (searchingWeb.val
-                    ? span({ class: 'searching-web-indicator' },
-                        icon('globe', 'spin-slow'),
-                        () => t('chat_web_search_status'),
-                      )
-                    : span({ class: 'typing-indicator', 'aria-label': () => t('chat_typing_aria'), title: () => t('chat_typing_aria') },
-                        span({ class: 'typing-dot' }),
-                        span({ class: 'typing-dot' }),
-                        span({ class: 'typing-dot' }),
-                      ))
-                : '')
-        ),
+        message.role === 'user'
+          ? div({ class: 'user-message-bubble-wrap' },
+              div({ class: 'message-text' },
+                message.text ? renderMarkdown(message.text) : ''
+              ),
+              button({
+                type: 'button',
+                class: 'icon-button copy-button copy-prompt-button',
+                'aria-label': () => t('chat_copy_prompt_aria'),
+                title: () => t('chat_copy_prompt_aria'),
+                onclick: () => copyText(message.text),
+              }, icon('copy')),
+            )
+          : div({ class: 'message-text' },
+              message.text
+                ? renderMarkdown(message.text)
+                : (isGenerating
+                    ? (buildingQuiz.val
+                        ? span({ class: 'searching-web-indicator building-quiz-indicator' },
+                            icon('globe', 'spin-slow'),
+                            icon('bulb', 'spin-slow'),
+                            () => t('chat_quiz_building_status'),
+                          )
+                        : (searchingWeb.val
+                            ? span({ class: 'searching-web-indicator' },
+                                icon('globe', 'spin-slow'),
+                                () => t('chat_web_search_status'),
+                              )
+                            : span({ class: 'typing-indicator', 'aria-label': () => t('chat_typing_aria'), title: () => t('chat_typing_aria') },
+                                span({ class: 'typing-dot' }),
+                                span({ class: 'typing-dot' }),
+                                span({ class: 'typing-dot' }),
+                              )))
+                    : '')
+            ),
         message.role === 'assistant' && message.text && !loading.val
           ? button({
               class: 'icon-button copy-button',
@@ -207,7 +226,6 @@ export function Chat() {
       Suggestions(),
     ),
     div({ class: 'workspace-footer' },
-      icon('mountain'),
       span(() => t('chat_footer_text')),
     ),
   );

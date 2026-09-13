@@ -62,9 +62,7 @@
   .topic-empty-state { padding: 36px 16px; text-align: center; color: var(--muted); font-size: 13px; }
   .study-viewer-container { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; gap: 14px; }
   .study-viewer-loading, .study-viewer-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 220px; gap: 14px; text-align: center; }
-  .study-header-nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0; padding-bottom: 4px; border-bottom: 1px solid rgba(34, 46, 60, 0.06); }
-  .study-back-btn { padding: 6px 10px; font-size: 11px; min-height: 28px; border-radius: 6px; }
-  .study-back-icon { width: 12px; height: 12px; transform: rotate(90deg); }
+  .study-header-nav { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-shrink: 0; padding-bottom: 4px; border-bottom: 1px solid rgba(34, 46, 60, 0.06); }
   .study-progress-badge { font-size: 11.5px; font-weight: 600; color: var(--terracotta); background: var(--hover); padding: 3px 10px; border-radius: 12px; }
   .study-question-card { background: var(--bg); border: 1px solid rgba(34, 46, 60, 0.08); border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 14px; }
   .study-question-title { font-size: 14px; font-weight: 600; line-height: 1.45; color: var(--text); margin: 0; }
