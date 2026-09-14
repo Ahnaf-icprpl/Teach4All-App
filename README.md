@@ -40,6 +40,26 @@ The app runs entirely in your browser. No backend required.
 | `npm test`        | Run integration tests                          |
 | `npm run test:e2e` | Run Playwright end-to-end tests              |
 
+## Running with Docker
+
+### Build and Run Standalone Container
+
+```bash
+# Build the Docker image
+docker build -t teach4all .
+
+# Run the container
+docker run -p 3000:3000 --env-file .env teach4all
+```
+
+The container starts the production Express server listening on `http://localhost:3000`.
+
+### Run with Docker Compose (PostgreSQL included)
+
+```bash
+docker compose up -d
+```
+
 ## Architecture
 
 ```
