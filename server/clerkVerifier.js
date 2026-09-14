@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { syncUserToDb, getUserFromDb } from './db.js';
 
-let jwksCache = { keys: null, expiresAt: 0 };
+const jwksCache = new Map();
 const userCache = new Map();
 const sessionCache = new Map();
 
@@ -93,24 +93,27 @@ export async function getClerkJwks(frontendApi) {
   if (!frontendApi) {
     throw new Error('Clerk frontendApi is not configured');
   }
+  const clean = frontendApi.replace(/\/$/, '');
   const now = Date.now();
-  if (jwksCache.keys && jwksCache.expiresAt > now) {
-    return jwksCache.keys;
+  const cached = jwksCache.get(clean);
+  if (cached && cached.expiresAt > now) {
+    return cached.keys;
   }
   try {
-    const url = `${frontendApi.replace(/\/$/, '')}/.well-known/jwks.json`;
+    const url = `${clean}/.well-known/jwks.json`;
     const res = await fetch(url);
     if (!res.ok) {
       throw new Error(`Failed to fetch JWKS (${res.status})`);
     }
     const data = await res.json();
-    jwksCache = {
-      keys: data.keys || [],
+    const keys = data.keys || [];
+    jwksCache.set(clean, {
+      keys,
       expiresAt: now + 3600 * 1000, // 1 hour cache
-    };
-    return jwksCache.keys;
+    });
+    return keys;
   } catch (err) {
-    if (jwksCache.keys) return jwksCache.keys;
+    if (cached?.keys) return cached.keys;
     throw err;
   }
 }
@@ -136,15 +139,34 @@ export async function verifyClerkJwt(token, frontendApi) {
     throw new Error('Token header missing kid');
   }
 
-  let keys = await getClerkJwks(frontendApi);
-  let jwk = keys.find(k => k.kid === header.kid);
-  if (!jwk) {
-    jwksCache.expiresAt = 0;
+  const endpoints = [];
+  if (payload.iss && typeof payload.iss === 'string' && payload.iss.startsWith('http')) {
     try {
-      keys = await getClerkJwks(frontendApi);
-      jwk = keys.find(k => k.kid === header.kid);
+      const h = new URL(payload.iss).hostname;
+      if (h.endsWith('.clerk.accounts.dev') || h.endsWith('.teach4all.my.id') || h.includes('clerk.')) {
+        endpoints.push(payload.iss.replace(/\/$/, ''));
+      }
     } catch {}
   }
+  if (frontendApi) {
+    const cleanFrontend = frontendApi.replace(/\/$/, '');
+    if (!endpoints.includes(cleanFrontend)) endpoints.push(cleanFrontend);
+  }
+
+  let jwk = null;
+  for (const ep of endpoints) {
+    try {
+      let keys = await getClerkJwks(ep);
+      jwk = keys.find(k => k.kid === header.kid);
+      if (!jwk) {
+        jwksCache.delete(ep);
+        keys = await getClerkJwks(ep);
+        jwk = keys.find(k => k.kid === header.kid);
+      }
+      if (jwk) break;
+    } catch {}
+  }
+
   if (!jwk) {
     throw new Error(`Public key not found for kid: ${header.kid}`);
   }
@@ -161,7 +183,10 @@ export async function verifyClerkJwt(token, frontendApi) {
   const now = Math.floor(Date.now() / 1000);
   const SKEW = 60; // 60s clock skew tolerance
   if (payload.exp && payload.exp < now - SKEW) {
-    throw new Error('Token has expired');
+    const err = new Error('Token has expired');
+    err.payload = payload;
+    err.signatureVerified = true;
+    throw err;
   }
   if (payload.nbf && payload.nbf > now + SKEW) {
     throw new Error('Token is not active yet');
@@ -399,7 +424,7 @@ export async function authenticateClerkRequest(req, serverEnv = {}) {
         user: resolvedUser,
         sessionId: payload.sid || null,
       };
-    } catch {
+    } catch (jwtErr) {
       // Fallback: If JWT is expired or verification failed, inspect payload for session ID
       try {
         const parts = cred.token.split('.');
@@ -421,6 +446,11 @@ export async function authenticateClerkRequest(req, serverEnv = {}) {
             if (dbUser) {
               return { authenticated: true, user: dbUser, sessionId: payload.sid || null };
             }
+          }
+          if (jwtErr?.signatureVerified && payload.sub) {
+            let user = dbUrl ? await getUserFromDb(payload.sub, dbUrl) : null;
+            const resolvedUser = user || { id: payload.sub, name: 'User', email: null, avatarUrl: null };
+            return { authenticated: true, user: resolvedUser, sessionId: payload.sid || null };
           }
         }
       } catch {}

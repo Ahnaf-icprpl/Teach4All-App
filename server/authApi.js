@@ -89,17 +89,24 @@ export async function handleLoginRequest(req, res, serverEnv = {}) {
   }
 
   if (authResult.user) {
+    if (req.body?.user?.name && authResult.user.name === 'User' && req.body.user.id === authResult.user.id) {
+      authResult.user.name = req.body.user.name;
+      authResult.user.email = req.body.user.email || authResult.user.email;
+      authResult.user.avatarUrl = req.body.user.avatarUrl || authResult.user.avatarUrl;
+    }
     const dbUrl = serverEnv.DATABASE_URL || process.env.DATABASE_URL;
     await syncUserToDb(authResult.user, dbUrl);
   }
 
+  const isHttps = Boolean(req.secure || req.headers?.['x-forwarded-proto'] === 'https' || process.env.NODE_ENV === 'production');
+  const sec = isHttps ? '; Secure' : '';
   const tokenToSet = cred.token || cred.sessionId;
   const cookieHeaders = [
-    `__session=${encodeURIComponent(tokenToSet)}; Path=/; SameSite=Lax; Max-Age=2592000`,
-    `clerk_session=${encodeURIComponent(tokenToSet)}; Path=/; SameSite=Lax; Max-Age=2592000`,
+    `__session=${encodeURIComponent(tokenToSet)}; Path=/; SameSite=Lax${sec}; Max-Age=2592000`,
+    `clerk_session=${encodeURIComponent(tokenToSet)}; Path=/; SameSite=Lax${sec}; Max-Age=2592000`,
   ];
   if (authResult.sessionId) {
-    cookieHeaders.push(`clerk_session_id=${encodeURIComponent(authResult.sessionId)}; Path=/; SameSite=Lax; Max-Age=2592000`);
+    cookieHeaders.push(`clerk_session_id=${encodeURIComponent(authResult.sessionId)}; Path=/; SameSite=Lax${sec}; Max-Age=2592000`);
   }
   res.setHeader('Set-Cookie', cookieHeaders);
 
@@ -228,14 +235,16 @@ export function clerkHandshakeMiddleware(req, res, next) {
         }
 
         if (extractedSessionToken) {
-          cookiesToSet.push(`__session=${extractedSessionToken}; Path=/; SameSite=Lax; Max-Age=2592000`);
-          cookiesToSet.push(`clerk_session=${extractedSessionToken}; Path=/; SameSite=Lax; Max-Age=2592000`);
+          const isHttps = Boolean(req.secure || req.headers?.['x-forwarded-proto'] === 'https' || process.env.NODE_ENV === 'production');
+          const sec = isHttps ? '; Secure' : '';
+          cookiesToSet.push(`__session=${extractedSessionToken}; Path=/; SameSite=Lax${sec}; Max-Age=2592000`);
+          cookiesToSet.push(`clerk_session=${extractedSessionToken}; Path=/; SameSite=Lax${sec}; Max-Age=2592000`);
           try {
             const tokenParts = extractedSessionToken.split('.');
             if (tokenParts.length === 3) {
               const jwtPayload = JSON.parse(Buffer.from(tokenParts[1], 'base64url').toString('utf8'));
               if (jwtPayload.sid) {
-                cookiesToSet.push(`clerk_session_id=${jwtPayload.sid}; Path=/; SameSite=Lax; Max-Age=2592000`);
+                cookiesToSet.push(`clerk_session_id=${jwtPayload.sid}; Path=/; SameSite=Lax${sec}; Max-Age=2592000`);
               }
             }
           } catch {}

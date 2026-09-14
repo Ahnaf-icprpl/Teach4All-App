@@ -45,8 +45,17 @@ export const GUEST_COOKIE_NAME = 'teach4all_guest_id';
 
 function getCookie(name) {
   if (typeof document === 'undefined') return null;
-  const match = document.cookie.match(new RegExp('(?:^|;\\s*)' + name + '=([^;]*)'));
-  return match ? decodeURIComponent(match[1]) : null;
+  try {
+    const match = document.cookie.match(new RegExp('(?:^|;\\s*)' + name + '=([^;]*)'));
+    if (!match) return null;
+    try {
+      return decodeURIComponent(match[1]);
+    } catch {
+      return match[1];
+    }
+  } catch {
+    return null;
+  }
 }
 
 function getStoredUser() {
@@ -174,6 +183,10 @@ export async function processHandshakeIfPresent() {
         try {
           const loginPayload = { token: sessionToken };
           if (sid) loginPayload.sessionId = sid;
+          const stored = getStoredUser();
+          if (stored?.name && !String(stored.id).startsWith('guest_')) {
+            loginPayload.user = stored;
+          }
           const loginRes = await fetch('./api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
