@@ -7,6 +7,7 @@ import { uiRouter } from './routes/uiRoutes.js';
 import { clerkHandshakeMiddleware, authContextMiddleware } from './authApi.js';
 import { enforceRateLimit } from './rateLimiter.js';
 import { load404HtmlTemplate } from './ssr.js';
+import { metricsMiddleware, handleMetricsRequest } from './metrics.js';
 
 export function createApp(serverEnv = {}) {
   const app = express();
@@ -14,6 +15,10 @@ export function createApp(serverEnv = {}) {
   // 1. Security & Header Defaults
   app.disable('x-powered-by');
   app.set('query parser', 'simple');
+
+  // 1.5 Prometheus Metrics Collection & Scrape Endpoint
+  app.use(metricsMiddleware);
+  app.get('/metrics', (req, res) => handleMetricsRequest(req, res, serverEnv));
 
   // 2. Request Body Parsing & Auth Handshake Interception
   app.use(clerkHandshakeMiddleware);
@@ -51,6 +56,7 @@ export function createApp(serverEnv = {}) {
       cleanUrl !== '/' &&
       cleanUrl !== '/index.html' &&
       cleanUrl !== '/404.html' &&
+      cleanUrl !== '/metrics' &&
       !cleanUrl.startsWith('/@') &&
       !cleanUrl.startsWith('/src/') &&
       !cleanUrl.startsWith('/node_modules/') &&

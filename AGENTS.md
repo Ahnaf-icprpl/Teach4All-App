@@ -27,6 +27,7 @@ These rules apply to all application code files (`.js`, `.mjs`, `.cjs`, `.css`) 
   - `vanjs-core` (frontend)
   - `pg` (PostgreSQL driver)
   - `express` (server-side HTTP framework)
+  - `prom-client` (Prometheus metrics client)
 - Development tools (Vite, Playwright) are devDependencies only.
 
 ## Offline-First Design
