@@ -1,5 +1,4 @@
 import { createQuiz, DEFAULT_USER_ID } from './db.js';
-import { logger } from './logger.js';
 import { diagnoseAndValidateQuizArgs } from './quizValidator.js';
 import { buildWebSearchPlugin } from './webSearch.js';
 
@@ -146,20 +145,12 @@ export async function parseAndExecuteQuizTool(toolCall, { userId, conversationId
       { databaseUrl }
     );
 
-    logger.info('Quiz successfully created via tool call', {
-      quiz_id: createdQuiz?.id,
-      title: createdQuiz?.title,
-      questions_count: questions.length,
-      conversation_id: conversationId,
-    });
-
     return {
       success: true,
       quiz: createdQuiz,
       questionCount: questions.length,
     };
   } catch (err) {
-    logger.error('Failed to execute create_quiz tool', { error: err.message, stack: err.stack });
     return {
       success: false,
       errorType: 'DATABASE_ERROR',
@@ -236,13 +227,6 @@ export async function handleCompletedToolCalls({
 
     // Execution or validation failed; evaluate algorithmic recall
     if (attempt < maxRetries && apiKey && !controller?.signal?.aborted) {
-      logger.warn('Tool execution failed, sending algorithmic diagnostic to model for recall', {
-        attempt: attempt + 1,
-        max_retries: maxRetries,
-        error_type: execResult.errorType,
-        diagnostic: execResult.diagnostic,
-      });
-
       const callId = currentQuizCall.id || `call_quiz_${Date.now()}_${attempt}`;
       conversationHistory.push({
         role: 'assistant',
@@ -298,7 +282,6 @@ export async function handleCompletedToolCalls({
         });
 
         if (!recallRes.ok || !recallRes.body) {
-          logger.error('OpenRouter recall request failed', { status: recallRes.status });
           break;
         }
 
@@ -343,10 +326,6 @@ export async function handleCompletedToolCalls({
           continue;
         } else {
           // Model output plain text or apology instead of invoking create_quiz
-          logger.warn('Model output text instead of calling create_quiz during recall, forcing tool recall', {
-            attempt: attempt + 1,
-            text_snippet: recallText.slice(0, 100),
-          });
           conversationHistory.push({
             role: 'assistant',
             content: recallText || 'Error attempting to construct quiz.',
@@ -366,7 +345,6 @@ export async function handleCompletedToolCalls({
           continue;
         }
       } catch (err) {
-        logger.error('Error during tool recall turn', { error: err.message });
         break;
       }
     } else {

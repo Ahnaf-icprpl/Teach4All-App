@@ -6,7 +6,6 @@ import {
   getClientLocation,
   applyRateLimitHeaders,
   getEndpointConfig,
-  recordRequestMetric,
   clearRateLimitStore,
 } from '../server/rateLimiter.js';
 import {
@@ -15,7 +14,6 @@ import {
   clearConversationProvider,
 } from '../server/providerCache.js';
 import { handleChatRequest } from '../server/chatApi.js';
-import { GrafanaMetrics, parseMetricKey, toOtlpMetricAttributes } from '../server/metrics.js';
 import { EventEmitter } from 'node:events';
 
 test('checkRateLimit accurately tracks request counts and window TTL in memory without DB writes', async () => {
@@ -150,10 +148,6 @@ test('getEndpointConfig caches policy in memory without DB round-trips', async (
 
   const config2 = await getEndpointConfig('/api/chat', { databaseUrl: null });
   assert.deepStrictEqual(config2, config1);
-
-  // Test recordRequestMetric in memory
-  const testIp = '198.51.100.1';
-  await recordRequestMetric(testIp, '/api/chat');
 });
 
 test('setConversationProvider and getConversationProvider cache provider in memory', async () => {
@@ -206,43 +200,4 @@ test('getClientIp properly resolves Vercel edge IP forwarding and prevents spoof
   const loc = getClientLocation(req3);
   assert.strictEqual(loc.country, 'ID');
   assert.strictEqual(loc.city, 'Jakarta');
-});
-
-test('GrafanaMetrics records requests and formats OTLP metrics in memory', async () => {
-  const parsed = parseMetricKey('http_requests_total{endpoint=/api/chat,status=200,method=POST}');
-  assert.strictEqual(parsed.name, 'http_requests_total');
-  assert.strictEqual(parsed.attributes.endpoint, '/api/chat');
-  assert.strictEqual(parsed.attributes.status, '200');
-
-  const attrs = toOtlpMetricAttributes({ endpoint: '/api/chat', count: 5 });
-  assert.strictEqual(attrs.length, 2);
-  assert.strictEqual(attrs[0].key, 'endpoint');
-  assert.strictEqual(attrs[0].value.stringValue, '/api/chat');
-
-  const metricsInst = new GrafanaMetrics({
-    forceSendInTest: false,
-  });
-
-  metricsInst.recordHttpRequest({
-    endpoint: '/api/test-metrics',
-    method: 'POST',
-    status: 200,
-    durationMs: 45,
-  });
-
-  metricsInst.recordStreamMetric({
-    chunks: 5,
-    bytes: 250,
-    model: 'test-model',
-    durationMs: 120,
-  });
-
-  metricsInst.recordRateLimitHit({ endpoint: '/api/test-metrics' });
-  metricsInst.recordClientError({ type: 'unit_test_err', path: '/test' });
-
-  assert(metricsInst.localDataPoints.length >= 4);
-
-  const metricsList = await metricsInst.buildMetricsList();
-  assert(Array.isArray(metricsList));
-  assert(metricsList.length > 0);
 });

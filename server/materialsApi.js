@@ -1,6 +1,4 @@
 import { getMaterials, getMaterialById, createMaterial, setMaterialSolvedStatus } from './db.js';
-import { logger } from './logger.js';
-import { getClientIp } from './rateLimiter.js';
 
 function readJsonBody(req) {
   if (req.body !== undefined && req.body !== null) {
@@ -29,7 +27,6 @@ function readJsonBody(req) {
 }
 
 export async function handleMaterialsRequest(req, res, env = {}) {
-  const clientIp = getClientIp(req);
   const url = new URL(req.url, 'http://localhost');
   const dbUrl = env.DATABASE_URL || process.env.DATABASE_URL;
 
@@ -56,7 +53,6 @@ export async function handleMaterialsRequest(req, res, env = {}) {
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
       res.end(JSON.stringify({ materials }));
     } catch (err) {
-      logger.error('Failed to retrieve materials from database', { error: err.message, client_ip: clientIp });
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: { message: 'Failed to retrieve materials.' } }));
     }
@@ -83,7 +79,6 @@ export async function handleMaterialsRequest(req, res, env = {}) {
       res.writeHead(201, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ material }));
     } catch (err) {
-      logger.error('Failed to create material in database', { error: err.message, client_ip: clientIp });
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: { message: 'Failed to create material.' } }));
     }
@@ -117,7 +112,6 @@ export async function handleMaterialsRequest(req, res, env = {}) {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ material: updated }));
     } catch (err) {
-      logger.error('Failed to update material solved status in database', { error: err.message, client_ip: clientIp });
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: { message: 'Failed to update material.' } }));
     }

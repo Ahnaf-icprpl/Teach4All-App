@@ -1,6 +1,4 @@
 import { query } from './db.js';
-import { logger } from './logger.js';
-import { getClientIp } from './rateLimiter.js';
 
 export async function getUiTextsFromDb(databaseUrl = process.env.DATABASE_URL) {
   const rows = await query('SELECT key, value FROM ui_texts ORDER BY key ASC;', [], databaseUrl);
@@ -28,7 +26,6 @@ export async function getChatPromptsFromDb(databaseUrl = process.env.DATABASE_UR
 }
 
 export async function handleUiTextsRequest(req, res, env = {}) {
-  const clientIp = getClientIp(req);
   if (req.method !== 'GET') {
     res.writeHead(405, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: { message: 'Method not allowed' } }));
@@ -47,14 +44,12 @@ export async function handleUiTextsRequest(req, res, env = {}) {
     });
     res.end(JSON.stringify({ texts, prompts, env: appEnv }));
   } catch (err) {
-    logger.error('Failed to load UI texts and prompts from database', { error: err.message, client_ip: clientIp });
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: { message: 'Failed to load UI texts and prompts from database.' } }));
   }
 }
 
 export async function handleChatPromptsRequest(req, res, env = {}) {
-  const clientIp = getClientIp(req);
   if (req.method !== 'GET') {
     res.writeHead(405, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: { message: 'Method not allowed' } }));
@@ -71,7 +66,6 @@ export async function handleChatPromptsRequest(req, res, env = {}) {
     });
     res.end(JSON.stringify({ prompts }));
   } catch (err) {
-    logger.error('Failed to load chat prompts from database', { error: err.message, client_ip: clientIp });
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: { message: 'Failed to load chat prompts from database.' } }));
   }

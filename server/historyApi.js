@@ -2,7 +2,6 @@ import {
   checkRateLimit,
   getClientIp,
   applyRateLimitHeaders,
-  recordRequestMetric,
 } from './rateLimiter.js';
 import {
   DEFAULT_USER_ID,
@@ -11,8 +10,6 @@ import {
   deleteConversation,
   updateConversationTitle,
 } from './db.js';
-import { logger, logDevRequest } from './logger.js';
-import { metrics } from './metrics.js';
 
 function readBody(req) {
   if (req.body !== undefined && req.body !== null) {
@@ -32,11 +29,9 @@ function readBody(req) {
 export async function handleConversationsRequest(req, res, serverEnv = {}) {
   const method = req.method || 'GET';
   const clientIp = getClientIp(req);
-  logDevRequest(req, '/api/conversations', { method });
   const parsedUrl = new URL(req.url || '/', 'http://localhost');
   const databaseUrl = serverEnv.DATABASE_URL || process.env.DATABASE_URL;
 
-  // In-memory rate limiting check
   const rateInfo = await checkRateLimit({
     endpoint: '/api/conversations',
     clientIp,
@@ -47,12 +42,6 @@ export async function handleConversationsRequest(req, res, serverEnv = {}) {
   applyRateLimitHeaders(res, rateInfo);
 
   if (!rateInfo.allowed) {
-    metrics.recordRateLimitHit({ endpoint: '/api/conversations' });
-    logger.warn('Conversations rate limit exceeded', {
-      endpoint: '/api/conversations',
-      client_ip: clientIp,
-      retry_after: rateInfo.resetSeconds,
-    });
     res.writeHead(429, {
       'Content-Type': 'application/json',
       'Retry-After': String(rateInfo.resetSeconds),
@@ -63,8 +52,6 @@ export async function handleConversationsRequest(req, res, serverEnv = {}) {
     return;
   }
 
-  recordRequestMetric(clientIp, '/api/conversations');
-
   if (method === 'GET') {
     const userId = parsedUrl.searchParams.get('userId') || DEFAULT_USER_ID;
     const limit = parseInt(parsedUrl.searchParams.get('limit') || '50', 10);
@@ -73,15 +60,6 @@ export async function handleConversationsRequest(req, res, serverEnv = {}) {
 
     try {
       const conversations = await getConversations({ userId, limit, offset, query, databaseUrl });
-      logger.info('Fetched conversations list', {
-        endpoint: '/api/conversations',
-        client_ip: clientIp,
-        user_id: userId,
-        count: conversations.length,
-        limit,
-        offset,
-        ...(query ? { query } : {}),
-      });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         conversations,
@@ -90,12 +68,6 @@ export async function handleConversationsRequest(req, res, serverEnv = {}) {
         offset,
       }));
     } catch (err) {
-      logger.error('Failed to fetch conversations from DB', {
-        endpoint: '/api/conversations',
-        client_ip: clientIp,
-        user_id: userId,
-        error: err.message,
-      });
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: { message: err.message || 'Database error' } }));
     }
@@ -116,10 +88,6 @@ export async function handleConversationsRequest(req, res, serverEnv = {}) {
     }
 
     if (!id) {
-      logger.warn('Missing conversation id in DELETE /api/conversations', {
-        endpoint: '/api/conversations',
-        client_ip: clientIp,
-      });
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: { message: 'id is required' } }));
       return;
@@ -127,11 +95,6 @@ export async function handleConversationsRequest(req, res, serverEnv = {}) {
 
     try {
       await deleteConversation({ conversationId: id, userId, databaseUrl });
-      logger.info('Deleted conversation', {
-        endpoint: '/api/conversations',
-        conversation_id: id,
-        user_id: userId,
-      });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true }));
     } catch (err) {
@@ -148,21 +111,12 @@ export async function handleConversationsRequest(req, res, serverEnv = {}) {
       const targetId = id || conversationId;
 
       if (!targetId || !title) {
-        logger.warn('Missing id or title in PATCH /api/conversations', {
-          endpoint: '/api/conversations',
-          client_ip: clientIp,
-        });
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: { message: 'id and title are required' } }));
         return;
       }
 
       const result = await updateConversationTitle({ conversationId: targetId, userId, title, databaseUrl });
-      logger.info('Updated conversation title', {
-        endpoint: '/api/conversations',
-        conversation_id: targetId,
-        title,
-      });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));
     } catch (err) {
@@ -172,11 +126,6 @@ export async function handleConversationsRequest(req, res, serverEnv = {}) {
     return;
   }
 
-  logger.warn('Method Not Allowed on /api/conversations', {
-    endpoint: '/api/conversations',
-    method,
-    client_ip: clientIp,
-  });
   res.writeHead(405, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ error: { message: 'Method Not Allowed' } }));
 }
@@ -184,14 +133,8 @@ export async function handleConversationsRequest(req, res, serverEnv = {}) {
 export async function handleMessagesRequest(req, res, serverEnv = {}) {
   const method = req.method || 'GET';
   const clientIp = getClientIp(req);
-  logDevRequest(req, '/api/messages');
 
   if (method !== 'GET') {
-    logger.warn('Method Not Allowed on /api/messages', {
-      endpoint: '/api/messages',
-      method,
-      client_ip: clientIp,
-    });
     res.writeHead(405, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: { message: 'Method Not Allowed' } }));
     return;
@@ -210,12 +153,6 @@ export async function handleMessagesRequest(req, res, serverEnv = {}) {
   applyRateLimitHeaders(res, rateInfo);
 
   if (!rateInfo.allowed) {
-    metrics.recordRateLimitHit({ endpoint: '/api/messages' });
-    logger.warn('Messages rate limit exceeded', {
-      endpoint: '/api/messages',
-      client_ip: clientIp,
-      retry_after: rateInfo.resetSeconds,
-    });
     res.writeHead(429, {
       'Content-Type': 'application/json',
       'Retry-After': String(rateInfo.resetSeconds),
@@ -226,18 +163,12 @@ export async function handleMessagesRequest(req, res, serverEnv = {}) {
     return;
   }
 
-  recordRequestMetric(clientIp, '/api/messages');
-
   const conversationId = parsedUrl.searchParams.get('conversationId') || parsedUrl.searchParams.get('id');
   const userId = parsedUrl.searchParams.get('userId') || DEFAULT_USER_ID;
   const limit = parseInt(parsedUrl.searchParams.get('limit') || '100', 10);
   const offset = parseInt(parsedUrl.searchParams.get('offset') || '0', 10);
 
   if (!conversationId) {
-    logger.warn('Missing conversationId in GET /api/messages', {
-      endpoint: '/api/messages',
-      client_ip: clientIp,
-    });
     res.writeHead(400, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: { message: 'conversationId is required' } }));
     return;
@@ -245,24 +176,9 @@ export async function handleMessagesRequest(req, res, serverEnv = {}) {
 
   try {
     const messages = await getMessages({ conversationId, userId, limit, offset, databaseUrl });
-    logger.info('Fetched messages for conversation', {
-      endpoint: '/api/messages',
-      client_ip: clientIp,
-      conversation_id: conversationId,
-      user_id: userId,
-      count: messages.length,
-      limit,
-      offset,
-    });
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ messages }));
   } catch (err) {
-    logger.error('Failed to fetch messages from DB', {
-      endpoint: '/api/messages',
-      client_ip: clientIp,
-      conversation_id: conversationId,
-      error: err.message,
-    });
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: { message: err.message || 'Database error' } }));
   }

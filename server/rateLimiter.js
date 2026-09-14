@@ -6,12 +6,10 @@ import { query } from './db.js';
  */
 export const inMemoryStore = new Map();
 const inMemoryConfigCache = new Map();
-export const inMemoryRequestMetrics = new Map();
 
 export function clearRateLimitStore() {
   inMemoryStore.clear();
   inMemoryConfigCache.clear();
-  inMemoryRequestMetrics.clear();
 }
 
 // Periodic cleanup of expired in-memory buckets every 60s
@@ -192,17 +190,4 @@ export async function getEndpointConfig(endpoint = '/api/chat', {
   });
 
   return config;
-}
-
-/**
- * Ephemeral request metrics tracking completely in memory (zero DB writes).
- */
-export async function recordRequestMetric(clientIp, endpoint = '/api/chat') {
-  try {
-    const today = new Date().toISOString().slice(0, 10);
-    const key = `${today}:${endpoint}`;
-    inMemoryRequestMetrics.set(key, (inMemoryRequestMetrics.get(key) || 0) + 1);
-  } catch {
-    // ignore metrics errors under high volume
-  }
 }
