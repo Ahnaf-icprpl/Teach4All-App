@@ -157,12 +157,14 @@ export async function processHandshakeIfPresent() {
       if (sessionToken) {
         document.cookie = `__session=${sessionToken}; Path=/; SameSite=Lax; Max-Age=2592000`;
         document.cookie = `clerk_session=${sessionToken}; Path=/; SameSite=Lax; Max-Age=2592000`;
+        let sid = null;
         try {
           localStorage.setItem('teach4all_session', sessionToken);
           const tokenParts = sessionToken.split('.');
           if (tokenParts.length === 3) {
             const p = JSON.parse(atob(tokenParts[1].replace(/-/g, '+').replace(/_/g, '/')));
             if (p.sid) {
+              sid = p.sid;
               document.cookie = `clerk_session_id=${p.sid}; Path=/; SameSite=Lax; Max-Age=2592000`;
               localStorage.setItem('teach4all_session_id', p.sid);
             }
@@ -170,10 +172,12 @@ export async function processHandshakeIfPresent() {
         } catch {}
 
         try {
+          const loginPayload = { token: sessionToken };
+          if (sid) loginPayload.sessionId = sid;
           const loginRes = await fetch('./api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: sessionToken }),
+            body: JSON.stringify(loginPayload),
             credentials: 'include',
           });
           if (loginRes.ok) {

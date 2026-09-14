@@ -15,6 +15,7 @@ export {
   toUserId,
   ensureUserExists,
   syncUserToDb,
+  getUserFromDb,
   inMemoryConversations,
   inMemoryMessages,
   queryJson,

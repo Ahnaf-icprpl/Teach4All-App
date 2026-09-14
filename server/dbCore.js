@@ -175,6 +175,36 @@ export async function syncUserToDb(user = {}, databaseUrl = process.env.DATABASE
   }
 }
 
+/**
+ * Retrieve user record from database users table.
+ */
+export async function getUserFromDb(userId, databaseUrl = process.env.DATABASE_URL) {
+  const uId = toUserId(userId);
+  if (!uId || !databaseUrl) return null;
+  const pool = getPool(databaseUrl);
+  if (!pool) return null;
+  try {
+    const res = await pool.query(
+      'SELECT id, email, name, first_name, last_name, avatar_url, username FROM users WHERE id = $1 LIMIT 1;',
+      [uId]
+    );
+    if (res.rows && res.rows[0]) {
+      const row = res.rows[0];
+      const fullName = row.name || [row.first_name, row.last_name].filter(Boolean).join(' ') || row.username || 'User';
+      return {
+        id: row.id,
+        email: row.email || null,
+        name: fullName,
+        firstName: row.first_name || '',
+        lastName: row.last_name || '',
+        avatarUrl: row.avatar_url || null,
+        username: row.username || null,
+      };
+    }
+  } catch {}
+  return null;
+}
+
 export const inMemoryConversations = new Map();
 export const inMemoryMessages = new Map();
 

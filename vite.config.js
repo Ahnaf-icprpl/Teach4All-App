@@ -76,11 +76,22 @@ export default defineConfig(({ mode }) => {
               const texts = await getUiTextsFromDb(dbUrl);
               const prompts = await getChatPromptsFromDb(dbUrl);
               if (texts && Object.keys(texts).length && prompts && prompts.length) {
+                let user = null;
+                if (ctx?.req) {
+                  try {
+                    const { authenticateClerkRequest } = await import('./server/clerkVerifier.js');
+                    const auth = await authenticateClerkRequest(ctx.req, { ...env, ...process.env });
+                    if (auth?.authenticated && auth.user) {
+                      user = auth.user;
+                    }
+                  } catch {}
+                }
                 return renderSsrHtml({
                   htmlTemplate: html,
                   texts,
                   prompts,
                   serverEnv: { ...env, ...process.env, ENV: isProdBuild ? 'production' : appEnv },
+                  user,
                 });
               }
             }

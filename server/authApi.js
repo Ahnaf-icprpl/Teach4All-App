@@ -243,13 +243,6 @@ export function clerkHandshakeMiddleware(req, res, next) {
 
         res.setHeader('Set-Cookie', cookiesToSet);
       }
-
-      parsed.searchParams.delete('__clerk_handshake');
-      parsed.searchParams.delete('__clerk_status');
-      const cleanPath = `${parsed.pathname}${parsed.search ? parsed.search : ''}`;
-      res.writeHead(302, { Location: cleanPath || '/' });
-      res.end();
-      return;
     }
   } catch {}
 

@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { syncUserToDb } from './db.js';
+import { syncUserToDb, getUserFromDb } from './db.js';
 
 let jwksCache = { keys: null, expiresAt: 0 };
 const userCache = new Map();
@@ -73,9 +73,13 @@ export function parseCookies(header = '') {
     const idx = pair.indexOf('=');
     if (idx !== -1) {
       const key = pair.slice(0, idx).trim();
-      const val = pair.slice(idx + 1).trim();
+      const rawVal = pair.slice(idx + 1).trim();
       if (key) {
-        cookies[key] = decodeURIComponent(val);
+        try {
+          cookies[key] = decodeURIComponent(rawVal);
+        } catch {
+          cookies[key] = rawVal;
+        }
       }
     }
   }
@@ -132,8 +136,15 @@ export async function verifyClerkJwt(token, frontendApi) {
     throw new Error('Token header missing kid');
   }
 
-  const keys = await getClerkJwks(frontendApi);
-  const jwk = keys.find(k => k.kid === header.kid);
+  let keys = await getClerkJwks(frontendApi);
+  let jwk = keys.find(k => k.kid === header.kid);
+  if (!jwk) {
+    jwksCache.expiresAt = 0;
+    try {
+      keys = await getClerkJwks(frontendApi);
+      jwk = keys.find(k => k.kid === header.kid);
+    } catch {}
+  }
   if (!jwk) {
     throw new Error(`Public key not found for kid: ${header.kid}`);
   }
@@ -148,10 +159,11 @@ export async function verifyClerkJwt(token, frontendApi) {
   }
 
   const now = Math.floor(Date.now() / 1000);
-  if (payload.exp && payload.exp < now) {
+  const SKEW = 60; // 60s clock skew tolerance
+  if (payload.exp && payload.exp < now - SKEW) {
     throw new Error('Token has expired');
   }
-  if (payload.nbf && payload.nbf > now) {
+  if (payload.nbf && payload.nbf > now + SKEW) {
     throw new Error('Token is not active yet');
   }
 
@@ -162,78 +174,91 @@ export async function verifyClerkJwt(token, frontendApi) {
  * Fetches user profile from Clerk API with in-memory caching.
  */
 export async function getClerkUser(userId, secretKey, databaseUrl = process.env.DATABASE_URL) {
-  if (!userId || !secretKey) return null;
+  if (!userId) return null;
   const now = Date.now();
   const cached = userCache.get(userId);
   if (cached && cached.expiresAt > now) {
     return cached.user;
   }
 
-  try {
-    const res = await fetch(`https://api.clerk.com/v1/users/${encodeURIComponent(userId)}`, {
-      headers: { Authorization: `Bearer ${secretKey}` },
-    });
+  if (secretKey) {
+    try {
+      const res = await fetch(`https://api.clerk.com/v1/users/${encodeURIComponent(userId)}`, {
+        headers: { Authorization: `Bearer ${secretKey}` },
+      });
 
-    if (!res.ok) {
-      return null;
-    }
+      if (res.ok) {
+        const data = await res.json();
+        const primaryEmail = data.email_addresses?.[0]?.email_address || null;
 
-    const data = await res.json();
-    const primaryEmail = data.email_addresses?.[0]?.email_address || null;
+        // Extract Google OAuth account details if connected
+        const googleAccount = Array.isArray(data.external_accounts)
+          ? data.external_accounts.find(acc => {
+              const prov = String(acc?.provider || '').toLowerCase();
+              return prov === 'google' || prov === 'oauth_google' || prov.includes('google');
+            })
+          : null;
 
-    // Extract Google OAuth account details if connected
-    const googleAccount = Array.isArray(data.external_accounts)
-      ? data.external_accounts.find(acc => {
-          const prov = String(acc?.provider || '').toLowerCase();
-          return prov === 'google' || prov === 'oauth_google' || prov.includes('google');
-        })
-      : null;
+        const googlePfp =
+          googleAccount?.image_url ||
+          googleAccount?.avatar_url ||
+          googleAccount?.picture ||
+          (typeof data.image_url === 'string' && data.image_url.includes('googleusercontent.com') ? data.image_url : null);
 
-    const googlePfp =
-      googleAccount?.image_url ||
-      googleAccount?.avatar_url ||
-      googleAccount?.picture ||
-      (typeof data.image_url === 'string' && data.image_url.includes('googleusercontent.com') ? data.image_url : null);
+        const avatarUrl =
+          googlePfp ||
+          (data.has_image ? data.image_url : null) ||
+          data.image_url ||
+          data.profile_image_url ||
+          null;
 
-    const avatarUrl =
-      googlePfp ||
-      (data.has_image ? data.image_url : null) ||
-      data.image_url ||
-      data.profile_image_url ||
-      null;
+        const firstName = data.first_name || googleAccount?.first_name || '';
+        const lastName = data.last_name || googleAccount?.last_name || '';
+        const fullName = [firstName, lastName].filter(Boolean).join(' ').trim() ||
+          data.username ||
+          googleAccount?.username ||
+          primaryEmail?.split('@')[0] ||
+          'User';
 
-    const firstName = data.first_name || googleAccount?.first_name || '';
-    const lastName = data.last_name || googleAccount?.last_name || '';
-    const fullName = [firstName, lastName].filter(Boolean).join(' ').trim() ||
-      data.username ||
-      googleAccount?.username ||
-      primaryEmail?.split('@')[0] ||
-      'User';
+        const user = {
+          id: data.id,
+          email: primaryEmail,
+          name: fullName,
+          firstName,
+          lastName,
+          avatarUrl,
+          googleAvatarUrl: googlePfp || null,
+          username: data.username || googleAccount?.username || null,
+        };
 
-    const user = {
-      id: data.id,
-      email: primaryEmail,
-      name: fullName,
-      firstName,
-      lastName,
-      avatarUrl,
-      googleAvatarUrl: googlePfp || null,
-      username: data.username || googleAccount?.username || null,
-    };
+        userCache.set(userId, {
+          user,
+          expiresAt: now + 300 * 1000, // 5 minutes cache
+        });
 
-    userCache.set(userId, {
-      user,
-      expiresAt: now + 300 * 1000, // 5 minutes cache
-    });
+        if (databaseUrl) {
+          syncUserToDb(user, databaseUrl).catch(() => {});
+        }
 
-    if (databaseUrl) {
-      syncUserToDb(user, databaseUrl).catch(() => {});
-    }
-
-    return user;
-  } catch {
-    return null;
+        return user;
+      }
+    } catch {}
   }
+
+  if (databaseUrl) {
+    try {
+      const dbUser = await getUserFromDb(userId, databaseUrl);
+      if (dbUser) {
+        userCache.set(userId, {
+          user: dbUser,
+          expiresAt: now + 60 * 1000,
+        });
+        return dbUser;
+      }
+    } catch {}
+  }
+
+  return null;
 }
 
 /**
@@ -260,7 +285,13 @@ export async function verifyClerkSessionId(sessionId, secretKey, databaseUrl = p
       sessionCache.delete(sessionId);
       return null;
     }
-    const user = await getClerkUser(session.user_id, secretKey, databaseUrl);
+    let user = await getClerkUser(session.user_id, secretKey, databaseUrl);
+    if (!user && databaseUrl) {
+      user = await getUserFromDb(session.user_id, databaseUrl);
+    }
+    if (!user) {
+      user = { id: session.user_id, name: 'User', email: null, avatarUrl: null };
+    }
     const result = { session, user };
     sessionCache.set(sessionId, {
       ...result,
@@ -292,11 +323,38 @@ export function extractAuthCredential(req) {
   let sessionId = headers['x-session-id'] || headers['X-Session-ID'] || cookies.clerk_session_id || null;
 
   try {
-    const parsedUrl = new URL(req.url || '/', 'http://localhost');
+    const rawUrl = req.originalUrl || req.url || '/';
+    const parsedUrl = new URL(rawUrl, 'http://localhost');
     const qToken = parsedUrl.searchParams.get('token') || parsedUrl.searchParams.get('__clerk_token');
     if (qToken) token = qToken;
     const qSession = parsedUrl.searchParams.get('sessionId') || parsedUrl.searchParams.get('session_id');
     if (qSession) sessionId = qSession;
+
+    const qHandshake = parsedUrl.searchParams.get('__clerk_handshake');
+    if (qHandshake && qHandshake.includes('.')) {
+      try {
+        const parts = qHandshake.split('.');
+        if (parts.length >= 2) {
+          const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+          if (Array.isArray(payload.handshake)) {
+            for (const c of payload.handshake) {
+              const match = c.match(/^__session=([^;]+)/);
+              if (match && match[1] && match[1].length > 10) {
+                token = match[1];
+                try {
+                  const tParts = token.split('.');
+                  if (tParts.length === 3) {
+                    const tPayload = JSON.parse(Buffer.from(tParts[1], 'base64url').toString('utf8'));
+                    if (tPayload.sid) sessionId = tPayload.sid;
+                  }
+                } catch {}
+                break;
+              }
+            }
+          }
+        }
+      } catch {}
+    }
   } catch {}
 
   if (req.body && typeof req.body === 'object') {
@@ -331,7 +389,10 @@ export async function authenticateClerkRequest(req, serverEnv = {}) {
     try {
       const payload = await verifyClerkJwt(cred.token, config.frontendApi);
       const userId = payload.sub;
-      const user = await getClerkUser(userId, config.secretKey, dbUrl);
+      let user = await getClerkUser(userId, config.secretKey, dbUrl);
+      if (!user && dbUrl) {
+        user = await getUserFromDb(userId, dbUrl);
+      }
       const resolvedUser = user || { id: userId, name: 'User', email: null, avatarUrl: null };
       return {
         authenticated: true,
@@ -346,8 +407,19 @@ export async function authenticateClerkRequest(req, serverEnv = {}) {
           const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
           if (payload.sid) {
             const verified = await verifyClerkSessionId(payload.sid, config.secretKey, dbUrl);
-            if (verified && verified.user) {
-              return { authenticated: true, user: verified.user, sessionId: payload.sid };
+            if (verified && (verified.user || verified.session?.user_id)) {
+              let user = verified.user;
+              if (!user && dbUrl && verified.session?.user_id) {
+                user = await getUserFromDb(verified.session.user_id, dbUrl);
+              }
+              const resolvedUser = user || { id: verified.session?.user_id || payload.sub, name: 'User', email: null, avatarUrl: null };
+              return { authenticated: true, user: resolvedUser, sessionId: payload.sid };
+            }
+          }
+          if (payload.sub && dbUrl) {
+            const dbUser = await getUserFromDb(payload.sub, dbUrl);
+            if (dbUser) {
+              return { authenticated: true, user: dbUser, sessionId: payload.sid || null };
             }
           }
         }
@@ -356,8 +428,13 @@ export async function authenticateClerkRequest(req, serverEnv = {}) {
       // Fallback: If token string is actually a sessionId
       if (cred.token.startsWith('sess_')) {
         const verified = await verifyClerkSessionId(cred.token, config.secretKey, dbUrl);
-        if (verified && verified.user) {
-          return { authenticated: true, user: verified.user, sessionId: cred.token };
+        if (verified && (verified.user || verified.session?.user_id)) {
+          let user = verified.user;
+          if (!user && dbUrl && verified.session?.user_id) {
+            user = await getUserFromDb(verified.session.user_id, dbUrl);
+          }
+          const resolvedUser = user || { id: verified.session?.user_id, name: 'User', email: null, avatarUrl: null };
+          return { authenticated: true, user: resolvedUser, sessionId: cred.token };
         }
       }
     }
@@ -366,8 +443,13 @@ export async function authenticateClerkRequest(req, serverEnv = {}) {
   // 2. If it's a session ID
   if (cred.sessionId) {
     const verified = await verifyClerkSessionId(cred.sessionId, config.secretKey, dbUrl);
-    if (verified && verified.user) {
-      return { authenticated: true, user: verified.user, sessionId: cred.sessionId };
+    if (verified && (verified.user || verified.session?.user_id)) {
+      let user = verified.user;
+      if (!user && dbUrl && verified.session?.user_id) {
+        user = await getUserFromDb(verified.session.user_id, dbUrl);
+      }
+      const resolvedUser = user || { id: verified.session?.user_id, name: 'User', email: null, avatarUrl: null };
+      return { authenticated: true, user: resolvedUser, sessionId: cred.sessionId };
     }
   }
 
