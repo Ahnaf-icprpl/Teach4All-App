@@ -2,10 +2,45 @@ import van from 'vanjs-core';
 import { toast } from './state.js';
 import { t } from './uiTexts.js';
 
-export const CLERK_HANDSHAKE_URL = 'https://outgoing-feline-6741.clerk.accounts.dev/v1/client/handshake';
-export const CLERK_SIGN_IN_URL = 'https://outgoing-feline-6741.accounts.dev/sign-in';
-export const CLERK_SIGN_UP_URL = 'https://outgoing-feline-6741.accounts.dev/sign-up';
-export const CLERK_USER_PROFILE_URL = 'https://outgoing-feline-6741.accounts.dev/user';
+export function getClerkUrls() {
+  const serverAuth = (typeof window !== 'undefined' && window.__INITIAL_UI_DATA__?.auth) || null;
+  if (serverAuth) {
+    const frontend = (serverAuth.frontendApi || '').replace(/\/$/, '');
+    const accounts = (serverAuth.accountsUrl || '').replace(/\/$/, '');
+    return {
+      handshakeUrl: serverAuth.handshakeUrl || (frontend ? `${frontend}/v1/client/handshake` : ''),
+      signInUrl: serverAuth.signInUrl || (accounts ? `${accounts}/sign-in` : ''),
+      signUpUrl: serverAuth.signUpUrl || (accounts ? `${accounts}/sign-up` : ''),
+      userProfileUrl: serverAuth.userProfileUrl || (accounts ? `${accounts}/user` : ''),
+    };
+  }
+  return {
+    handshakeUrl: '',
+    signInUrl: '',
+    signUpUrl: '',
+    userProfileUrl: '',
+  };
+}
+
+export async function initAuthConfig() {
+  if (typeof window === 'undefined') return null;
+  if (window.__INITIAL_UI_DATA__?.auth?.signInUrl) return window.__INITIAL_UI_DATA__.auth;
+  try {
+    const res = await fetch('./api/auth/config', { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      if (!window.__INITIAL_UI_DATA__) window.__INITIAL_UI_DATA__ = {};
+      window.__INITIAL_UI_DATA__.auth = data;
+      return data;
+    }
+  } catch {}
+  return null;
+}
+
+export const CLERK_HANDSHAKE_URL = '';
+export const CLERK_SIGN_IN_URL = '';
+export const CLERK_SIGN_UP_URL = '';
+export const CLERK_USER_PROFILE_URL = '';
 export const GUEST_COOKIE_NAME = 'teach4all_guest_id';
 
 function getCookie(name) {
@@ -15,19 +50,11 @@ function getCookie(name) {
 }
 
 function getStoredUser() {
+  if (typeof window !== 'undefined' && window.__INITIAL_UI_DATA__?.user) {
+    return window.__INITIAL_UI_DATA__.user;
+  }
   if (typeof localStorage === 'undefined') return null;
   try {
-    const token = getCookie('__session') || getCookie('clerk_session');
-    const sessionId = getCookie('clerk_session_id');
-    const localToken = localStorage.getItem('teach4all_session');
-    const localSessionId = localStorage.getItem('teach4all_session_id');
-
-    // If there is zero active session credential, the user is an unauthenticated guest
-    if (!token && !sessionId && !localToken && !localSessionId) {
-      localStorage.removeItem('teach4all_user');
-      return null;
-    }
-
     const raw = localStorage.getItem('teach4all_user');
     if (raw) {
       const user = JSON.parse(raw);
@@ -94,7 +121,7 @@ export function getAuthHeaders() {
     headers['X-Session-ID'] = sessionId;
   }
   const guestId = getOrCreateGuestId();
-  if (guestId && !token) {
+  if (guestId && !token && !currentUser.val) {
     headers['X-Guest-ID'] = guestId;
   }
   return headers;
@@ -143,11 +170,24 @@ export async function processHandshakeIfPresent() {
         } catch {}
 
         try {
-          await fetch('./api/auth/login', {
+          const loginRes = await fetch('./api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ token: sessionToken }),
+            credentials: 'include',
           });
+          if (loginRes.ok) {
+            const loginData = await loginRes.json();
+            if (loginData && loginData.authenticated && loginData.user) {
+              currentUser.val = loginData.user;
+              try {
+                localStorage.setItem('teach4all_user', JSON.stringify(loginData.user));
+              } catch {}
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('teach4all:auth-changed', { detail: { user: loginData.user } }));
+              }
+            }
+          }
         } catch {}
       }
 
@@ -162,6 +202,7 @@ export async function processHandshakeIfPresent() {
 
 export async function checkAuth() {
   authLoading.val = true;
+  await initAuthConfig();
   await processHandshakeIfPresent();
 
   try {
@@ -178,17 +219,6 @@ export async function checkAuth() {
       } catch {}
     }
 
-    if (!token && !sessionId) {
-      currentUser.val = null;
-      if (typeof localStorage !== 'undefined') {
-        try {
-          localStorage.removeItem('teach4all_user');
-        } catch {}
-      }
-      authLoading.val = false;
-      return null;
-    }
-
     const headers = {};
     if (token) {
       headers.Authorization = `Bearer ${token}`;
@@ -197,7 +227,11 @@ export async function checkAuth() {
       headers['X-Session-ID'] = sessionId;
     }
 
-    const res = await fetch('./api/whoami', { headers });
+    const res = await fetch('./api/whoami', {
+      headers,
+      credentials: 'include',
+      cache: 'no-store',
+    });
     if (!res.ok) {
       if (res.status >= 400 && res.status < 500) {
         currentUser.val = null;
@@ -207,6 +241,11 @@ export async function checkAuth() {
             localStorage.removeItem('teach4all_session');
             localStorage.removeItem('teach4all_session_id');
           } catch {}
+        }
+        if (typeof document !== 'undefined') {
+          document.cookie = '__session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+          document.cookie = 'clerk_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+          document.cookie = 'clerk_session_id=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
         }
       }
       authLoading.val = false;
@@ -244,6 +283,11 @@ export async function checkAuth() {
           localStorage.removeItem('teach4all_session_id');
         } catch {}
       }
+      if (typeof document !== 'undefined') {
+        document.cookie = '__session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+        document.cookie = 'clerk_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+        document.cookie = 'clerk_session_id=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+      }
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('teach4all:auth-changed', { detail: { user: null } }));
       }
@@ -256,19 +300,37 @@ export async function checkAuth() {
   return currentUser.val;
 }
 
-export function login(returnUrl) {
+export async function login(returnUrl) {
   if (typeof window === 'undefined') return;
+  await initAuthConfig();
+  const urls = getClerkUrls();
+  if (!urls.signInUrl || (!urls.signInUrl.startsWith('http://') && !urls.signInUrl.startsWith('https://'))) {
+    const msg = t('auth_not_configured') || 'Autentikasi belum dikonfigurasi pada server.';
+    toast(msg);
+    return;
+  }
   const target = returnUrl || `${window.location.origin}${window.location.pathname}`;
-  const handshakeUrl = `${CLERK_HANDSHAKE_URL}?redirect_url=${encodeURIComponent(target)}`;
-  const signInUrl = `${CLERK_SIGN_IN_URL}?redirect_url=${encodeURIComponent(handshakeUrl)}`;
+  const handshakeUrl = (urls.handshakeUrl && (urls.handshakeUrl.startsWith('http://') || urls.handshakeUrl.startsWith('https://')))
+    ? `${urls.handshakeUrl}?redirect_url=${encodeURIComponent(target)}`
+    : target;
+  const signInUrl = `${urls.signInUrl}?redirect_url=${encodeURIComponent(handshakeUrl)}`;
   window.location.href = signInUrl;
 }
 
-export function signup(returnUrl) {
+export async function signup(returnUrl) {
   if (typeof window === 'undefined') return;
+  await initAuthConfig();
+  const urls = getClerkUrls();
+  if (!urls.signUpUrl || (!urls.signUpUrl.startsWith('http://') && !urls.signUpUrl.startsWith('https://'))) {
+    const msg = t('auth_not_configured') || 'Autentikasi belum dikonfigurasi pada server.';
+    toast(msg);
+    return;
+  }
   const target = returnUrl || `${window.location.origin}${window.location.pathname}`;
-  const handshakeUrl = `${CLERK_HANDSHAKE_URL}?redirect_url=${encodeURIComponent(target)}`;
-  const signUpUrl = `${CLERK_SIGN_UP_URL}?redirect_url=${encodeURIComponent(handshakeUrl)}`;
+  const handshakeUrl = (urls.handshakeUrl && (urls.handshakeUrl.startsWith('http://') || urls.handshakeUrl.startsWith('https://')))
+    ? `${urls.handshakeUrl}?redirect_url=${encodeURIComponent(target)}`
+    : target;
+  const signUpUrl = `${urls.signUpUrl}?redirect_url=${encodeURIComponent(handshakeUrl)}`;
   window.location.href = signUpUrl;
 }
 
@@ -294,9 +356,12 @@ export async function logout() {
   if (msg) toast(msg);
 }
 
-export function openUserProfile() {
+export async function openUserProfile() {
   if (typeof window === 'undefined') return;
-  window.open(CLERK_USER_PROFILE_URL, '_blank', 'noopener,noreferrer');
+  await initAuthConfig();
+  const urls = getClerkUrls();
+  if (!urls.userProfileUrl || (!urls.userProfileUrl.startsWith('http://') && !urls.userProfileUrl.startsWith('https://'))) return;
+  window.open(urls.userProfileUrl, '_blank', 'noopener,noreferrer');
 }
 
 // Auto-initialize checkAuth when loaded in browser

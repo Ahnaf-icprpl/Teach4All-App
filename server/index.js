@@ -4,6 +4,12 @@ import { existsSync } from 'node:fs';
 import { createApp } from './app.js';
 import { handleSsrRequest, load404HtmlTemplate } from './ssr.js';
 
+try {
+  if (typeof process.loadEnvFile === 'function') {
+    process.loadEnvFile();
+  }
+} catch {}
+
 const app = createApp(process.env);
 const port = process.env.PORT || 3000;
 const distPath = resolve(process.cwd(), 'dist');

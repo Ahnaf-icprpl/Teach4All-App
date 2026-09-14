@@ -9,29 +9,56 @@ const sessionCache = new Map();
  * Resolves Clerk environment variables.
  */
 export function getClerkConfig(serverEnv = {}) {
-  const publishableKey =
+  const publishableKey = (
     serverEnv.CLERK_PUBLISHABLE_KEY ||
     serverEnv.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ||
     serverEnv.PUBLISHABLE_KEY ||
     process.env.CLERK_PUBLISHABLE_KEY ||
     process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ||
     process.env.PUBLISHABLE_KEY ||
-    'pk_test_b3V0Z29pbmctZmVsaW5lLTY3NDEuY2xlcmsuYWNjb3VudHMuZGV2JA';
+    ''
+  ).trim();
 
-  const secretKey =
+  const secretKey = (
     serverEnv.CLERK_SECRET_KEY ||
     process.env.CLERK_SECRET_KEY ||
-    'sk_test_eEGOFwtFsyPUtLDlvQw1W5ro3sXKbdFF3iw4cmEWo2';
+    ''
+  ).trim();
 
-  const frontendApi =
+  let derivedFrontendDomain = null;
+  if (publishableKey) {
+    try {
+      const raw = publishableKey.split('_')[2];
+      if (raw) {
+        const decoded = Buffer.from(raw, 'base64').toString('utf8').replace(/\$$/, '');
+        if (decoded && decoded.includes('.')) {
+          derivedFrontendDomain = decoded;
+        }
+      }
+    } catch {}
+  }
+
+  let frontendApi = (
     serverEnv.CLERK_FRONTEND_API ||
     process.env.CLERK_FRONTEND_API ||
-    'https://outgoing-feline-6741.clerk.accounts.dev';
+    (derivedFrontendDomain ? `https://${derivedFrontendDomain}` : '')
+  ).trim();
 
-  const accountsUrl =
+  let accountsUrl = (
     serverEnv.CLERK_ACCOUNTS_URL ||
     process.env.CLERK_ACCOUNTS_URL ||
-    'https://outgoing-feline-6741.accounts.dev';
+    ''
+  ).trim();
+
+  if ((!accountsUrl || accountsUrl.includes('api.clerk.com')) && frontendApi) {
+    if (frontendApi.includes('clerk.accounts.dev')) {
+      accountsUrl = frontendApi.replace(/\.clerk\.accounts\.dev/i, '.accounts.dev');
+    } else if (frontendApi.includes('clerk.')) {
+      accountsUrl = frontendApi.replace(/^https?:\/\/clerk\./i, 'https://accounts.');
+    } else {
+      accountsUrl = frontendApi;
+    }
+  }
 
   return { publishableKey, secretKey, frontendApi, accountsUrl };
 }
@@ -59,6 +86,9 @@ export function parseCookies(header = '') {
  * Fetches and caches Clerk JWKS for RSA token verification.
  */
 export async function getClerkJwks(frontendApi) {
+  if (!frontendApi) {
+    throw new Error('Clerk frontendApi is not configured');
+  }
   const now = Date.now();
   if (jwksCache.keys && jwksCache.expiresAt > now) {
     return jwksCache.keys;
@@ -132,7 +162,7 @@ export async function verifyClerkJwt(token, frontendApi) {
  * Fetches user profile from Clerk API with in-memory caching.
  */
 export async function getClerkUser(userId, secretKey, databaseUrl = process.env.DATABASE_URL) {
-  if (!userId) return null;
+  if (!userId || !secretKey) return null;
   const now = Date.now();
   const cached = userCache.get(userId);
   if (cached && cached.expiresAt > now) {
@@ -210,7 +240,7 @@ export async function getClerkUser(userId, secretKey, databaseUrl = process.env.
  * Verifies a session ID with Clerk API and retrieves user with in-memory caching.
  */
 export async function verifyClerkSessionId(sessionId, secretKey, databaseUrl = process.env.DATABASE_URL) {
-  if (!sessionId) return null;
+  if (!sessionId || !secretKey) return null;
   const now = Date.now();
   const cached = sessionCache.get(sessionId);
   if (cached && cached.expiresAt > now) {
@@ -292,15 +322,20 @@ export async function authenticateClerkRequest(req, serverEnv = {}) {
     return { authenticated: false, user: null, sessionId: null };
   }
 
+  if (!config.publishableKey && !config.secretKey && !config.frontendApi) {
+    return { authenticated: false, user: null, sessionId: null };
+  }
+
   // 1. If it's a JWT token
   if (cred.token) {
     try {
       const payload = await verifyClerkJwt(cred.token, config.frontendApi);
       const userId = payload.sub;
       const user = await getClerkUser(userId, config.secretKey, dbUrl);
+      const resolvedUser = user || { id: userId, name: 'User', email: null, avatarUrl: null };
       return {
-        authenticated: Boolean(user),
-        user: user || { id: userId, name: 'User', email: null, avatarUrl: null },
+        authenticated: true,
+        user: resolvedUser,
         sessionId: payload.sid || null,
       };
     } catch {

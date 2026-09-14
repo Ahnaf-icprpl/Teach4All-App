@@ -1,5 +1,6 @@
 import { query } from './db.js';
 import { enforceRateLimit } from './rateLimiter.js';
+import { getClerkConfig } from './clerkVerifier.js';
 
 export async function getUiTextsFromDb(databaseUrl = process.env.DATABASE_URL) {
   const rows = await query('SELECT key, value FROM ui_texts ORDER BY key ASC;', [], databaseUrl);
@@ -52,12 +53,24 @@ export async function handleUiTextsRequest(req, res, env = {}) {
     const texts = await getUiTextsFromDb(dbUrl);
     const prompts = await getChatPromptsFromDb(dbUrl);
     const appEnv = env.ENV || env.env || process.env.ENV || process.env.env || 'development';
+    const clerkConfig = getClerkConfig(env);
+    const frontend = (clerkConfig.frontendApi || '').replace(/\/$/, '');
+    const accounts = (clerkConfig.accountsUrl || '').replace(/\/$/, '');
+    const authConfig = {
+      publishableKey: clerkConfig.publishableKey || '',
+      frontendApi: frontend,
+      accountsUrl: accounts,
+      handshakeUrl: frontend ? `${frontend}/v1/client/handshake` : '',
+      signInUrl: accounts ? `${accounts}/sign-in` : '',
+      signUpUrl: accounts ? `${accounts}/sign-up` : '',
+      userProfileUrl: accounts ? `${accounts}/user` : '',
+    };
 
     res.writeHead(200, {
       'Content-Type': 'application/json',
       'Cache-Control': 'no-cache',
     });
-    res.end(JSON.stringify({ texts, prompts, env: appEnv }));
+    res.end(JSON.stringify({ texts, prompts, env: appEnv, auth: authConfig }));
   } catch (err) {
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: { message: 'Failed to load UI texts and prompts from database.' } }));

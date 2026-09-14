@@ -44,6 +44,8 @@ export async function handleWhoamiRequest(req, res, serverEnv = {}) {
     guestId: req.isGuest ? req.userId : null,
   });
 
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+
   if (typeof res.json === 'function') {
     res.json(JSON.parse(body));
   } else {
@@ -93,7 +95,8 @@ export async function handleLoginRequest(req, res, serverEnv = {}) {
 
   const tokenToSet = cred.token || cred.sessionId;
   const cookieHeaders = [
-    `__session=${encodeURIComponent(tokenToSet)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`,
+    `__session=${encodeURIComponent(tokenToSet)}; Path=/; SameSite=Lax; Max-Age=2592000`,
+    `clerk_session=${encodeURIComponent(tokenToSet)}; Path=/; SameSite=Lax; Max-Age=2592000`,
   ];
   if (authResult.sessionId) {
     cookieHeaders.push(`clerk_session_id=${encodeURIComponent(authResult.sessionId)}; Path=/; SameSite=Lax; Max-Age=2592000`);
@@ -105,6 +108,8 @@ export async function handleLoginRequest(req, res, serverEnv = {}) {
     user: authResult.user,
     sessionId: authResult.sessionId,
   };
+
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
 
   if (typeof res.json === 'function') {
     res.json(payload);
@@ -145,6 +150,7 @@ export async function handleLogoutRequest(req, res, serverEnv = {}) {
   ];
 
   res.setHeader('Set-Cookie', expiredCookies);
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
 
   const payload = {
     authenticated: false,
@@ -166,14 +172,19 @@ export async function handleLogoutRequest(req, res, serverEnv = {}) {
  */
 export function handleAuthConfigRequest(req, res, serverEnv = {}) {
   const config = getClerkConfig(serverEnv);
+  const frontend = (config.frontendApi || '').replace(/\/$/, '');
+  const accounts = (config.accountsUrl || '').replace(/\/$/, '');
   const payload = {
-    publishableKey: config.publishableKey,
-    frontendApi: config.frontendApi,
-    accountsUrl: config.accountsUrl,
-    signInUrl: `${config.accountsUrl}/sign-in`,
-    signUpUrl: `${config.accountsUrl}/sign-up`,
-    userProfileUrl: `${config.accountsUrl}/user`,
+    publishableKey: config.publishableKey || '',
+    frontendApi: frontend,
+    accountsUrl: accounts,
+    handshakeUrl: frontend ? `${frontend}/v1/client/handshake` : '',
+    signInUrl: accounts ? `${accounts}/sign-in` : '',
+    signUpUrl: accounts ? `${accounts}/sign-up` : '',
+    userProfileUrl: accounts ? `${accounts}/user` : '',
   };
+
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
 
   if (typeof res.json === 'function') {
     res.json(payload);
@@ -211,12 +222,13 @@ export function clerkHandshakeMiddleware(req, res, next) {
             .replace(/Domain=[^;]+;?/gi, '')
             .replace(/SameSite=None/gi, 'SameSite=Lax')
             .replace(/Secure;?/gi, '')
+            .replace(/HttpOnly;?/gi, '')
             .trim();
           cookiesToSet.push(sanitized);
         }
 
         if (extractedSessionToken) {
-          cookiesToSet.push(`__session=${extractedSessionToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`);
+          cookiesToSet.push(`__session=${extractedSessionToken}; Path=/; SameSite=Lax; Max-Age=2592000`);
           cookiesToSet.push(`clerk_session=${extractedSessionToken}; Path=/; SameSite=Lax; Max-Age=2592000`);
           try {
             const tokenParts = extractedSessionToken.split('.');

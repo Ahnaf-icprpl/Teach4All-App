@@ -1,6 +1,6 @@
 # Agent Rules for Teach4All
 
-These rules apply to all application code files (`.js`, `.mjs`, `.cjs`, `.css`) across `src/`, `server/`, `api/`, `prompts/`, `scripts/`, and future application directories.
+These rules apply to all application code files (`.js`, `.mjs`, `.cjs`, `.css`) across `src/`, `server/`, `prompts/`, `scripts/`, and future application directories.
 
 ## File Size Limits
 
