@@ -1,6 +1,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { getUiTextsFromDb, getChatPromptsFromDb, getGoogleTagIdFromDb } from './uiTextsApi.js';
+import { getClerkConfig } from './clerkVerifier.js';
 
 let cachedGoogleTagId = null;
 
@@ -9,7 +10,7 @@ export function isProductionEnv(env = {}) {
   if (explicit) {
     return explicit.trim().toLowerCase() === 'production';
   }
-  const fallback = env?.VERCEL_ENV || env?.NODE_ENV || process.env.VERCEL_ENV || process.env.NODE_ENV || 'development';
+  const fallback = env?.NODE_ENV || process.env.NODE_ENV || 'development';
   return fallback.trim().toLowerCase() === 'production';
 }
 
@@ -79,7 +80,17 @@ export function renderSsrHtml({ htmlTemplate, texts, prompts = [], serverEnv = {
 
   const isProd = isProductionEnv(serverEnv);
   const appEnv = serverEnv.ENV || serverEnv.env || process.env.ENV || process.env.env || (isProd ? 'production' : 'development');
-  const initialDataScript = `<script id="__TEACH4ALL_DATA__">window.__INITIAL_UI_DATA__ = ${JSON.stringify({ texts, prompts, env: appEnv })};</script>`;
+  const clerkConfig = getClerkConfig(serverEnv);
+  const authConfig = {
+    publishableKey: clerkConfig.publishableKey,
+    frontendApi: clerkConfig.frontendApi,
+    accountsUrl: clerkConfig.accountsUrl,
+    handshakeUrl: `${clerkConfig.frontendApi.replace(/\/$/, '')}/v1/client/handshake`,
+    signInUrl: `${clerkConfig.accountsUrl.replace(/\/$/, '')}/sign-in`,
+    signUpUrl: `${clerkConfig.accountsUrl.replace(/\/$/, '')}/sign-up`,
+    userProfileUrl: `${clerkConfig.accountsUrl.replace(/\/$/, '')}/user`,
+  };
+  const initialDataScript = `<script id="__TEACH4ALL_DATA__">window.__INITIAL_UI_DATA__ = ${JSON.stringify({ texts, prompts, env: appEnv, auth: authConfig })};</script>`;
   const ssrPrompts = prompts.slice(0, 4);
 
   const promptCardsHtml = ssrPrompts.map(p => `

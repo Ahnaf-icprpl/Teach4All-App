@@ -44,6 +44,8 @@ export async function handleWhoamiRequest(req, res, serverEnv = {}) {
     guestId: req.isGuest ? req.userId : null,
   });
 
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+
   if (typeof res.json === 'function') {
     res.json(JSON.parse(body));
   } else {
@@ -106,6 +108,8 @@ export async function handleLoginRequest(req, res, serverEnv = {}) {
     sessionId: authResult.sessionId,
   };
 
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+
   if (typeof res.json === 'function') {
     res.json(payload);
   } else {
@@ -145,6 +149,7 @@ export async function handleLogoutRequest(req, res, serverEnv = {}) {
   ];
 
   res.setHeader('Set-Cookie', expiredCookies);
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
 
   const payload = {
     authenticated: false,
@@ -170,10 +175,13 @@ export function handleAuthConfigRequest(req, res, serverEnv = {}) {
     publishableKey: config.publishableKey,
     frontendApi: config.frontendApi,
     accountsUrl: config.accountsUrl,
-    signInUrl: `${config.accountsUrl}/sign-in`,
-    signUpUrl: `${config.accountsUrl}/sign-up`,
-    userProfileUrl: `${config.accountsUrl}/user`,
+    handshakeUrl: `${config.frontendApi.replace(/\/$/, '')}/v1/client/handshake`,
+    signInUrl: `${config.accountsUrl.replace(/\/$/, '')}/sign-in`,
+    signUpUrl: `${config.accountsUrl.replace(/\/$/, '')}/sign-up`,
+    userProfileUrl: `${config.accountsUrl.replace(/\/$/, '')}/user`,
   };
+
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
 
   if (typeof res.json === 'function') {
     res.json(payload);

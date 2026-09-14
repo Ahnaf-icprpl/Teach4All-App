@@ -2,6 +2,41 @@ import van from 'vanjs-core';
 import { toast } from './state.js';
 import { t } from './uiTexts.js';
 
+export function getClerkUrls() {
+  const serverAuth = (typeof window !== 'undefined' && window.__INITIAL_UI_DATA__?.auth) || null;
+  if (serverAuth) {
+    const frontend = (serverAuth.frontendApi || '').replace(/\/$/, '');
+    const accounts = (serverAuth.accountsUrl || '').replace(/\/$/, '');
+    return {
+      handshakeUrl: serverAuth.handshakeUrl || `${frontend}/v1/client/handshake`,
+      signInUrl: serverAuth.signInUrl || `${accounts}/sign-in`,
+      signUpUrl: serverAuth.signUpUrl || `${accounts}/sign-up`,
+      userProfileUrl: serverAuth.userProfileUrl || `${accounts}/user`,
+    };
+  }
+  return {
+    handshakeUrl: 'https://outgoing-feline-6741.clerk.accounts.dev/v1/client/handshake',
+    signInUrl: 'https://outgoing-feline-6741.accounts.dev/sign-in',
+    signUpUrl: 'https://outgoing-feline-6741.accounts.dev/sign-up',
+    userProfileUrl: 'https://outgoing-feline-6741.accounts.dev/user',
+  };
+}
+
+export async function initAuthConfig() {
+  if (typeof window === 'undefined') return null;
+  if (window.__INITIAL_UI_DATA__?.auth) return window.__INITIAL_UI_DATA__.auth;
+  try {
+    const res = await fetch('./api/auth/config', { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      if (!window.__INITIAL_UI_DATA__) window.__INITIAL_UI_DATA__ = {};
+      window.__INITIAL_UI_DATA__.auth = data;
+      return data;
+    }
+  } catch {}
+  return null;
+}
+
 export const CLERK_HANDSHAKE_URL = 'https://outgoing-feline-6741.clerk.accounts.dev/v1/client/handshake';
 export const CLERK_SIGN_IN_URL = 'https://outgoing-feline-6741.accounts.dev/sign-in';
 export const CLERK_SIGN_UP_URL = 'https://outgoing-feline-6741.accounts.dev/sign-up';
@@ -162,6 +197,7 @@ export async function processHandshakeIfPresent() {
 
 export async function checkAuth() {
   authLoading.val = true;
+  await initAuthConfig();
   await processHandshakeIfPresent();
 
   try {
@@ -197,7 +233,7 @@ export async function checkAuth() {
       headers['X-Session-ID'] = sessionId;
     }
 
-    const res = await fetch('./api/whoami', { headers });
+    const res = await fetch('./api/whoami', { headers, cache: 'no-store' });
     if (!res.ok) {
       if (res.status >= 400 && res.status < 500) {
         currentUser.val = null;
@@ -207,6 +243,11 @@ export async function checkAuth() {
             localStorage.removeItem('teach4all_session');
             localStorage.removeItem('teach4all_session_id');
           } catch {}
+        }
+        if (typeof document !== 'undefined') {
+          document.cookie = '__session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+          document.cookie = 'clerk_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+          document.cookie = 'clerk_session_id=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
         }
       }
       authLoading.val = false;
@@ -244,6 +285,11 @@ export async function checkAuth() {
           localStorage.removeItem('teach4all_session_id');
         } catch {}
       }
+      if (typeof document !== 'undefined') {
+        document.cookie = '__session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+        document.cookie = 'clerk_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+        document.cookie = 'clerk_session_id=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+      }
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('teach4all:auth-changed', { detail: { user: null } }));
       }
@@ -258,17 +304,19 @@ export async function checkAuth() {
 
 export function login(returnUrl) {
   if (typeof window === 'undefined') return;
+  const urls = getClerkUrls();
   const target = returnUrl || `${window.location.origin}${window.location.pathname}`;
-  const handshakeUrl = `${CLERK_HANDSHAKE_URL}?redirect_url=${encodeURIComponent(target)}`;
-  const signInUrl = `${CLERK_SIGN_IN_URL}?redirect_url=${encodeURIComponent(handshakeUrl)}`;
+  const handshakeUrl = `${urls.handshakeUrl}?redirect_url=${encodeURIComponent(target)}`;
+  const signInUrl = `${urls.signInUrl}?redirect_url=${encodeURIComponent(handshakeUrl)}`;
   window.location.href = signInUrl;
 }
 
 export function signup(returnUrl) {
   if (typeof window === 'undefined') return;
+  const urls = getClerkUrls();
   const target = returnUrl || `${window.location.origin}${window.location.pathname}`;
-  const handshakeUrl = `${CLERK_HANDSHAKE_URL}?redirect_url=${encodeURIComponent(target)}`;
-  const signUpUrl = `${CLERK_SIGN_UP_URL}?redirect_url=${encodeURIComponent(handshakeUrl)}`;
+  const handshakeUrl = `${urls.handshakeUrl}?redirect_url=${encodeURIComponent(target)}`;
+  const signUpUrl = `${urls.signUpUrl}?redirect_url=${encodeURIComponent(handshakeUrl)}`;
   window.location.href = signUpUrl;
 }
 
@@ -296,7 +344,8 @@ export async function logout() {
 
 export function openUserProfile() {
   if (typeof window === 'undefined') return;
-  window.open(CLERK_USER_PROFILE_URL, '_blank', 'noopener,noreferrer');
+  const urls = getClerkUrls();
+  window.open(urls.userProfileUrl, '_blank', 'noopener,noreferrer');
 }
 
 // Auto-initialize checkAuth when loaded in browser

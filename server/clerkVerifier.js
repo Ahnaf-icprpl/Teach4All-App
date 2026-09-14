@@ -23,15 +23,35 @@ export function getClerkConfig(serverEnv = {}) {
     process.env.CLERK_SECRET_KEY ||
     'sk_test_eEGOFwtFsyPUtLDlvQw1W5ro3sXKbdFF3iw4cmEWo2';
 
-  const frontendApi =
+  let derivedFrontendDomain = null;
+  try {
+    const raw = publishableKey.split('_')[2];
+    if (raw) {
+      const decoded = Buffer.from(raw, 'base64').toString('utf8').replace(/\$$/, '');
+      if (decoded && decoded.includes('.')) {
+        derivedFrontendDomain = decoded;
+      }
+    }
+  } catch {}
+
+  let frontendApi =
     serverEnv.CLERK_FRONTEND_API ||
     process.env.CLERK_FRONTEND_API ||
-    'https://outgoing-feline-6741.clerk.accounts.dev';
+    (derivedFrontendDomain ? `https://${derivedFrontendDomain}` : 'https://outgoing-feline-6741.clerk.accounts.dev');
 
-  const accountsUrl =
+  let accountsUrl =
     serverEnv.CLERK_ACCOUNTS_URL ||
-    process.env.CLERK_ACCOUNTS_URL ||
-    'https://outgoing-feline-6741.accounts.dev';
+    process.env.CLERK_ACCOUNTS_URL;
+
+  if (!accountsUrl || accountsUrl.includes('api.clerk.com')) {
+    if (frontendApi.includes('clerk.accounts.dev')) {
+      accountsUrl = frontendApi.replace(/\.clerk\.accounts\.dev/i, '.accounts.dev');
+    } else if (frontendApi.includes('clerk.')) {
+      accountsUrl = frontendApi.replace(/^https?:\/\/clerk\./i, 'https://accounts.');
+    } else {
+      accountsUrl = frontendApi;
+    }
+  }
 
   return { publishableKey, secretKey, frontendApi, accountsUrl };
 }
@@ -298,9 +318,10 @@ export async function authenticateClerkRequest(req, serverEnv = {}) {
       const payload = await verifyClerkJwt(cred.token, config.frontendApi);
       const userId = payload.sub;
       const user = await getClerkUser(userId, config.secretKey, dbUrl);
+      const resolvedUser = user || { id: userId, name: 'User', email: null, avatarUrl: null };
       return {
-        authenticated: Boolean(user),
-        user: user || { id: userId, name: 'User', email: null, avatarUrl: null },
+        authenticated: true,
+        user: resolvedUser,
         sessionId: payload.sid || null,
       };
     } catch {

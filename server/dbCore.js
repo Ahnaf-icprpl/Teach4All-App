@@ -152,6 +152,12 @@ export async function syncUserToDb(user = {}, databaseUrl = process.env.DATABASE
     RETURNING *;
   `;
 
+  const fallbackUsername =
+    user.username ||
+    user.email?.split('@')[0] ||
+    (user.name ? user.name.replace(/\s+/g, '_').toLowerCase() : null) ||
+    (userId.startsWith('guest_') ? 'teach4all_guest' : 'teach4all_user');
+
   try {
     const res = await pool.query(sql, [
       userId,
@@ -160,7 +166,7 @@ export async function syncUserToDb(user = {}, databaseUrl = process.env.DATABASE
       user.firstName || user.first_name || null,
       user.lastName || user.last_name || null,
       user.avatarUrl || user.avatar_url || null,
-      user.username || null,
+      fallbackUsername,
     ]);
     return res.rows[0] || null;
   } catch (err) {
