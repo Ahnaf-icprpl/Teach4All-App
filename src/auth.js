@@ -15,10 +15,10 @@ export function getClerkUrls() {
     };
   }
   return {
-    handshakeUrl: 'https://outgoing-feline-6741.clerk.accounts.dev/v1/client/handshake',
-    signInUrl: 'https://outgoing-feline-6741.accounts.dev/sign-in',
-    signUpUrl: 'https://outgoing-feline-6741.accounts.dev/sign-up',
-    userProfileUrl: 'https://outgoing-feline-6741.accounts.dev/user',
+    handshakeUrl: '',
+    signInUrl: '',
+    signUpUrl: '',
+    userProfileUrl: '',
   };
 }
 
@@ -37,10 +37,10 @@ export async function initAuthConfig() {
   return null;
 }
 
-export const CLERK_HANDSHAKE_URL = 'https://outgoing-feline-6741.clerk.accounts.dev/v1/client/handshake';
-export const CLERK_SIGN_IN_URL = 'https://outgoing-feline-6741.accounts.dev/sign-in';
-export const CLERK_SIGN_UP_URL = 'https://outgoing-feline-6741.accounts.dev/sign-up';
-export const CLERK_USER_PROFILE_URL = 'https://outgoing-feline-6741.accounts.dev/user';
+export const CLERK_HANDSHAKE_URL = '';
+export const CLERK_SIGN_IN_URL = '';
+export const CLERK_SIGN_UP_URL = '';
+export const CLERK_USER_PROFILE_URL = '';
 export const GUEST_COOKIE_NAME = 'teach4all_guest_id';
 
 function getCookie(name) {
@@ -305,8 +305,13 @@ export async function checkAuth() {
 export function login(returnUrl) {
   if (typeof window === 'undefined') return;
   const urls = getClerkUrls();
+  if (!urls.signInUrl) {
+    const msg = t('auth_not_configured') || 'Autentikasi belum dikonfigurasi pada server.';
+    toast(msg);
+    return;
+  }
   const target = returnUrl || `${window.location.origin}${window.location.pathname}`;
-  const handshakeUrl = `${urls.handshakeUrl}?redirect_url=${encodeURIComponent(target)}`;
+  const handshakeUrl = urls.handshakeUrl ? `${urls.handshakeUrl}?redirect_url=${encodeURIComponent(target)}` : target;
   const signInUrl = `${urls.signInUrl}?redirect_url=${encodeURIComponent(handshakeUrl)}`;
   window.location.href = signInUrl;
 }
@@ -314,8 +319,13 @@ export function login(returnUrl) {
 export function signup(returnUrl) {
   if (typeof window === 'undefined') return;
   const urls = getClerkUrls();
+  if (!urls.signUpUrl) {
+    const msg = t('auth_not_configured') || 'Autentikasi belum dikonfigurasi pada server.';
+    toast(msg);
+    return;
+  }
   const target = returnUrl || `${window.location.origin}${window.location.pathname}`;
-  const handshakeUrl = `${urls.handshakeUrl}?redirect_url=${encodeURIComponent(target)}`;
+  const handshakeUrl = urls.handshakeUrl ? `${urls.handshakeUrl}?redirect_url=${encodeURIComponent(target)}` : target;
   const signUpUrl = `${urls.signUpUrl}?redirect_url=${encodeURIComponent(handshakeUrl)}`;
   window.location.href = signUpUrl;
 }
@@ -345,6 +355,7 @@ export async function logout() {
 export function openUserProfile() {
   if (typeof window === 'undefined') return;
   const urls = getClerkUrls();
+  if (!urls.userProfileUrl) return;
   window.open(urls.userProfileUrl, '_blank', 'noopener,noreferrer');
 }
 
