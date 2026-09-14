@@ -633,12 +633,28 @@ export class ConversationStreamWriter {
 /**
  * Retrieve list of quizzes with question count aggregation.
  */
-export async function getQuizzes({ category, limit = 50, offset = 0, databaseUrl } = {}) {
+export async function getQuizzes({ search, query: qSearch, category, limit = 50, offset = 0, databaseUrl } = {}) {
   const params = [];
   let where = 'WHERE q.is_published = true';
   if (category) {
     params.push(category);
     where += ` AND q.category = $${params.length}`;
+  }
+  const searchQuery = (search || qSearch || '').trim();
+  if (searchQuery) {
+    params.push(`%${searchQuery}%`);
+    const sParam = `$${params.length}`;
+    where += ` AND (
+      q.title ILIKE ${sParam}
+      OR q.category ILIKE ${sParam}
+      OR q.summary ILIKE ${sParam}
+      OR q.prompt ILIKE ${sParam}
+      OR EXISTS (
+        SELECT 1 FROM quiz_questions qq2
+        WHERE qq2.quiz_id = q.id
+          AND (qq2.question_text ILIKE ${sParam} OR qq2.explanation ILIKE ${sParam})
+      )
+    )`;
   }
   params.push(limit, offset);
   const sql = `
@@ -769,12 +785,28 @@ export async function createQuiz(quiz, questions = [], { databaseUrl } = {}) {
 /**
  * Retrieve list of learning materials with section count aggregation.
  */
-export async function getMaterials({ category, limit = 50, offset = 0, databaseUrl } = {}) {
+export async function getMaterials({ search, query: qSearch, category, limit = 50, offset = 0, databaseUrl } = {}) {
   const params = [];
   let where = 'WHERE m.is_published = true';
   if (category) {
     params.push(category);
     where += ` AND m.category = $${params.length}`;
+  }
+  const searchQuery = (search || qSearch || '').trim();
+  if (searchQuery) {
+    params.push(`%${searchQuery}%`);
+    const sParam = `$${params.length}`;
+    where += ` AND (
+      m.title ILIKE ${sParam}
+      OR m.category ILIKE ${sParam}
+      OR m.summary ILIKE ${sParam}
+      OR m.prompt ILIKE ${sParam}
+      OR EXISTS (
+        SELECT 1 FROM material_sections ms2
+        WHERE ms2.material_id = m.id
+          AND (ms2.title ILIKE ${sParam} OR ms2.content ILIKE ${sParam})
+      )
+    )`;
   }
   params.push(limit, offset);
   const sql = `

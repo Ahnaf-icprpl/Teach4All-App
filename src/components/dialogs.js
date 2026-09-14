@@ -4,7 +4,10 @@ import {
   modal, chats, newChat, exportWorkspace,
   clearWorkspace, renameChat, deleteChat, startTopicChat, toast,
 } from '../state.js';
-import { quizzes, materials, markQuizSolved, markMaterialSolved } from '../studyModules.js';
+import {
+  quizzes, materials, markQuizSolved, markMaterialSolved,
+  fetchQuizzes, fetchMaterials,
+} from '../studyModules.js';
 import { QuizSolver, MaterialReader } from './studyViewer.js';
 import { t } from '../uiTexts.js';
 
@@ -36,21 +39,44 @@ function formatMeta(isQuiz, item) {
 function TopicList(type) {
   const isQuiz = type === 'quiz';
   const filter = van.state('all');
+  const searchQuery = van.state('');
+  const searchResults = van.state(null);
+  let debounceTimer = null;
 
   const toggleSolved = async (item) => {
     const isCurrentlySolved = Boolean(item.is_solved || item.isSolved);
     const nextSolved = !isCurrentlySolved;
     if (isQuiz) {
       await markQuizSolved(item.id, nextSolved);
+      if (searchResults.val) {
+        searchResults.val = searchResults.val.map(q => (q.id === item.id ? { ...q, is_solved: nextSolved, isSolved: nextSolved } : q));
+      }
       toast(nextSolved ? t('dialogs_toast_quiz_solved') : t('dialogs_toast_quiz_unsolved'));
     } else {
       await markMaterialSolved(item.id, nextSolved);
+      if (searchResults.val) {
+        searchResults.val = searchResults.val.map(m => (m.id === item.id ? { ...m, is_solved: nextSolved, isSolved: nextSolved, is_completed: nextSolved, isCompleted: nextSolved } : m));
+      }
       toast(nextSolved ? t('dialogs_toast_material_solved') : t('dialogs_toast_material_unsolved'));
     }
   };
 
+  const getBaseList = () => {
+    const base = isQuiz ? quizzes.val : materials.val;
+    if (searchResults.val !== null) {
+      return searchResults.val;
+    }
+    const q = searchQuery.val.trim().toLowerCase();
+    if (!q) return base;
+    return base.filter(item =>
+      (item.title && item.title.toLowerCase().includes(q)) ||
+      (item.summary && item.summary.toLowerCase().includes(q)) ||
+      (item.category && item.category.toLowerCase().includes(q))
+    );
+  };
+
   const getFilteredItems = () => {
-    const list = isQuiz ? quizzes.val : materials.val;
+    const list = getBaseList();
     if (filter.val === 'solved') {
       return list.filter(item => Boolean(item.is_solved || item.isSolved));
     }
@@ -60,9 +86,57 @@ function TopicList(type) {
     return list;
   };
 
+  const onSearchInput = (e) => {
+    const value = e.target.value;
+    searchQuery.val = value;
+    clearTimeout(debounceTimer);
+    const trimmed = value.trim();
+    if (!trimmed) {
+      searchResults.val = null;
+      return;
+    }
+    debounceTimer = setTimeout(async () => {
+      const results = isQuiz
+        ? await fetchQuizzes({ search: trimmed })
+        : await fetchMaterials({ search: trimmed });
+      if (searchQuery.val.trim() === trimmed) {
+        searchResults.val = results;
+      }
+    }, 250);
+  };
+
+  const clearSearch = (inputEl) => {
+    clearTimeout(debounceTimer);
+    searchQuery.val = '';
+    searchResults.val = null;
+    if (inputEl) {
+      inputEl.value = '';
+      inputEl.focus();
+    }
+  };
+
+  const searchInputEl = input({
+    type: 'search',
+    class: 'topic-search-input',
+    placeholder: () => isQuiz ? t('dialogs_search_quiz_placeholder') : t('dialogs_search_material_placeholder'),
+    'aria-label': () => t('dialogs_search_aria'),
+    oninput: onSearchInput,
+    onsearch: (e) => { if (!e.target.value) clearSearch(e.target); },
+  });
+
   return div({ class: 'topic-dialog-content' },
     p({ class: 'topic-dialog-desc' },
       () => isQuiz ? t('dialogs_quiz_desc') : t('dialogs_material_desc')),
+    div({ class: 'topic-search-field' },
+      icon('search', 'topic-search-icon'),
+      searchInputEl,
+      () => searchQuery.val ? button({
+        type: 'button',
+        class: 'topic-search-clear',
+        'aria-label': () => t('dialogs_close_aria'),
+        onclick: () => clearSearch(searchInputEl),
+      }, icon('close')) : null,
+    ),
     div({ class: 'study-filter-tabs', role: 'tablist' },
       button({
         type: 'button',
@@ -72,7 +146,7 @@ function TopicList(type) {
         onclick: () => { filter.val = 'all'; },
       },
       span(() => t('dialogs_filter_all')),
-      span({ class: 'study-filter-badge' }, () => (isQuiz ? quizzes.val : materials.val).length),
+      span({ class: 'study-filter-badge' }, () => getBaseList().length),
       ),
       button({
         type: 'button',
@@ -82,7 +156,7 @@ function TopicList(type) {
         onclick: () => { filter.val = 'unsolved'; },
       },
       span(() => t('dialogs_filter_unsolved')),
-      span({ class: 'study-filter-badge' }, () => (isQuiz ? quizzes.val : materials.val).filter(item => !(item.is_solved || item.isSolved)).length),
+      span({ class: 'study-filter-badge' }, () => getBaseList().filter(item => !(item.is_solved || item.isSolved)).length),
       ),
       button({
         type: 'button',
@@ -92,7 +166,7 @@ function TopicList(type) {
         onclick: () => { filter.val = 'solved'; },
       },
       span(() => t('dialogs_filter_solved')),
-      span({ class: 'study-filter-badge' }, () => (isQuiz ? quizzes.val : materials.val).filter(item => Boolean(item.is_solved || item.isSolved)).length),
+      span({ class: 'study-filter-badge' }, () => getBaseList().filter(item => Boolean(item.is_solved || item.isSolved)).length),
       ),
     ),
     () => {

@@ -1,5 +1,6 @@
 import van from 'vanjs-core';
 import { QUIZZES_STORAGE_KEY, MATERIALS_STORAGE_KEY } from './storage.js';
+import { t } from './uiTexts.js';
 
 export const INITIAL_QUIZZES = [];
 export const INITIAL_MATERIALS = [];
@@ -36,9 +37,13 @@ function loadCachedMaterials() {
 export const quizzes = van.state(loadCachedQuizzes());
 export const materials = van.state(loadCachedMaterials());
 
-export async function fetchQuizzes() {
+export async function fetchQuizzes({ search, category } = {}) {
   try {
-    const res = await fetch('/api/quizzes');
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    if (category) params.set('category', category);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    const res = await fetch(`/api/quizzes${qs}`);
     if (!res.ok) return quizzes.val;
     const data = await res.json();
     if (Array.isArray(data?.quizzes)) {
@@ -52,21 +57,27 @@ export async function fetchQuizzes() {
           isSolved: solved,
         };
       });
-      quizzes.val = formatted;
-      try {
-        if (typeof localStorage !== 'undefined') {
-          localStorage.setItem(QUIZZES_STORAGE_KEY, JSON.stringify(formatted));
-        }
-      } catch {}
+      if (!search && !category) {
+        quizzes.val = formatted;
+        try {
+          if (typeof localStorage !== 'undefined') {
+            localStorage.setItem(QUIZZES_STORAGE_KEY, JSON.stringify(formatted));
+          }
+        } catch {}
+      }
       return formatted;
     }
   } catch {}
   return quizzes.val;
 }
 
-export async function fetchMaterials() {
+export async function fetchMaterials({ search, category } = {}) {
   try {
-    const res = await fetch('/api/materials');
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    if (category) params.set('category', category);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    const res = await fetch(`/api/materials${qs}`);
     if (!res.ok) return materials.val;
     const data = await res.json();
     if (Array.isArray(data?.materials)) {
@@ -83,12 +94,14 @@ export async function fetchMaterials() {
           isCompleted: solved,
         };
       });
-      materials.val = formatted;
-      try {
-        if (typeof localStorage !== 'undefined') {
-          localStorage.setItem(MATERIALS_STORAGE_KEY, JSON.stringify(formatted));
-        }
-      } catch {}
+      if (!search && !category) {
+        materials.val = formatted;
+        try {
+          if (typeof localStorage !== 'undefined') {
+            localStorage.setItem(MATERIALS_STORAGE_KEY, JSON.stringify(formatted));
+          }
+        } catch {}
+      }
       return formatted;
     }
   } catch {}
@@ -215,7 +228,7 @@ export function normalizeMaterialSection(s, idx = 0) {
     section_number: sectionNumber,
     readTimeMinutes,
     read_time_minutes: readTimeMinutes,
-    title: s.title || `Bagian ${sectionNumber}`,
+    title: s.title || `${t('dialogs_material_section_label')} ${sectionNumber}`,
     content: s.content || '',
   };
 }

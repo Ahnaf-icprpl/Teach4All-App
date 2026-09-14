@@ -11,6 +11,7 @@ import {
   shuffleArray,
 } from '../studyModules.js';
 import { t } from '../uiTexts.js';
+import { renderMarkdown } from '../markdown.js';
 
 const { div, h2, h3, p, span, button } = van.tags;
 
@@ -214,7 +215,7 @@ export function MaterialReader(materialId) {
           ),
         ),
         div({ class: 'study-material-body' },
-          (currentSec.content || '').split('\n\n').map(paragraph => p({ class: 'study-material-para' }, paragraph)),
+          renderMarkdown(currentSec.content || ''),
         ),
       ),
       div({ class: 'study-footer-nav' },

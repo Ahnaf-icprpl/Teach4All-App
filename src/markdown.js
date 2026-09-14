@@ -1,7 +1,7 @@
 import van from 'vanjs-core';
 import { icon } from './icons.js';
 import { toast, modal } from './state.js';
-import { fetchQuizzes } from './studyModules.js';
+import { fetchQuizzes, fetchMaterials } from './studyModules.js';
 import { t } from './uiTexts.js';
 
 const {
@@ -86,8 +86,8 @@ export function renderMarkdown(content) {
         attrs[m[1]] = m[2];
       }
       const quizId = attrs.id;
-      const title = attrs.title || 'Kuis Interaktif';
-      const category = attrs.category || 'Kuis';
+      const title = attrs.title || t('dialogs_title_quiz');
+      const category = attrs.category || t('sidebar_quiz_button');
       const count = attrs.count || '20';
 
       elements.push(
@@ -105,6 +105,43 @@ export function renderMarkdown(content) {
               modal.val = { type: 'quiz-solver', id: quizId };
             },
           }, icon('play'), span(() => t('dialogs_quiz_start_button'))),
+        )
+      );
+      i++;
+      continue;
+    }
+
+    // Interactive Material Card marker (:::material-card{...}:::)
+    const matMatch = line.trim().match(/^:::material-card\{([^}]+)\}:::$/);
+    if (matMatch) {
+      const attrsStr = matMatch[1];
+      const attrs = {};
+      const attrRegex = /(\w+)="([^"]*)"/g;
+      let m;
+      while ((m = attrRegex.exec(attrsStr)) !== null) {
+        attrs[m[1]] = m[2];
+      }
+      const materialId = attrs.id;
+      const title = attrs.title || t('dialogs_title_material');
+      const category = attrs.category || t('sidebar_material_button');
+      const count = attrs.count || '1';
+      const readTime = attrs.readTime || '5';
+
+      elements.push(
+        div({ class: 'chat-material-card' },
+          div({ class: 'chat-material-card-header' },
+            div({ class: 'chat-material-badge' }, icon('book'), span(category)),
+            span({ class: 'chat-material-count' }, () => `${count} ${t('dialogs_meta_parts_suffix')} • ${readTime} ${t('dialogs_meta_read_time_suffix')}`),
+          ),
+          h3({ class: 'chat-material-title' }, title),
+          button({
+            type: 'button',
+            class: 'chat-material-read-btn',
+            onclick: () => {
+              fetchMaterials().catch(() => {});
+              modal.val = { type: 'material-reader', id: materialId };
+            },
+          }, icon('book'), span(() => t('dialogs_material_open_button'))),
         )
       );
       i++;
@@ -131,13 +168,16 @@ export function renderMarkdown(content) {
             button({
               type: 'button',
               class: 'code-copy-btn',
-              'aria-label': 'Salin kode',
+              'aria-label': () => t('markdown_copy_code_aria'),
+              title: () => t('markdown_copy_code_aria'),
               onclick: () => {
                 navigator.clipboard?.writeText(codeString).then(() => {
-                  toast('Kode berhasil disalin.');
-                }).catch(() => {});
+                  toast(t('markdown_copy_code_success'));
+                }).catch(() => {
+                  toast(t('chat_copy_fail'));
+                });
               },
-            }, icon('copy'), span('Salin')),
+            }, icon('copy'), span(() => t('markdown_copy_code_button'))),
           ),
           pre(code({ class: lang ? `language-${lang}` : '' }, codeString)),
         )

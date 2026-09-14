@@ -33,6 +33,7 @@ export async function handleMaterialsRequest(req, res, env = {}) {
   if (req.method === 'GET') {
     const id = url.searchParams.get('id');
     const category = url.searchParams.get('category') || undefined;
+    const search = url.searchParams.get('search') || url.searchParams.get('q') || undefined;
     const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '50', 10), 1), 100);
     const offset = Math.max(parseInt(url.searchParams.get('offset') || '0', 10), 0);
 
@@ -49,7 +50,7 @@ export async function handleMaterialsRequest(req, res, env = {}) {
         return;
       }
 
-      const materials = await getMaterials({ category, limit, offset, databaseUrl: dbUrl });
+      const materials = await getMaterials({ search, category, limit, offset, databaseUrl: dbUrl });
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
       res.end(JSON.stringify({ materials }));
     } catch (err) {

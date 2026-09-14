@@ -51,7 +51,15 @@
   .topic-chat-btn { padding: 6px 10px; font-size: 11px; min-height: 30px; border-radius: 6px; }
   .topic-chat-btn .icon { width: 12px; height: 12px; }
   .topic-open-btn { padding: 6px 12px; font-size: 11px; min-height: 30px; border-radius: 6px; }
-  .topic-open-btn .icon { width: 12px; height: 12px; }
+  .topic-search-field { display: flex; align-items: center; position: relative; width: 100%; margin-bottom: 12px; flex-shrink: 0; }
+  .topic-search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--muted); pointer-events: none; z-index: 1; }
+  .app-dialog .topic-search-input { width: 100%; background: var(--bg); border: 1px solid rgba(34, 46, 60, 0.12); border-radius: 10px; padding: 9px 38px 9px 40px; font-size: 12.5px; color: var(--text); outline: none; transition: border-color .15s, box-shadow .15s; box-sizing: border-box; }
+  .app-dialog .topic-search-input:focus { border-color: var(--terracotta); box-shadow: 0 0 0 2px rgba(199, 92, 58, 0.15); }
+  .app-dialog .topic-search-input::placeholder { color: var(--muted); opacity: 0.75; }
+  .app-dialog .topic-search-input::-webkit-search-cancel-button, .app-dialog .topic-search-input::-webkit-search-decoration { -webkit-appearance: none; appearance: none; }
+  .topic-search-clear { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; border: 0; background: var(--hover); color: var(--muted); cursor: pointer; padding: 0; transition: all .15s; z-index: 1; }
+  .topic-search-clear:hover { background: var(--soft-beige); color: var(--text); }
+  .topic-search-clear .icon { width: 13px; height: 13px; }
   .study-filter-tabs { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-shrink: 0; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
   .study-filter-tabs::-webkit-scrollbar { display: none; }
   .study-filter-tab { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 20px; font-size: 11.5px; font-weight: 550; border: 1px solid rgba(34, 46, 60, 0.1); background: var(--bg); color: var(--muted); cursor: pointer; transition: all .15s; white-space: nowrap; }
@@ -98,6 +106,15 @@
   .study-material-title { font-size: 15px; font-weight: 600; color: var(--text); margin: 0; flex: 1; line-height: 1.35; }
   .study-material-read-time { font-size: 10.5px; font-weight: 550; color: var(--muted); background: var(--hover); padding: 3px 8px; border-radius: 10px; white-space: nowrap; }
   .study-material-body { display: flex; flex-direction: column; gap: 12px; }
+  .study-material-body .markdown-body { display: flex; flex-direction: column; gap: 12px; }
+  .study-material-body .markdown-heading { font-weight: 650; color: var(--text); margin: 8px 0 2px; }
+  .study-material-body .markdown-h1 { font-size: 1.3em; }
+  .study-material-body .markdown-h2 { font-size: 1.18em; }
+  .study-material-body .markdown-h3 { font-size: 1.08em; }
+  .study-material-body .markdown-p { font-size: 13.5px; line-height: 1.8; color: var(--text); }
+  .study-material-body .markdown-list { padding-left: 20px; }
+  .study-material-body .markdown-list li { font-size: 13px; line-height: 1.7; color: var(--text); margin-bottom: 4px; }
+  .study-material-body .markdown-blockquote { background: var(--surface); border-left: 3px solid var(--gold-amber); border-radius: 6px; padding: 10px 14px; font-style: normal; color: var(--text); }
   .study-material-para { font-size: 12.5px; line-height: 1.7; color: var(--text); margin: 0; }
 }
 
@@ -157,6 +174,7 @@
       color: var(--muted);
       line-height: 1.55;
     }
+    .dialog-wide .topic-search-input { font-size: 13px; padding: 10px 38px 10px 40px; }
     .dialog-wide .topic-card-grid {
       gap: 12px;
       padding-right: 0;

@@ -112,6 +112,24 @@ function Messages() {
   );
 }
 
+/**
+ * Cleans pasted text by collapsing multiple consecutive spaces/tabs into a single space,
+ * and collapsing all consecutive newlines into a single line break (max 1 newline, no blank lines).
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+export function cleanPastedText(text) {
+  if (!text || typeof text !== 'string') return '';
+  return text
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .split('\n')
+    .map(line => line.replace(/[^\S\r\n]+/g, ' ').trim())
+    .filter(line => line.length > 0)
+    .join('\n');
+}
+
 function Composer() {
   const autoResize = () => {
     draft.val; // track dependency
@@ -119,6 +137,40 @@ function Composer() {
       inputEl.style.height = 'auto';
       inputEl.style.height = `${Math.min(inputEl.scrollHeight, 180)}px`;
     });
+  };
+
+  const handlePaste = event => {
+    const clipboardData = event.clipboardData || window.clipboardData;
+    if (!clipboardData) return;
+    const text = clipboardData.getData('text');
+    if (!text) return;
+
+    event.preventDefault();
+    const cleaned = cleanPastedText(text);
+    if (!cleaned) return;
+
+    const target = event.target;
+    const start = target.selectionStart ?? target.value.length;
+    const end = target.selectionEnd ?? target.value.length;
+    const currentVal = target.value || '';
+    const availableSpace = Math.max(0, MAX_INPUT - (currentVal.length - (end - start)));
+    const toInsert = cleaned.slice(0, availableSpace);
+    if (!toInsert) return;
+
+    let inserted = false;
+    try {
+      inserted = document.execCommand('insertText', false, toInsert);
+    } catch {}
+
+    if (!inserted) {
+      const newVal = currentVal.slice(0, start) + toInsert + currentVal.slice(end);
+      target.value = newVal;
+      setDraft(newVal);
+      const newCursorPos = Math.min(start + toInsert.length, newVal.length);
+      target.selectionStart = target.selectionEnd = newCursorPos;
+    } else {
+      setDraft(target.value);
+    }
   };
 
   const inputEl = textarea({
@@ -130,6 +182,7 @@ function Composer() {
     'aria-label': () => t('chat_composer_aria'),
     value: () => draft.val,
     oninput: event => setDraft(event.target.value),
+    onpaste: handlePaste,
     onkeydown: event => {
       if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
         if (!window.matchMedia('(pointer: coarse)').matches) {

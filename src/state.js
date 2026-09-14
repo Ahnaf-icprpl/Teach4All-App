@@ -142,9 +142,7 @@ export function startTopicChat(type, topicOrPrompt) {
   } else if (custom) {
     promptText = `${prefix}${custom}`;
   } else {
-    promptText = isQuiz
-      ? `${prefix}Sains dan Pengetahuan Umum`
-      : `${prefix}Sains dan Konsep Dasar`;
+    promptText = `${prefix}${t('dialogs_cat_basic_science')}`;
   }
 
   modal.val = null;

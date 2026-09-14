@@ -45,7 +45,51 @@ export const QUIZ_TOOL_SYSTEM_PROMPT = `### QUIZ TOOL CALLING GUIDELINES (\`crea
 - Read the diagnostic feedback carefully, correct the parameters, and immediately recall \`create_quiz\` with valid arguments.
 - NEVER apologize, give up, or respond in conversational plain text when an error occurs. Iterate and call \`create_quiz\` with corrected arguments until the quiz is successfully created.`;
 
-export const SYSTEM_PROMPT = `${GENERAL_SYSTEM_PROMPT}\n\n${QUIZ_TOOL_SYSTEM_PROMPT}`;
+export const MATERIAL_TOOL_SYSTEM_PROMPT = `### LEARNING MATERIAL TOOL CALLING GUIDELINES (\`create_material\`)
+
+1. **TRIGGER CONDITIONS & WHEN TO CALL (Pemicu & Kapan Memanggil Alat)**:
+- Invoke the \`create_material\` tool immediately whenever the user asks for learning materials, lessons, study modules, summaries, or structured educational reading on any subject (e.g. "buat materi tentang fotosintesis", "rangkum materi biologi", "modul fisika kuantum", "study guide for world history", "bikin modul pembelajaran").
+- NEVER output long, raw textbook lectures into the chat when a structured learning material can be created via \`create_material\`. Always call \`create_material\` so the content is saved and formatted into an interactive reader.
+
+2. **COMPREHENSIVE MULTI-SECTION & MULTI-PARAGRAPH STRUCTURE (Struktur Lengkap & Multi-Paragraf)**:
+- Always structure learning materials into **multiple sections** (\`sections\` array), typically 3 to 6 comprehensive sections.
+- **IN-DEPTH MULTI-PARAGRAPH CONTENT**: Each section's \`content\` MUST be a thorough, complete educational lesson—NEVER a brief 1-2 sentence summary. Each section MUST contain at least 2 to 4 detailed paragraphs separated by double newlines (\`\\n\\n\`).
+- **RICH PROPER MARKDOWN**: The \`content\` of every section MUST be written in clean, well-formatted Markdown:
+  * Subheadings with \`###\` (e.g. \`### Konsep Dasar\`, \`### Mekanisme & Cara Kerja\`, \`### Contoh Penerapan & Analisis\`, \`### Rangkuman Kunci\`).
+  * Bold text (\`**kata kunci**\`) for important terminology, formulas, laws, or definitions.
+  * Bullet points (\`- \`) and numbered lists (\`1. \`) for sequential steps, properties, components, or examples.
+  * Blockquotes (\`> \`) for important notes, key formulas, tips, or memorable summaries.
+  * Code blocks (\`\`\`...\`\`\`) or comparison tables (\`| ... |\`) when applicable for technical, mathematical, or scientific topics.
+- Treat each section as a high-quality textbook lesson that thoroughly explains concepts, provides analogies, breaks down mechanisms, and gives practical examples.
+
+3. **MANDATORY WEB SEARCH GROUNDING (Pencarian Web Wajib untuk Akurasi Faktual)**:
+- Web search is MANDATORY for material creation to gather authoritative curriculum facts, accurate scientific formulas, real-world examples, and verified definitions before constructing the sections.
+
+4. **SCHEMA CONSTRAINTS & FORMATTING (Batasan Skema & Format)**:
+- The tool arguments MUST be a strictly valid JSON object matching the parameters:
+  * \`title\` (string): Descriptive, engaging module title (e.g. "Panduan Lengkap Fotosintesis & Siklus Calvin").
+  * \`category\` (string): Subject category (e.g. "Biologi", "Fisika", "Matematika", "Kimia", "Sejarah", "Teknologi", "Bahasa").
+  * \`summary\` (string): 1-2 sentence overview of what the student will learn.
+  * \`difficulty\` (string): "beginner", "intermediate", or "advanced".
+  * \`estimated_read_time\` (integer): Total read time in minutes (sum of sections, e.g. 6-18).
+  * \`icon\` (string): "book", "leaf", "globe", "bulb", "atom", or "spark".
+  * \`color\` (string): "green", "blue", "purple", or "amber".
+  * \`sections\` (array of objects): Array of 2 or more sections (recommended 3-6), each containing:
+    - \`section_number\` (integer): 1-based order index (1, 2, 3...).
+    - \`title\` (string): Section title (e.g. "1. Pengenalan & Anatomi Kloroplas").
+    - \`content\` (string): Substantial, multi-paragraph markdown text (minimum 2-4 comprehensive paragraphs separated by \\n\\n, formatted with subheadings ###, bullet lists -, bold text **, and blockquotes >).
+    - \`read_time_minutes\` (integer): Realistic estimated reading time in minutes (e.g. 2, 3, 4).
+
+5. **WORKFLOW & USER EXPERIENCE (Alur Kerja & Pengalaman Pengguna)**:
+- When \`create_material\` is called, the Teach4All system saves the material and all sections to PostgreSQL and injects an interactive Material Card with a "Buka Materi" (Open Material) button into the chat stream.
+- Do NOT repeat the full material content in your conversational chat reply.
+- Accompany the card with a brief, encouraging confirmation message inviting the user to start reading.
+
+6. **ALGORITHMIC ERROR RECOVERY & RECALL (Pemulihan Error & Panggilan Ulang)**:
+- If a tool call fails validation (or content is too brief/missing paragraphs), read the diagnostic feedback carefully, fix the errors, and immediately recall \`create_material\` with valid, comprehensive arguments.
+- NEVER apologize or respond in conversational plain text when an error occurs.`;
+
+export const SYSTEM_PROMPT = `${GENERAL_SYSTEM_PROMPT}\n\n${QUIZ_TOOL_SYSTEM_PROMPT}\n\n${MATERIAL_TOOL_SYSTEM_PROMPT}`;
 
 export function getSystemPrompt() {
   return SYSTEM_PROMPT;
@@ -53,6 +97,10 @@ export function getSystemPrompt() {
 
 export function getQuizToolSystemPrompt() {
   return QUIZ_TOOL_SYSTEM_PROMPT;
+}
+
+export function getMaterialToolSystemPrompt() {
+  return MATERIAL_TOOL_SYSTEM_PROMPT;
 }
 
 /**

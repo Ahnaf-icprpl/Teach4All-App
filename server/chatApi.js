@@ -15,6 +15,7 @@ import {
 } from './providerCache.js';
 import { buildWebSearchPlugin, buildWebSearchTool, isWebSearchRequested } from './webSearch.js';
 import { buildQuizTool, accumulateToolCalls, handleCompletedToolCalls } from './quizTool.js';
+import { buildMaterialTool, handleCompletedMaterialToolCalls, MATERIAL_TOOL_NAME } from './materialTool.js';
 import { createChatMiddleware, dispatchApi } from './chatMiddleware.js';
 
 export const DEFAULT_MODEL = 'google/gemini-2.5-flash-lite';
@@ -157,10 +158,13 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
 
   const isQuizRequest = (promptText && /\b(kuis|quiz|soal|latihan|evaluasi|test me)\b/i.test(promptText)) ||
     (Array.isArray(messages) && messages.some(m => m && m.role === 'user' && /\b(kuis|quiz|soal|latihan|evaluasi|test me)\b/i.test(m.text || m.content || '')));
+  const isMaterialRequest = (promptText && /\b(materi|modul|ringkasan|rangkuman|bacaan|pelajaran|material|study guide)\b/i.test(promptText)) ||
+    (Array.isArray(messages) && messages.some(m => m && m.role === 'user' && /\b(materi|modul|ringkasan|rangkuman|bacaan|pelajaran|material|study guide)\b/i.test(m.text || m.content || '')));
 
-  const enableSearch = isWebSearchRequested(webSearch, { isQuiz: isQuizRequest });
+  const enableSearch = isWebSearchRequested(webSearch, { isQuiz: isQuizRequest || isMaterialRequest });
   const webPlugin = enableSearch ? buildWebSearchPlugin(serverEnv) : null;
   const quizTool = buildQuizTool(serverEnv);
+  const materialTool = buildMaterialTool(serverEnv);
 
   const formattedMessages = formatMessages(messages);
   const controller = new AbortController();
@@ -186,8 +190,9 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
         messages: formattedMessages,
         stream: true,
         user: userId || clientIp,
-        tools: [quizTool],
-        ...(isQuizRequest ? { tool_choice: { type: 'function', function: { name: 'create_quiz' } } } : {}),
+        tools: [quizTool, materialTool],
+        ...(isQuizRequest && !isMaterialRequest ? { tool_choice: { type: 'function', function: { name: 'create_quiz' } } } : {}),
+        ...(isMaterialRequest && !isQuizRequest ? { tool_choice: { type: 'function', function: { name: MATERIAL_TOOL_NAME } } } : {}),
         ...(webPlugin ? { plugins: [webPlugin] } : {}),
         ...providerRouting,
       }),
@@ -309,7 +314,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
             const delta = json.choices?.[0]?.delta?.content || '';
             if (delta) {
               accumulatedText += delta;
-              if (!isQuizRequest) {
+              if (!isQuizRequest && !isMaterialRequest) {
                 res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: delta } }] })}\n\n`);
                 streamWriter.writeChunk(delta);
               }
@@ -330,7 +335,28 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
         }
       }
 
-      if (Object.keys(accumulatedToolCalls).length > 0) {
+      const hasMaterialToolCall = Object.values(accumulatedToolCalls).some(c => c.function?.name === MATERIAL_TOOL_NAME);
+      const hasQuizToolCall = Object.values(accumulatedToolCalls).some(c => c.function?.name === 'create_quiz');
+
+      if (hasMaterialToolCall) {
+        if (!res.writableEnded) {
+          res.write('data: {"type":"quiz_status","status":"building"}\n\n');
+        }
+        await handleCompletedMaterialToolCalls({
+          toolCallsMap: accumulatedToolCalls,
+          serverEnv,
+          userId,
+          clientIp,
+          conversationId,
+          formattedMessages,
+          streamWriter,
+          res,
+          controller,
+          apiKey,
+          model,
+          providerRouting,
+        });
+      } else if (hasQuizToolCall || Object.keys(accumulatedToolCalls).length > 0) {
         if (!res.writableEnded) {
           res.write('data: {"type":"quiz_status","status":"building"}\n\n');
         }
@@ -341,6 +367,34 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
           clientIp,
           conversationId,
           formattedMessages,
+          streamWriter,
+          res,
+          controller,
+          apiKey,
+          model,
+          providerRouting,
+        });
+      } else if (isMaterialRequest && apiKey && !controller.signal.aborted) {
+        if (!res.writableEnded) {
+          res.write('data: {"type":"quiz_status","status":"building"}\n\n');
+        }
+        await handleCompletedMaterialToolCalls({
+          toolCallsMap: {
+            0: {
+              id: `call_mat_${Date.now()}_init`,
+              type: 'function',
+              function: { name: MATERIAL_TOOL_NAME, arguments: '{}' },
+            },
+          },
+          serverEnv,
+          userId,
+          clientIp,
+          conversationId,
+          formattedMessages: [
+            ...formattedMessages,
+            { role: 'assistant', content: accumulatedText || 'Attempted to respond in text.' },
+            { role: 'user', content: 'CRITICAL INSTRUCTION: You must NOT answer in plain conversational text or apologies. You MUST call the create_material function immediately with arguments: title, category, summary, difficulty, icon, color, and sections array (with section_number, title, content).' },
+          ],
           streamWriter,
           res,
           controller,
