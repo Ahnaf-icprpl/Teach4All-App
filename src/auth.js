@@ -8,10 +8,10 @@ export function getClerkUrls() {
     const frontend = (serverAuth.frontendApi || '').replace(/\/$/, '');
     const accounts = (serverAuth.accountsUrl || '').replace(/\/$/, '');
     return {
-      handshakeUrl: serverAuth.handshakeUrl || `${frontend}/v1/client/handshake`,
-      signInUrl: serverAuth.signInUrl || `${accounts}/sign-in`,
-      signUpUrl: serverAuth.signUpUrl || `${accounts}/sign-up`,
-      userProfileUrl: serverAuth.userProfileUrl || `${accounts}/user`,
+      handshakeUrl: serverAuth.handshakeUrl || (frontend ? `${frontend}/v1/client/handshake` : ''),
+      signInUrl: serverAuth.signInUrl || (accounts ? `${accounts}/sign-in` : ''),
+      signUpUrl: serverAuth.signUpUrl || (accounts ? `${accounts}/sign-up` : ''),
+      userProfileUrl: serverAuth.userProfileUrl || (accounts ? `${accounts}/user` : ''),
     };
   }
   return {
@@ -24,7 +24,7 @@ export function getClerkUrls() {
 
 export async function initAuthConfig() {
   if (typeof window === 'undefined') return null;
-  if (window.__INITIAL_UI_DATA__?.auth) return window.__INITIAL_UI_DATA__.auth;
+  if (window.__INITIAL_UI_DATA__?.auth?.signInUrl) return window.__INITIAL_UI_DATA__.auth;
   try {
     const res = await fetch('./api/auth/config', { cache: 'no-store' });
     if (res.ok) {
@@ -300,30 +300,36 @@ export async function checkAuth() {
   return currentUser.val;
 }
 
-export function login(returnUrl) {
+export async function login(returnUrl) {
   if (typeof window === 'undefined') return;
+  await initAuthConfig();
   const urls = getClerkUrls();
-  if (!urls.signInUrl) {
+  if (!urls.signInUrl || (!urls.signInUrl.startsWith('http://') && !urls.signInUrl.startsWith('https://'))) {
     const msg = t('auth_not_configured') || 'Autentikasi belum dikonfigurasi pada server.';
     toast(msg);
     return;
   }
   const target = returnUrl || `${window.location.origin}${window.location.pathname}`;
-  const handshakeUrl = urls.handshakeUrl ? `${urls.handshakeUrl}?redirect_url=${encodeURIComponent(target)}` : target;
+  const handshakeUrl = (urls.handshakeUrl && (urls.handshakeUrl.startsWith('http://') || urls.handshakeUrl.startsWith('https://')))
+    ? `${urls.handshakeUrl}?redirect_url=${encodeURIComponent(target)}`
+    : target;
   const signInUrl = `${urls.signInUrl}?redirect_url=${encodeURIComponent(handshakeUrl)}`;
   window.location.href = signInUrl;
 }
 
-export function signup(returnUrl) {
+export async function signup(returnUrl) {
   if (typeof window === 'undefined') return;
+  await initAuthConfig();
   const urls = getClerkUrls();
-  if (!urls.signUpUrl) {
+  if (!urls.signUpUrl || (!urls.signUpUrl.startsWith('http://') && !urls.signUpUrl.startsWith('https://'))) {
     const msg = t('auth_not_configured') || 'Autentikasi belum dikonfigurasi pada server.';
     toast(msg);
     return;
   }
   const target = returnUrl || `${window.location.origin}${window.location.pathname}`;
-  const handshakeUrl = urls.handshakeUrl ? `${urls.handshakeUrl}?redirect_url=${encodeURIComponent(target)}` : target;
+  const handshakeUrl = (urls.handshakeUrl && (urls.handshakeUrl.startsWith('http://') || urls.handshakeUrl.startsWith('https://')))
+    ? `${urls.handshakeUrl}?redirect_url=${encodeURIComponent(target)}`
+    : target;
   const signUpUrl = `${urls.signUpUrl}?redirect_url=${encodeURIComponent(handshakeUrl)}`;
   window.location.href = signUpUrl;
 }
@@ -350,10 +356,11 @@ export async function logout() {
   if (msg) toast(msg);
 }
 
-export function openUserProfile() {
+export async function openUserProfile() {
   if (typeof window === 'undefined') return;
+  await initAuthConfig();
   const urls = getClerkUrls();
-  if (!urls.userProfileUrl) return;
+  if (!urls.userProfileUrl || (!urls.userProfileUrl.startsWith('http://') && !urls.userProfileUrl.startsWith('https://'))) return;
   window.open(urls.userProfileUrl, '_blank', 'noopener,noreferrer');
 }
 

@@ -54,14 +54,16 @@ export async function handleUiTextsRequest(req, res, env = {}) {
     const prompts = await getChatPromptsFromDb(dbUrl);
     const appEnv = env.ENV || env.env || process.env.ENV || process.env.env || 'development';
     const clerkConfig = getClerkConfig(env);
+    const frontend = (clerkConfig.frontendApi || '').replace(/\/$/, '');
+    const accounts = (clerkConfig.accountsUrl || '').replace(/\/$/, '');
     const authConfig = {
-      publishableKey: clerkConfig.publishableKey,
-      frontendApi: clerkConfig.frontendApi,
-      accountsUrl: clerkConfig.accountsUrl,
-      handshakeUrl: `${clerkConfig.frontendApi.replace(/\/$/, '')}/v1/client/handshake`,
-      signInUrl: `${clerkConfig.accountsUrl.replace(/\/$/, '')}/sign-in`,
-      signUpUrl: `${clerkConfig.accountsUrl.replace(/\/$/, '')}/sign-up`,
-      userProfileUrl: `${clerkConfig.accountsUrl.replace(/\/$/, '')}/user`,
+      publishableKey: clerkConfig.publishableKey || '',
+      frontendApi: frontend,
+      accountsUrl: accounts,
+      handshakeUrl: frontend ? `${frontend}/v1/client/handshake` : '',
+      signInUrl: accounts ? `${accounts}/sign-in` : '',
+      signUpUrl: accounts ? `${accounts}/sign-up` : '',
+      userProfileUrl: accounts ? `${accounts}/user` : '',
     };
 
     res.writeHead(200, {

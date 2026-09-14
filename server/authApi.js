@@ -172,14 +172,16 @@ export async function handleLogoutRequest(req, res, serverEnv = {}) {
  */
 export function handleAuthConfigRequest(req, res, serverEnv = {}) {
   const config = getClerkConfig(serverEnv);
+  const frontend = (config.frontendApi || '').replace(/\/$/, '');
+  const accounts = (config.accountsUrl || '').replace(/\/$/, '');
   const payload = {
-    publishableKey: config.publishableKey,
-    frontendApi: config.frontendApi,
-    accountsUrl: config.accountsUrl,
-    handshakeUrl: `${config.frontendApi.replace(/\/$/, '')}/v1/client/handshake`,
-    signInUrl: `${config.accountsUrl.replace(/\/$/, '')}/sign-in`,
-    signUpUrl: `${config.accountsUrl.replace(/\/$/, '')}/sign-up`,
-    userProfileUrl: `${config.accountsUrl.replace(/\/$/, '')}/user`,
+    publishableKey: config.publishableKey || '',
+    frontendApi: frontend,
+    accountsUrl: accounts,
+    handshakeUrl: frontend ? `${frontend}/v1/client/handshake` : '',
+    signInUrl: accounts ? `${accounts}/sign-in` : '',
+    signUpUrl: accounts ? `${accounts}/sign-up` : '',
+    userProfileUrl: accounts ? `${accounts}/user` : '',
   };
 
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');

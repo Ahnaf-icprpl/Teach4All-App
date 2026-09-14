@@ -23,11 +23,10 @@ export default defineConfig(({ mode }) => {
   process.env.ENV = appEnv;
   process.env.env = appEnv;
 
-  if (env.DATABASE_URL && !process.env.DATABASE_URL) {
-    process.env.DATABASE_URL = env.DATABASE_URL;
-  }
-  if (env.OPENROUTER_API_KEY && !process.env.OPENROUTER_API_KEY) {
-    process.env.OPENROUTER_API_KEY = env.OPENROUTER_API_KEY;
+  for (const [k, v] of Object.entries(env)) {
+    if (process.env[k] === undefined) {
+      process.env[k] = v;
+    }
   }
 
   return {
@@ -81,7 +80,7 @@ export default defineConfig(({ mode }) => {
                   htmlTemplate: html,
                   texts,
                   prompts,
-                  serverEnv: { ENV: isProdBuild ? 'production' : appEnv },
+                  serverEnv: { ...env, ...process.env, ENV: isProdBuild ? 'production' : appEnv },
                 });
               }
             }

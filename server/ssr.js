@@ -81,14 +81,16 @@ export function renderSsrHtml({ htmlTemplate, texts, prompts = [], serverEnv = {
   const isProd = isProductionEnv(serverEnv);
   const appEnv = serverEnv.ENV || serverEnv.env || process.env.ENV || process.env.env || (isProd ? 'production' : 'development');
   const clerkConfig = getClerkConfig(serverEnv);
+  const frontend = (clerkConfig.frontendApi || '').replace(/\/$/, '');
+  const accounts = (clerkConfig.accountsUrl || '').replace(/\/$/, '');
   const authConfig = {
     publishableKey: clerkConfig.publishableKey || '',
-    frontendApi: clerkConfig.frontendApi || '',
-    accountsUrl: clerkConfig.accountsUrl || '',
-    handshakeUrl: clerkConfig.frontendApi ? `${clerkConfig.frontendApi.replace(/\/$/, '')}/v1/client/handshake` : '',
-    signInUrl: clerkConfig.accountsUrl ? `${clerkConfig.accountsUrl.replace(/\/$/, '')}/sign-in` : '',
-    signUpUrl: clerkConfig.accountsUrl ? `${clerkConfig.accountsUrl.replace(/\/$/, '')}/sign-up` : '',
-    userProfileUrl: clerkConfig.accountsUrl ? `${clerkConfig.accountsUrl.replace(/\/$/, '')}/user` : '',
+    frontendApi: frontend,
+    accountsUrl: accounts,
+    handshakeUrl: frontend ? `${frontend}/v1/client/handshake` : '',
+    signInUrl: accounts ? `${accounts}/sign-in` : '',
+    signUpUrl: accounts ? `${accounts}/sign-up` : '',
+    userProfileUrl: accounts ? `${accounts}/user` : '',
   };
   const initialDataScript = `<script id="__TEACH4ALL_DATA__">window.__INITIAL_UI_DATA__ = ${JSON.stringify({ texts, prompts, env: appEnv, auth: authConfig, user })};</script>`;
   const ssrPrompts = prompts.slice(0, 4);
