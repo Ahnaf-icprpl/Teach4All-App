@@ -1,6 +1,6 @@
 import { defineConfig, loadEnv } from 'vite';
 import { resolve } from 'node:path';
-import { createChatMiddleware } from './server/chatApi.js';
+import { createApp } from './server/app.js';
 
 export const VALID_ENVS = ['production', 'development'];
 
@@ -64,10 +64,12 @@ export default defineConfig(({ mode }) => {
       {
         name: 'openrouter-api-server',
         configureServer(server) {
-          server.middlewares.use(createChatMiddleware({ ...env, ENV: appEnv, env: appEnv }));
+          const app = createApp({ ...env, ENV: appEnv, env: appEnv });
+          server.middlewares.use(app);
         },
         configurePreviewServer(server) {
-          server.middlewares.use(createChatMiddleware({ ...env, ENV: appEnv, env: appEnv }));
+          const app = createApp({ ...env, ENV: appEnv, env: appEnv });
+          server.middlewares.use(app);
         },
         async transformIndexHtml(html, ctx) {
           const path = ctx?.path || '';

@@ -9,18 +9,12 @@ import {
 import { getRedisClient } from './redis.js';
 import { getSystemPrompt, injectSystemPrompt } from '../prompts/systemPrompt.js';
 import { ConversationStreamWriter, DEFAULT_USER_ID } from './db.js';
-import { handleTitleRequest } from './titleApi.js';
-import { handleConversationsRequest, handleMessagesRequest } from './historyApi.js';
 import {
   getConversationProvider,
   setConversationProvider,
   buildProviderRoutingPayload,
   extractProvider,
 } from './providerCache.js';
-import { handleErrorLogRequest } from './errorApi.js';
-import { handleUiTextsRequest, handleChatPromptsRequest } from './uiTextsApi.js';
-import { handleQuizzesRequest } from './quizzesApi.js';
-import { handleMaterialsRequest } from './materialsApi.js';
 import { logger, logDevRequest } from './logger.js';
 import { metrics } from './metrics.js';
 import { buildWebSearchPlugin, buildWebSearchTool, isWebSearchRequested } from './webSearch.js';
@@ -30,26 +24,7 @@ import { createChatMiddleware, dispatchApi } from './chatMiddleware.js';
 export const DEFAULT_MODEL = 'google/gemini-2.5-flash-lite';
 export const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
-export {
-  getSystemPrompt,
-  handleTitleRequest,
-  handleConversationsRequest,
-  handleMessagesRequest,
-  getConversationProvider,
-  setConversationProvider,
-  buildProviderRoutingPayload,
-  extractProvider,
-  handleErrorLogRequest,
-  handleUiTextsRequest,
-  handleChatPromptsRequest,
-  handleQuizzesRequest,
-  handleMaterialsRequest,
-  buildWebSearchPlugin,
-  buildWebSearchTool,
-  isWebSearchRequested,
-  createChatMiddleware,
-  dispatchApi,
-};
+export { getSystemPrompt, createChatMiddleware, dispatchApi };
 
 export function isPlaceholderKey(key) {
   if (!key || typeof key !== 'string') return true;
@@ -130,38 +105,41 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
     return;
   }
 
-  let bodyStr = '';
-  try {
-    bodyStr = await new Promise((resolve, reject) => {
-      let data = '';
-      req.on('data', chunk => {
-        data += chunk;
-        if (data.length > 1e6) reject(new Error('Payload Too Large'));
+  let parsed = req.body;
+  if (parsed === undefined || parsed === null || (typeof parsed !== 'object' && typeof parsed !== 'string')) {
+    let bodyStr = '';
+    try {
+      bodyStr = await new Promise((resolve, reject) => {
+        let data = '';
+        req.on('data', chunk => {
+          data += chunk;
+          if (data.length > 1e6) reject(new Error('Payload Too Large'));
+        });
+        req.on('end', () => resolve(data));
+        req.on('error', reject);
       });
-      req.on('end', () => resolve(data));
-      req.on('error', reject);
-    });
-  } catch (err) {
-    const status = err.message === 'Payload Too Large' ? 413 : 400;
-    logger.warn('Chat request body reading error', {
-      endpoint: '/api/chat',
-      client_ip: clientIp,
-      status,
-      error: err.message,
-    });
-    res.writeHead(status, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: { message: err.message || 'Invalid request' } }));
-    return;
-  }
-
-  let parsed;
-  try {
-    parsed = JSON.parse(bodyStr || '{}');
-  } catch {
-    logger.warn('Invalid JSON in chat request body', { endpoint: '/api/chat', client_ip: clientIp });
-    res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: { message: 'Invalid JSON body' } }));
-    return;
+      parsed = JSON.parse(bodyStr || '{}');
+    } catch (err) {
+      const status = err.message === 'Payload Too Large' ? 413 : 400;
+      logger.warn('Chat request body reading error', {
+        endpoint: '/api/chat',
+        client_ip: clientIp,
+        status,
+        error: err.message,
+      });
+      res.writeHead(status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: err.message || 'Invalid request' } }));
+      return;
+    }
+  } else if (typeof parsed === 'string') {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      logger.warn('Invalid JSON in chat request body', { endpoint: '/api/chat', client_ip: clientIp });
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: 'Invalid JSON body' } }));
+      return;
+    }
   }
 
   const {
@@ -315,6 +293,9 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
       'X-Accel-Buffering': 'no',
       ...(detectedProvider ? { 'X-Provider': detectedProvider } : {}),
     });
+    if (typeof res.flushHeaders === 'function') {
+      res.flushHeaders();
+    }
 
     const reader = upstream.body.getReader();
     const decoder = new TextDecoder();
