@@ -1,80 +1,30 @@
 import van from 'vanjs-core';
 import { toast } from './state.js';
 import { t } from './uiTexts.js';
+import {
+  GUEST_COOKIE_NAME,
+  CLERK_HANDSHAKE_URL,
+  CLERK_SIGN_IN_URL,
+  CLERK_SIGN_UP_URL,
+  CLERK_USER_PROFILE_URL,
+  getClerkUrls,
+  initAuthConfig,
+  getCookie,
+  getStoredUser,
+  getOrCreateGuestId,
+  getAuthHeaders as baseGetAuthHeaders,
+} from './authUtils.js';
 
-export function getClerkUrls() {
-  const serverAuth = (typeof window !== 'undefined' && window.__INITIAL_UI_DATA__?.auth) || null;
-  if (serverAuth) {
-    const frontend = (serverAuth.frontendApi || '').replace(/\/$/, '');
-    const accounts = (serverAuth.accountsUrl || '').replace(/\/$/, '');
-    return {
-      handshakeUrl: serverAuth.handshakeUrl || (frontend ? `${frontend}/v1/client/handshake` : ''),
-      signInUrl: serverAuth.signInUrl || (accounts ? `${accounts}/sign-in` : ''),
-      signUpUrl: serverAuth.signUpUrl || (accounts ? `${accounts}/sign-up` : ''),
-      userProfileUrl: serverAuth.userProfileUrl || (accounts ? `${accounts}/user` : ''),
-    };
-  }
-  return {
-    handshakeUrl: '',
-    signInUrl: '',
-    signUpUrl: '',
-    userProfileUrl: '',
-  };
-}
-
-export async function initAuthConfig() {
-  if (typeof window === 'undefined') return null;
-  if (window.__INITIAL_UI_DATA__?.auth?.signInUrl) return window.__INITIAL_UI_DATA__.auth;
-  try {
-    const res = await fetch('./api/auth/config', { cache: 'no-store' });
-    if (res.ok) {
-      const data = await res.json();
-      if (!window.__INITIAL_UI_DATA__) window.__INITIAL_UI_DATA__ = {};
-      window.__INITIAL_UI_DATA__.auth = data;
-      return data;
-    }
-  } catch {}
-  return null;
-}
-
-export const CLERK_HANDSHAKE_URL = '';
-export const CLERK_SIGN_IN_URL = '';
-export const CLERK_SIGN_UP_URL = '';
-export const CLERK_USER_PROFILE_URL = '';
-export const GUEST_COOKIE_NAME = 'teach4all_guest_id';
-
-function getCookie(name) {
-  if (typeof document === 'undefined') return null;
-  try {
-    const match = document.cookie.match(new RegExp('(?:^|;\\s*)' + name + '=([^;]*)'));
-    if (!match) return null;
-    try {
-      return decodeURIComponent(match[1]);
-    } catch {
-      return match[1];
-    }
-  } catch {
-    return null;
-  }
-}
-
-function getStoredUser() {
-  if (typeof window !== 'undefined' && window.__INITIAL_UI_DATA__?.user) {
-    return window.__INITIAL_UI_DATA__.user;
-  }
-  if (typeof localStorage === 'undefined') return null;
-  try {
-    const raw = localStorage.getItem('teach4all_user');
-    if (raw) {
-      const user = JSON.parse(raw);
-      if (user && user.id && !String(user.id).startsWith('guest_') && user.id !== '00000000-0000-0000-0000-000000000001') {
-        return user;
-      }
-      localStorage.removeItem('teach4all_user');
-    }
-  } catch {}
-  return null;
-}
+export {
+  GUEST_COOKIE_NAME,
+  CLERK_HANDSHAKE_URL,
+  CLERK_SIGN_IN_URL,
+  CLERK_SIGN_UP_URL,
+  CLERK_USER_PROFILE_URL,
+  getClerkUrls,
+  initAuthConfig,
+  getOrCreateGuestId,
+};
 
 export const currentUser = van.state(getStoredUser());
 export const authLoading = van.state(true);
@@ -83,57 +33,12 @@ export function isAuthenticated() {
   return Boolean(currentUser.val);
 }
 
-export function getOrCreateGuestId() {
-  let guestId = getCookie(GUEST_COOKIE_NAME);
-  if (!guestId && typeof localStorage !== 'undefined') {
-    try {
-      guestId = localStorage.getItem(GUEST_COOKIE_NAME);
-    } catch {}
-  }
-  if (!guestId || typeof guestId !== 'string' || !guestId.startsWith('guest_')) {
-    const randomSuffix = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
-      ? crypto.randomUUID()
-      : (Math.random().toString(36).slice(2, 11) + Date.now().toString(36));
-    guestId = `guest_${randomSuffix}`;
-  }
-  if (typeof document !== 'undefined') {
-    document.cookie = `${GUEST_COOKIE_NAME}=${guestId}; Path=/; SameSite=Lax`;
-    try {
-      localStorage.setItem(GUEST_COOKIE_NAME, guestId);
-    } catch {}
-  }
-  return guestId;
-}
-
 export function getEffectiveUserId() {
   return currentUser.val?.id || getOrCreateGuestId();
 }
 
 export function getAuthHeaders() {
-  const headers = {};
-  let token = getCookie('__session') || getCookie('clerk_session');
-  let sessionId = getCookie('clerk_session_id');
-  if (!token && typeof localStorage !== 'undefined') {
-    try {
-      token = localStorage.getItem('teach4all_session');
-    } catch {}
-  }
-  if (!sessionId && typeof localStorage !== 'undefined') {
-    try {
-      sessionId = localStorage.getItem('teach4all_session_id');
-    } catch {}
-  }
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-  if (sessionId) {
-    headers['X-Session-ID'] = sessionId;
-  }
-  const guestId = getOrCreateGuestId();
-  if (guestId && !token && !currentUser.val) {
-    headers['X-Guest-ID'] = guestId;
-  }
-  return headers;
+  return baseGetAuthHeaders(currentUser.val);
 }
 
 export async function processHandshakeIfPresent() {
@@ -217,6 +122,87 @@ export async function processHandshakeIfPresent() {
   return false;
 }
 
+export async function syncFromClerkClient(frontendApi) {
+  if (!frontendApi || typeof window === 'undefined') return null;
+  try {
+    const clean = frontendApi.replace(/\/$/, '');
+    const res = await fetch(`${clean}/v1/client`, {
+      credentials: 'include',
+      cache: 'no-store',
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const sessions = data.response?.sessions || data.client?.sessions || [];
+    const activeSession = sessions.find(s => s.status === 'active') || sessions[0];
+    if (!activeSession) return null;
+
+    const u = activeSession.user;
+    if (!u) return null;
+
+    const primaryEmail = u.email_addresses?.[0]?.email_address || null;
+    const firstName = u.first_name || '';
+    const lastName = u.last_name || '';
+    const fullName = [firstName, lastName].filter(Boolean).join(' ').trim() ||
+      u.username ||
+      (primaryEmail ? primaryEmail.split('@')[0] : null) ||
+      'Pengguna';
+    const avatarUrl = u.image_url || u.profile_image_url || null;
+
+    let jwt = null;
+    try {
+      const tRes = await fetch(`${clean}/v1/client/sessions/${encodeURIComponent(activeSession.id)}/tokens`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (tRes.ok) {
+        const tData = await tRes.json();
+        jwt = tData.jwt || tData.response?.jwt || null;
+      }
+    } catch {}
+
+    const user = {
+      id: u.id,
+      name: fullName,
+      firstName,
+      lastName,
+      email: primaryEmail,
+      avatarUrl,
+      username: u.username || null,
+    };
+
+    if (jwt) {
+      document.cookie = `__session=${jwt}; Path=/; SameSite=Lax; Max-Age=2592000`;
+      document.cookie = `clerk_session=${jwt}; Path=/; SameSite=Lax; Max-Age=2592000`;
+      try {
+        localStorage.setItem('teach4all_session', jwt);
+      } catch {}
+    }
+    if (activeSession.id) {
+      document.cookie = `clerk_session_id=${activeSession.id}; Path=/; SameSite=Lax; Max-Age=2592000`;
+      try {
+        localStorage.setItem('teach4all_session_id', activeSession.id);
+      } catch {}
+    }
+
+    try {
+      localStorage.setItem('teach4all_user', JSON.stringify(user));
+    } catch {}
+
+    try {
+      fetch('./api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: jwt, sessionId: activeSession.id, user }),
+        credentials: 'include',
+      }).catch(() => {});
+    } catch {}
+
+    return { user, sessionId: activeSession.id, token: jwt };
+  } catch {
+    return null;
+  }
+}
+
 export async function checkAuth() {
   authLoading.val = true;
   await initAuthConfig();
@@ -236,12 +222,30 @@ export async function checkAuth() {
       } catch {}
     }
 
+    const urls = getClerkUrls();
+    if ((!token || !currentUser.val || currentUser.val.name === 'User' || !currentUser.val.email) && urls.frontendApi) {
+      const clerkSync = await syncFromClerkClient(urls.frontendApi);
+      if (clerkSync) {
+        if (clerkSync.token) token = clerkSync.token;
+        if (clerkSync.sessionId) sessionId = clerkSync.sessionId;
+        if (clerkSync.user) {
+          currentUser.val = clerkSync.user;
+        }
+      }
+    }
+
     const headers = {};
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }
     if (sessionId) {
       headers['X-Session-ID'] = sessionId;
+    }
+    const stored = getStoredUser();
+    if (stored?.name && stored.name !== 'User' && !String(stored.id).startsWith('guest_')) {
+      try {
+        headers['X-User-Profile'] = btoa(unescape(encodeURIComponent(JSON.stringify(stored))));
+      } catch {}
     }
 
     const res = await fetch('./api/whoami', {
@@ -277,10 +281,22 @@ export async function checkAuth() {
       } catch {}
     }
     if (data && data.authenticated && data.user) {
-      currentUser.val = data.user;
+      const finalUser = { ...data.user };
+      const localUser = getStoredUser();
+      if ((!finalUser.name || finalUser.name === 'User' || finalUser.name === 'Pengguna') && localUser?.name && localUser.name !== 'User') {
+        finalUser.name = localUser.name;
+      }
+      if (!finalUser.email && localUser?.email) {
+        finalUser.email = localUser.email;
+      }
+      if (!finalUser.avatarUrl && localUser?.avatarUrl) {
+        finalUser.avatarUrl = localUser.avatarUrl;
+      }
+
+      currentUser.val = finalUser;
       if (typeof localStorage !== 'undefined') {
         try {
-          localStorage.setItem('teach4all_user', JSON.stringify(data.user));
+          localStorage.setItem('teach4all_user', JSON.stringify(finalUser));
           if (token) localStorage.setItem('teach4all_session', token);
           if (data.sessionId) {
             localStorage.setItem('teach4all_session_id', data.sessionId);
@@ -289,7 +305,7 @@ export async function checkAuth() {
         } catch {}
       }
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('teach4all:auth-changed', { detail: { user: data.user } }));
+        window.dispatchEvent(new CustomEvent('teach4all:auth-changed', { detail: { user: finalUser } }));
       }
     } else if (data && data.authenticated === false) {
       currentUser.val = null;
@@ -327,10 +343,7 @@ export async function login(returnUrl) {
     return;
   }
   const target = returnUrl || `${window.location.origin}${window.location.pathname}`;
-  const handshakeUrl = (urls.handshakeUrl && (urls.handshakeUrl.startsWith('http://') || urls.handshakeUrl.startsWith('https://')))
-    ? `${urls.handshakeUrl}?redirect_url=${encodeURIComponent(target)}`
-    : target;
-  const signInUrl = `${urls.signInUrl}?redirect_url=${encodeURIComponent(handshakeUrl)}`;
+  const signInUrl = `${urls.signInUrl}?redirect_url=${encodeURIComponent(target)}`;
   window.location.href = signInUrl;
 }
 
@@ -344,10 +357,7 @@ export async function signup(returnUrl) {
     return;
   }
   const target = returnUrl || `${window.location.origin}${window.location.pathname}`;
-  const handshakeUrl = (urls.handshakeUrl && (urls.handshakeUrl.startsWith('http://') || urls.handshakeUrl.startsWith('https://')))
-    ? `${urls.handshakeUrl}?redirect_url=${encodeURIComponent(target)}`
-    : target;
-  const signUpUrl = `${urls.signUpUrl}?redirect_url=${encodeURIComponent(handshakeUrl)}`;
+  const signUpUrl = `${urls.signUpUrl}?redirect_url=${encodeURIComponent(target)}`;
   window.location.href = signUpUrl;
 }
 
@@ -381,7 +391,6 @@ export async function openUserProfile() {
   window.open(urls.userProfileUrl, '_blank', 'noopener,noreferrer');
 }
 
-// Auto-initialize checkAuth when loaded in browser
 if (typeof window !== 'undefined') {
   checkAuth();
 }

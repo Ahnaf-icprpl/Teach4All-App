@@ -110,8 +110,30 @@ export function renderSsrHtml({ htmlTemplate, texts, prompts = [], serverEnv = {
     </button>
   `).join('');
 
-  const displayName = user ? (user.name || user.email || 'Pengguna') : (texts.auth_guest_name || 'Akun Tamu');
-  const displayDetail = user ? (user.email || 'Terautentikasi') : (texts.auth_guest_detail || 'Klik untuk masuk');
+  let displayName = texts.auth_guest_name || 'Akun Tamu';
+  let displayDetail = texts.auth_guest_detail || 'Klik untuk masuk';
+  if (user) {
+    if (user.name && user.name !== 'User' && user.name !== 'Pengguna') {
+      displayName = user.name;
+    } else if (user.firstName || user.lastName) {
+      displayName = [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || 'Pengguna';
+    } else if (user.username && user.username !== 'teach4all_user') {
+      displayName = user.username;
+    } else if (user.email && user.email.includes('@')) {
+      const local = user.email.split('@')[0];
+      displayName = local.charAt(0).toUpperCase() + local.slice(1);
+    } else {
+      displayName = user.name || 'Pengguna';
+    }
+
+    if (user.email) {
+      displayDetail = user.email;
+    } else if (user.username && user.username !== 'teach4all_user') {
+      displayDetail = `@${user.username}`;
+    } else {
+      displayDetail = 'Terautentikasi';
+    }
+  }
   const profileBtnClass = user ? 'profile-button is-authenticated' : 'profile-button is-guest';
   const avatarHtml = user
     ? (user.avatarUrl

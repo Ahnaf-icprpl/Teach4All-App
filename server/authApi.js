@@ -89,10 +89,19 @@ export async function handleLoginRequest(req, res, serverEnv = {}) {
   }
 
   if (authResult.user) {
-    if (req.body?.user?.name && authResult.user.name === 'User' && req.body.user.id === authResult.user.id) {
-      authResult.user.name = req.body.user.name;
-      authResult.user.email = req.body.user.email || authResult.user.email;
-      authResult.user.avatarUrl = req.body.user.avatarUrl || authResult.user.avatarUrl;
+    if (req.body?.user && req.body.user.id === authResult.user.id) {
+      if (req.body.user.name && req.body.user.name !== 'User' && req.body.user.name !== 'Pengguna') {
+        authResult.user.name = req.body.user.name;
+      }
+      if (req.body.user.email) {
+        authResult.user.email = req.body.user.email;
+      }
+      if (req.body.user.avatarUrl) {
+        authResult.user.avatarUrl = req.body.user.avatarUrl;
+      }
+      if (req.body.user.firstName) authResult.user.firstName = req.body.user.firstName;
+      if (req.body.user.lastName) authResult.user.lastName = req.body.user.lastName;
+      if (req.body.user.username) authResult.user.username = req.body.user.username;
     }
     const dbUrl = serverEnv.DATABASE_URL || process.env.DATABASE_URL;
     await syncUserToDb(authResult.user, dbUrl);

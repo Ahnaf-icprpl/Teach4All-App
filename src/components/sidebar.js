@@ -37,6 +37,26 @@ if (typeof document !== 'undefined') {
   });
 }
 
+export function formatDisplayName(user, fallback = '') {
+  if (!user) return fallback || t('auth_guest_name') || 'Akun Tamu';
+  if (user.name && user.name !== 'User' && user.name !== 'Pengguna') return user.name;
+  const parts = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
+  if (parts && parts !== 'User') return parts;
+  if (user.username && user.username !== 'teach4all_user') return user.username;
+  if (user.email && user.email.includes('@')) {
+    const local = user.email.split('@')[0];
+    return local.charAt(0).toUpperCase() + local.slice(1);
+  }
+  return user.name || 'Pengguna';
+}
+
+export function formatDisplayDetail(user, fallback = '') {
+  if (!user) return fallback || t('auth_guest_detail') || 'Klik untuk masuk';
+  if (user.email) return user.email;
+  if (user.username && user.username !== 'teach4all_user') return `@${user.username}`;
+  return 'Terautentikasi';
+}
+
 function profileDropupMenu() {
   return div({
     class: () => `profile-dropup-menu ${profileMenuOpen.val ? 'is-open' : ''}`,
@@ -96,11 +116,12 @@ function profileDropupMenu() {
         );
       }
 
-      const displayName = user.name || user.email || 'Pengguna';
+      const displayName = formatDisplayName(user);
+      const displayDetail = formatDisplayDetail(user, '');
       return div({ class: 'profile-menu-content' },
         div({ class: 'profile-menu-header' },
           span({ class: 'profile-menu-name' }, displayName),
-          user.email ? span({ class: 'profile-menu-email' }, user.email) : null,
+          displayDetail ? span({ class: 'profile-menu-email' }, displayDetail) : null,
         ),
         div({ class: 'profile-menu-divider' }),
         button({
@@ -305,28 +326,19 @@ export function Sidebar() {
         'aria-haspopup': 'menu',
         'aria-expanded': () => String(profileMenuOpen.val),
         'aria-controls': 'profile-dropup-menu',
-        'aria-label': () => {
-          const user = currentUser.val;
-          return user ? (user.name || user.email || 'Pengguna') : (t('auth_guest_name') || 'Akun Tamu');
-        },
+        'aria-label': () => formatDisplayName(currentUser.val),
       },
         () => {
           const user = currentUser.val;
           if (!user) return span({ class: 'avatar' }, icon('user'));
-          const displayName = user.name || user.email || 'Pengguna';
+          const displayName = formatDisplayName(user);
           return user.avatarUrl
             ? img({ src: user.avatarUrl, alt: displayName, class: 'avatar avatar-img', 'aria-hidden': 'true', referrerpolicy: 'no-referrer' })
             : span({ class: 'avatar' }, (displayName[0] || 'U').toUpperCase());
         },
         span({ class: 'profile-copy' },
-          span({ class: 'profile-name' }, () => {
-            const user = currentUser.val;
-            return user ? (user.name || user.email || 'Pengguna') : (t('auth_guest_name') || 'Akun Tamu');
-          }),
-          span({ class: 'profile-detail' }, () => {
-            const user = currentUser.val;
-            return user ? (user.email || 'Terautentikasi') : (t('auth_guest_detail') || 'Klik untuk masuk');
-          }),
+          span({ class: 'profile-name' }, () => formatDisplayName(currentUser.val)),
+          span({ class: 'profile-detail' }, () => formatDisplayDetail(currentUser.val)),
         ),
         span({ class: () => `profile-chevron ${profileMenuOpen.val ? 'is-open' : ''}` }, icon('chevron')),
       ),

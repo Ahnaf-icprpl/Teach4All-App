@@ -143,7 +143,11 @@ export async function syncUserToDb(user = {}, databaseUrl = process.env.DATABASE
     VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
     ON CONFLICT (id) DO UPDATE SET
       email = COALESCE(EXCLUDED.email, users.email),
-      name = COALESCE(EXCLUDED.name, users.name),
+      name = CASE
+        WHEN EXCLUDED.name IS NOT NULL AND EXCLUDED.name != 'User' AND EXCLUDED.name != 'Pengguna' THEN EXCLUDED.name
+        WHEN users.name IS NOT NULL AND users.name != 'User' AND users.name != 'Pengguna' THEN users.name
+        ELSE COALESCE(EXCLUDED.name, users.name, 'Pengguna')
+      END,
       first_name = COALESCE(EXCLUDED.first_name, users.first_name),
       last_name = COALESCE(EXCLUDED.last_name, users.last_name),
       avatar_url = COALESCE(EXCLUDED.avatar_url, users.avatar_url),
@@ -190,7 +194,15 @@ export async function getUserFromDb(userId, databaseUrl = process.env.DATABASE_U
     );
     if (res.rows && res.rows[0]) {
       const row = res.rows[0];
-      const fullName = row.name || [row.first_name, row.last_name].filter(Boolean).join(' ') || row.username || 'User';
+      const rawName = row.name && row.name !== 'User' && row.name !== 'Pengguna' ? row.name : null;
+      const partsName = [row.first_name, row.last_name].filter(Boolean).join(' ').trim();
+      const emailName = row.email && row.email.includes('@')
+        ? row.email.split('@')[0].charAt(0).toUpperCase() + row.email.split('@')[0].slice(1)
+        : null;
+      const fullName = rawName || (partsName && partsName !== 'User' ? partsName : null) ||
+        (row.username && row.username !== 'teach4all_user' ? row.username : null) ||
+        emailName ||
+        'Pengguna';
       return {
         id: row.id,
         email: row.email || null,
