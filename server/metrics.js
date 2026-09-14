@@ -1,6 +1,27 @@
 import crypto from 'node:crypto';
 import client from 'prom-client';
 
+try {
+  if (typeof process.loadEnvFile === 'function') {
+    process.loadEnvFile();
+  }
+} catch {}
+
+/**
+ * Resolves normalized environment name ('production' or 'development').
+ */
+export function resolveMetricsEnvironment(env = process.env) {
+  const raw = (env.ENV || env.env || env.NODE_ENV || 'development').toLowerCase().trim();
+  return raw === 'production' || raw === 'prod' ? 'production' : 'development';
+}
+
+// Attach default environment labels to all Prometheus metrics
+const initialMetricsEnv = resolveMetricsEnvironment(process.env);
+client.register.setDefaultLabels({
+  environment: initialMetricsEnv,
+  env: initialMetricsEnv,
+});
+
 // Initialize default system and Node.js process metrics
 client.collectDefaultMetrics({
   register: client.register,
@@ -174,6 +195,11 @@ export async function handleMetricsRequest(req, res, serverEnv = {}) {
   }
 
   try {
+    const activeEnv = resolveMetricsEnvironment(serverEnv);
+    client.register.setDefaultLabels({
+      environment: activeEnv,
+      env: activeEnv,
+    });
     res.setHeader('Content-Type', client.register.contentType);
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
     const metricsData = await client.register.metrics();

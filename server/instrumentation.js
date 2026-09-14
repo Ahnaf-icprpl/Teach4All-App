@@ -3,6 +3,7 @@ import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentation
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
+import { resourceFromAttributes } from '@opentelemetry/resources';
 
 // Safely load environment file if running standalone
 try {
@@ -10,6 +11,14 @@ try {
     process.loadEnvFile();
   }
 } catch {}
+
+/**
+ * Resolves normalized environment name ('production' or 'development').
+ */
+export function resolveOtelEnvironment(env = process.env) {
+  const raw = (env.ENV || env.env || env.NODE_ENV || 'development').toLowerCase().trim();
+  return raw === 'production' || raw === 'prod' ? 'production' : 'development';
+}
 
 /**
  * Parses Grafana Cloud OTLP token (format: glc_<base64>)
@@ -75,6 +84,7 @@ export function getOtelConfig(env = process.env) {
   }
 
   const serviceName = (env.OTEL_SERVICE_NAME || 'teach4all').trim();
+  const environment = resolveOtelEnvironment(env);
   const isEnabled = Boolean(
     endpoint && (headers['Authorization'] || Object.keys(headers).length > 0 || !endpoint.includes('grafana.net'))
   );
@@ -84,6 +94,7 @@ export function getOtelConfig(env = process.env) {
     endpoint,
     headers,
     serviceName,
+    environment,
   };
 }
 
@@ -118,7 +129,16 @@ export function initOpenTelemetry(env = process.env) {
       exportIntervalMillis: 15000,
     });
 
+    const resource = resourceFromAttributes({
+      'service.name': config.serviceName,
+      'deployment.environment': config.environment,
+      'deployment.environment.name': config.environment,
+      'environment': config.environment,
+      'env': config.environment,
+    });
+
     sdkInstance = new NodeSDK({
+      resource,
       serviceName: config.serviceName,
       traceExporter,
       metricReader,
@@ -131,7 +151,9 @@ export function initOpenTelemetry(env = process.env) {
 
     sdkInstance.start();
     globalThis.__OTEL_SDK_INSTANCE__ = sdkInstance;
-    console.log(`[OpenTelemetry] Auto-instrumentation active for service '${config.serviceName}' -> ${config.endpoint}`);
+    console.log(
+      `[OpenTelemetry] Auto-instrumentation active for service '${config.serviceName}' [env: ${config.environment}] -> ${config.endpoint}`
+    );
 
     const cleanup = async () => {
       if (globalThis.__OTEL_SDK_INSTANCE__) {
