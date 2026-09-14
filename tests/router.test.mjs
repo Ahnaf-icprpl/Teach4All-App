@@ -1787,13 +1787,70 @@ test('handleCompletedToolCalls never streams conversational apology text during 
   }
 });
 
+test('AI tool execution enforces zero model control over userId and identity', async () => {
+  const { parseAndExecuteQuizTool } = await import('../server/quizTool.js');
+  const { parseAndExecuteMaterialTool } = await import('../server/materialTool.js');
 
+  const serverUserId = 'guest_server_authoritative_' + crypto.randomUUID();
 
+  // Model attempts to forge userId and user_id in arguments
+  const fakeModelQuizCall = {
+    function: {
+      name: 'create_quiz',
+      arguments: JSON.stringify({
+        userId: 'malicious_user_override',
+        user_id: 'malicious_user_override_2',
+        title: 'Quiz with Spoofed User',
+        category: 'Biologi',
+        summary: 'Testing identity security',
+        questions: [
+          {
+            question_text: 'Test question?',
+            options: ['A', 'B', 'C', 'D'],
+            correct_answer: 0,
+            explanation: 'Exp',
+          },
+        ],
+      }),
+    },
+  };
 
+  const { diagnoseAndValidateQuizArgs } = await import('../server/quizValidator.js');
+  const { diagnoseAndValidateMaterialArgs } = await import('../server/materialValidator.js');
 
+  const quizValidated = diagnoseAndValidateQuizArgs(fakeModelQuizCall.function.arguments);
+  assert.strictEqual(quizValidated.valid, true);
+  assert.strictEqual(quizValidated.data.userId, undefined);
+  assert.strictEqual(quizValidated.data.user_id, undefined);
 
+  const matValidated = diagnoseAndValidateMaterialArgs(fakeModelMatCall.function.arguments);
+  assert.strictEqual(matValidated.valid, true);
+  assert.strictEqual(matValidated.data.userId, undefined);
+  assert.strictEqual(matValidated.data.user_id, undefined);
 
+  if (process.env.DATABASE_URL) {
+    const quizResult = await parseAndExecuteQuizTool(fakeModelQuizCall, {
+      userId: serverUserId,
+      databaseUrl: process.env.DATABASE_URL,
+    });
+    assert.strictEqual(quizResult.success, true);
+    assert.strictEqual(quizResult.quiz.user_id, serverUserId);
+    assert.notStrictEqual(quizResult.quiz.user_id, 'malicious_user_override');
 
+    const matResult = await parseAndExecuteMaterialTool(fakeModelMatCall, {
+      userId: serverUserId,
+      databaseUrl: process.env.DATABASE_URL,
+    });
+    assert.strictEqual(matResult.success, true);
+    assert.strictEqual(matResult.material.user_id, serverUserId);
+    assert.notStrictEqual(matResult.material.user_id, 'malicious_user_override');
 
-
+    // Clean up
+    try {
+      await runSql(`DELETE FROM quizzes WHERE user_id = '${serverUserId}';`, process.env.DATABASE_URL);
+      await runSql(`DELETE FROM materials WHERE user_id = '${serverUserId}';`, process.env.DATABASE_URL);
+      await runSql(`DELETE FROM users WHERE id = '${serverUserId}';`, process.env.DATABASE_URL);
+    } catch {}
+  }
+});
 
