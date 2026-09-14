@@ -95,7 +95,8 @@ export async function handleLoginRequest(req, res, serverEnv = {}) {
 
   const tokenToSet = cred.token || cred.sessionId;
   const cookieHeaders = [
-    `__session=${encodeURIComponent(tokenToSet)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`,
+    `__session=${encodeURIComponent(tokenToSet)}; Path=/; SameSite=Lax; Max-Age=2592000`,
+    `clerk_session=${encodeURIComponent(tokenToSet)}; Path=/; SameSite=Lax; Max-Age=2592000`,
   ];
   if (authResult.sessionId) {
     cookieHeaders.push(`clerk_session_id=${encodeURIComponent(authResult.sessionId)}; Path=/; SameSite=Lax; Max-Age=2592000`);
@@ -219,12 +220,13 @@ export function clerkHandshakeMiddleware(req, res, next) {
             .replace(/Domain=[^;]+;?/gi, '')
             .replace(/SameSite=None/gi, 'SameSite=Lax')
             .replace(/Secure;?/gi, '')
+            .replace(/HttpOnly;?/gi, '')
             .trim();
           cookiesToSet.push(sanitized);
         }
 
         if (extractedSessionToken) {
-          cookiesToSet.push(`__session=${extractedSessionToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`);
+          cookiesToSet.push(`__session=${extractedSessionToken}; Path=/; SameSite=Lax; Max-Age=2592000`);
           cookiesToSet.push(`clerk_session=${extractedSessionToken}; Path=/; SameSite=Lax; Max-Age=2592000`);
           try {
             const tokenParts = extractedSessionToken.split('.');

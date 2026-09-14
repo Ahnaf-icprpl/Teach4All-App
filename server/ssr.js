@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { getUiTextsFromDb, getChatPromptsFromDb, getGoogleTagIdFromDb } from './uiTextsApi.js';
-import { getClerkConfig } from './clerkVerifier.js';
+import { getClerkConfig, authenticateClerkRequest } from './clerkVerifier.js';
 
 let cachedGoogleTagId = null;
 
@@ -73,7 +73,7 @@ const SVG_ICONS = {
   download: '<path d="M12 3v12m-5-5 5 5 5-5"/><path d="M4 16v5h16v-5"/>',
 };
 
-export function renderSsrHtml({ htmlTemplate, texts, prompts = [], serverEnv = {}, googleTagId = null }) {
+export function renderSsrHtml({ htmlTemplate, texts, prompts = [], serverEnv = {}, googleTagId = null, user = null }) {
   if (!texts || !Object.keys(texts).length || !prompts || !prompts.length) {
     throw new Error('No UI text or prompts available in database to populate SSR.');
   }
@@ -82,15 +82,15 @@ export function renderSsrHtml({ htmlTemplate, texts, prompts = [], serverEnv = {
   const appEnv = serverEnv.ENV || serverEnv.env || process.env.ENV || process.env.env || (isProd ? 'production' : 'development');
   const clerkConfig = getClerkConfig(serverEnv);
   const authConfig = {
-    publishableKey: clerkConfig.publishableKey,
-    frontendApi: clerkConfig.frontendApi,
-    accountsUrl: clerkConfig.accountsUrl,
-    handshakeUrl: `${clerkConfig.frontendApi.replace(/\/$/, '')}/v1/client/handshake`,
-    signInUrl: `${clerkConfig.accountsUrl.replace(/\/$/, '')}/sign-in`,
-    signUpUrl: `${clerkConfig.accountsUrl.replace(/\/$/, '')}/sign-up`,
-    userProfileUrl: `${clerkConfig.accountsUrl.replace(/\/$/, '')}/user`,
+    publishableKey: clerkConfig.publishableKey || '',
+    frontendApi: clerkConfig.frontendApi || '',
+    accountsUrl: clerkConfig.accountsUrl || '',
+    handshakeUrl: clerkConfig.frontendApi ? `${clerkConfig.frontendApi.replace(/\/$/, '')}/v1/client/handshake` : '',
+    signInUrl: clerkConfig.accountsUrl ? `${clerkConfig.accountsUrl.replace(/\/$/, '')}/sign-in` : '',
+    signUpUrl: clerkConfig.accountsUrl ? `${clerkConfig.accountsUrl.replace(/\/$/, '')}/sign-up` : '',
+    userProfileUrl: clerkConfig.accountsUrl ? `${clerkConfig.accountsUrl.replace(/\/$/, '')}/user` : '',
   };
-  const initialDataScript = `<script id="__TEACH4ALL_DATA__">window.__INITIAL_UI_DATA__ = ${JSON.stringify({ texts, prompts, env: appEnv, auth: authConfig })};</script>`;
+  const initialDataScript = `<script id="__TEACH4ALL_DATA__">window.__INITIAL_UI_DATA__ = ${JSON.stringify({ texts, prompts, env: appEnv, auth: authConfig, user })};</script>`;
   const ssrPrompts = prompts.slice(0, 4);
 
   const promptCardsHtml = ssrPrompts.map(p => `
@@ -107,6 +107,52 @@ export function renderSsrHtml({ htmlTemplate, texts, prompts = [], serverEnv = {
       </svg>
     </button>
   `).join('');
+
+  const displayName = user ? (user.name || user.email || 'Pengguna') : (texts.auth_guest_name || 'Akun Tamu');
+  const displayDetail = user ? (user.email || 'Terautentikasi') : (texts.auth_guest_detail || 'Klik untuk masuk');
+  const profileBtnClass = user ? 'profile-button is-authenticated' : 'profile-button is-guest';
+  const avatarHtml = user
+    ? (user.avatarUrl
+        ? `<img src="${escapeHtml(user.avatarUrl)}" alt="${escapeHtml(displayName)}" class="avatar avatar-img" aria-hidden="true" referrerpolicy="no-referrer" />`
+        : `<span class="avatar">${escapeHtml((displayName[0] || 'U').toUpperCase())}</span>`)
+    : `<span class="avatar"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon">${SVG_ICONS.user}</svg></span>`;
+
+  const profileMenuHtml = user
+    ? `<div class="profile-menu-content">
+            <div class="profile-menu-header">
+              <span class="profile-menu-name">${escapeHtml(displayName)}</span>
+              <span class="profile-menu-email">${escapeHtml(user.email || '')}</span>
+            </div>
+            <div class="profile-menu-divider"></div>
+            <button type="button" class="profile-menu-item" role="menuitem">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon">${SVG_ICONS.user}</svg>
+              <span>${escapeHtml(texts.auth_user_profile_button || 'Profil Pengguna')}</span>
+            </button>
+            <button type="button" class="profile-menu-item" role="menuitem">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon">${SVG_ICONS.login}</svg>
+              <span>${escapeHtml(texts.auth_logout_button || 'Keluar')}</span>
+            </button>
+          </div>`
+    : `<div class="profile-menu-content">
+            <div class="profile-menu-header">
+              <span class="profile-menu-name">${escapeHtml(texts.auth_guest_name || 'Akun Tamu')}</span>
+              <span class="profile-menu-email">${escapeHtml(texts.auth_guest_detail || 'Klik untuk masuk')}</span>
+            </div>
+            <div class="profile-menu-divider"></div>
+            <button type="button" class="profile-menu-item" role="menuitem">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon">${SVG_ICONS.login}</svg>
+              <span>${escapeHtml(texts.auth_login_button || 'Masuk')}</span>
+            </button>
+            <button type="button" class="profile-menu-item" role="menuitem">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon">${SVG_ICONS.user}</svg>
+              <span>${escapeHtml(texts.auth_signup_with_clerk || 'Daftar akun baru')}</span>
+            </button>
+            <div class="profile-menu-divider"></div>
+            <button type="button" class="profile-menu-item" role="menuitem">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon">${SVG_ICONS.download}</svg>
+              <span>${escapeHtml(texts.auth_export_workspace || 'expor histori chat')}</span>
+            </button>
+          </div>`;
 
   const ssrBody = `
   <div id="app" class="app">
@@ -167,42 +213,13 @@ export function renderSsrHtml({ htmlTemplate, texts, prompts = [], serverEnv = {
       </nav>
       <div class="sidebar-bottom">
         <div class="profile-dropup-menu" id="profile-dropup-menu" role="menu" aria-hidden="true">
-          <div class="profile-menu-content">
-            <div class="profile-menu-header">
-              <span class="profile-menu-name">${escapeHtml(texts.auth_guest_name || 'Akun Tamu')}</span>
-              <span class="profile-menu-email">${escapeHtml(texts.auth_guest_detail || 'Klik untuk masuk')}</span>
-            </div>
-            <div class="profile-menu-divider"></div>
-            <button type="button" class="profile-menu-item" role="menuitem">
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon">
-                ${SVG_ICONS.login}
-              </svg>
-              <span>${escapeHtml(texts.auth_login_button || 'Masuk')}</span>
-            </button>
-            <button type="button" class="profile-menu-item" role="menuitem">
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon">
-                ${SVG_ICONS.user}
-              </svg>
-              <span>${escapeHtml(texts.auth_signup_with_clerk || 'Daftar akun baru')}</span>
-            </button>
-            <div class="profile-menu-divider"></div>
-            <button type="button" class="profile-menu-item" role="menuitem">
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon">
-                ${SVG_ICONS.download}
-              </svg>
-              <span>${escapeHtml(texts.auth_export_workspace || 'expor histori chat')}</span>
-            </button>
-          </div>
+          ${profileMenuHtml}
         </div>
-        <button type="button" class="profile-button is-guest" aria-haspopup="menu" aria-expanded="false" aria-controls="profile-dropup-menu" aria-label="${escapeHtml(texts.auth_guest_name || 'Akun Tamu')}">
-          <span class="avatar">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon">
-              ${SVG_ICONS.user}
-            </svg>
-          </span>
+        <button type="button" class="${profileBtnClass}" aria-haspopup="menu" aria-expanded="false" aria-controls="profile-dropup-menu" aria-label="${escapeHtml(displayName)}">
+          ${avatarHtml}
           <span class="profile-copy">
-            <span class="profile-name">${escapeHtml(texts.auth_guest_name || 'Akun Tamu')}</span>
-            <span class="profile-detail">${escapeHtml(texts.auth_guest_detail || 'Klik untuk masuk')}</span>
+            <span class="profile-name">${escapeHtml(displayName)}</span>
+            <span class="profile-detail">${escapeHtml(displayDetail)}</span>
           </span>
           <span class="profile-chevron">
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon">
@@ -394,7 +411,17 @@ export async function handleSsrRequest(req, res, env = {}) {
       return;
     }
 
-    const rendered = renderSsrHtml({ htmlTemplate: template, texts, prompts, serverEnv: env });
+    let user = null;
+    try {
+      const auth = await authenticateClerkRequest(req, env);
+      if (auth?.authenticated && auth.user) {
+        user = auth.user;
+      }
+    } catch {
+      // Non-fatal: fall back to guest SSR
+    }
+
+    const rendered = renderSsrHtml({ htmlTemplate: template, texts, prompts, serverEnv: env, user });
     res.writeHead(200, {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'no-cache',

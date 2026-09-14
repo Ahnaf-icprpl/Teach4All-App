@@ -50,19 +50,11 @@ function getCookie(name) {
 }
 
 function getStoredUser() {
+  if (typeof window !== 'undefined' && window.__INITIAL_UI_DATA__?.user) {
+    return window.__INITIAL_UI_DATA__.user;
+  }
   if (typeof localStorage === 'undefined') return null;
   try {
-    const token = getCookie('__session') || getCookie('clerk_session');
-    const sessionId = getCookie('clerk_session_id');
-    const localToken = localStorage.getItem('teach4all_session');
-    const localSessionId = localStorage.getItem('teach4all_session_id');
-
-    // If there is zero active session credential, the user is an unauthenticated guest
-    if (!token && !sessionId && !localToken && !localSessionId) {
-      localStorage.removeItem('teach4all_user');
-      return null;
-    }
-
     const raw = localStorage.getItem('teach4all_user');
     if (raw) {
       const user = JSON.parse(raw);
@@ -129,7 +121,7 @@ export function getAuthHeaders() {
     headers['X-Session-ID'] = sessionId;
   }
   const guestId = getOrCreateGuestId();
-  if (guestId && !token) {
+  if (guestId && !token && !currentUser.val) {
     headers['X-Guest-ID'] = guestId;
   }
   return headers;
@@ -178,11 +170,24 @@ export async function processHandshakeIfPresent() {
         } catch {}
 
         try {
-          await fetch('./api/auth/login', {
+          const loginRes = await fetch('./api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ token: sessionToken }),
+            credentials: 'include',
           });
+          if (loginRes.ok) {
+            const loginData = await loginRes.json();
+            if (loginData && loginData.authenticated && loginData.user) {
+              currentUser.val = loginData.user;
+              try {
+                localStorage.setItem('teach4all_user', JSON.stringify(loginData.user));
+              } catch {}
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('teach4all:auth-changed', { detail: { user: loginData.user } }));
+              }
+            }
+          }
         } catch {}
       }
 
@@ -214,17 +219,6 @@ export async function checkAuth() {
       } catch {}
     }
 
-    if (!token && !sessionId) {
-      currentUser.val = null;
-      if (typeof localStorage !== 'undefined') {
-        try {
-          localStorage.removeItem('teach4all_user');
-        } catch {}
-      }
-      authLoading.val = false;
-      return null;
-    }
-
     const headers = {};
     if (token) {
       headers.Authorization = `Bearer ${token}`;
@@ -233,7 +227,11 @@ export async function checkAuth() {
       headers['X-Session-ID'] = sessionId;
     }
 
-    const res = await fetch('./api/whoami', { headers, cache: 'no-store' });
+    const res = await fetch('./api/whoami', {
+      headers,
+      credentials: 'include',
+      cache: 'no-store',
+    });
     if (!res.ok) {
       if (res.status >= 400 && res.status < 500) {
         currentUser.val = null;
