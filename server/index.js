@@ -1,3 +1,4 @@
+import './instrumentation.js';
 import express from 'express';
 import { resolve } from 'node:path';
 import { existsSync } from 'node:fs';

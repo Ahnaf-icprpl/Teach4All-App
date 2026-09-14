@@ -138,6 +138,8 @@ METRICS_PASSWORD=your_secure_metrics_password
 | `PROMETHEUS_METRICS_TOKEN` | No | Secret Bearer token for authenticating Prometheus `/metrics` scrapes |
 | `METRICS_USER` | No | HTTP Basic Auth username for `/metrics` scraping |
 | `METRICS_PASSWORD` | No | HTTP Basic Auth password for `/metrics` scraping |
+| `GRAFANA_OTEL_API_KEY` | No | Grafana Cloud OpenTelemetry Access Policy Token (`glc_...`) for automatic OTLP export |
+| `OTEL_SERVICE_NAME` | No | OpenTelemetry service name (defaults to `teach4all`) |
 
 ---
 

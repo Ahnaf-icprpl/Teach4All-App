@@ -12,10 +12,15 @@
     "test": "node --test tests/*.test.mjs",
     "test:api": "node --test tests/router.test.mjs tests/rateLimiter.test.mjs",
     "test:e2e": "playwright test",
-    "start": "node server/index.js",
+    "start": "node --import ./server/instrumentation.js server/index.js",
     "migrate": "node scripts/migrate.mjs"
   },
   "dependencies": {
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/auto-instrumentations-node": "^0.80.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.222.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.222.0",
+    "@opentelemetry/sdk-node": "^0.222.0",
     "express": "^5.2.1",
     "pg": "^8.23.0",
     "prom-client": "^15.1.3",
