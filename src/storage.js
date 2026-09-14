@@ -1,6 +1,14 @@
 export const THEME_STORAGE_KEY = 'teach4all.theme.v1';
 export const QUIZZES_STORAGE_KEY = 'teach4all.quizzes.v2';
 export const MATERIALS_STORAGE_KEY = 'teach4all.materials.v2';
+
+export function getQuizzesStorageKey(userId) {
+  return userId ? `${QUIZZES_STORAGE_KEY}:${userId}` : QUIZZES_STORAGE_KEY;
+}
+
+export function getMaterialsStorageKey(userId) {
+  return userId ? `${MATERIALS_STORAGE_KEY}:${userId}` : MATERIALS_STORAGE_KEY;
+}
 export const LOCAL_DB_NAME = 'teach4all_localdb';
 export const LOCAL_DB_STORE = 'settings';
 export const MAX_CHATS = 100;

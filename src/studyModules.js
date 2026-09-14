@@ -1,5 +1,7 @@
 import van from 'vanjs-core';
-import { QUIZZES_STORAGE_KEY, MATERIALS_STORAGE_KEY } from './storage.js';
+import { getQuizzesStorageKey, getMaterialsStorageKey } from './storage.js';
+import { getEffectiveUserId, getAuthHeaders } from './auth.js';
+import { t } from './uiTexts.js';
 
 export const INITIAL_QUIZZES = [];
 export const INITIAL_MATERIALS = [];
@@ -10,7 +12,8 @@ export const FALLBACK_MATERIALS = INITIAL_MATERIALS;
 function loadCachedQuizzes() {
   try {
     if (typeof localStorage !== 'undefined') {
-      const raw = localStorage.getItem(QUIZZES_STORAGE_KEY);
+      const key = getQuizzesStorageKey(getEffectiveUserId());
+      const raw = localStorage.getItem(key);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) return parsed;
@@ -23,7 +26,8 @@ function loadCachedQuizzes() {
 function loadCachedMaterials() {
   try {
     if (typeof localStorage !== 'undefined') {
-      const raw = localStorage.getItem(MATERIALS_STORAGE_KEY);
+      const key = getMaterialsStorageKey(getEffectiveUserId());
+      const raw = localStorage.getItem(key);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) return parsed;
@@ -36,9 +40,15 @@ function loadCachedMaterials() {
 export const quizzes = van.state(loadCachedQuizzes());
 export const materials = van.state(loadCachedMaterials());
 
-export async function fetchQuizzes() {
+export async function fetchQuizzes({ search, category } = {}) {
   try {
-    const res = await fetch('/api/quizzes');
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    if (category) params.set('category', category);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    const res = await fetch(`/api/quizzes${qs}`, {
+      headers: { ...getAuthHeaders() },
+    });
     if (!res.ok) return quizzes.val;
     const data = await res.json();
     if (Array.isArray(data?.quizzes)) {
@@ -52,21 +62,30 @@ export async function fetchQuizzes() {
           isSolved: solved,
         };
       });
-      quizzes.val = formatted;
-      try {
-        if (typeof localStorage !== 'undefined') {
-          localStorage.setItem(QUIZZES_STORAGE_KEY, JSON.stringify(formatted));
-        }
-      } catch {}
+      if (!search && !category) {
+        quizzes.val = formatted;
+        try {
+          if (typeof localStorage !== 'undefined') {
+            const key = getQuizzesStorageKey(getEffectiveUserId());
+            localStorage.setItem(key, JSON.stringify(formatted));
+          }
+        } catch {}
+      }
       return formatted;
     }
   } catch {}
   return quizzes.val;
 }
 
-export async function fetchMaterials() {
+export async function fetchMaterials({ search, category } = {}) {
   try {
-    const res = await fetch('/api/materials');
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    if (category) params.set('category', category);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    const res = await fetch(`/api/materials${qs}`, {
+      headers: { ...getAuthHeaders() },
+    });
     if (!res.ok) return materials.val;
     const data = await res.json();
     if (Array.isArray(data?.materials)) {
@@ -83,12 +102,15 @@ export async function fetchMaterials() {
           isCompleted: solved,
         };
       });
-      materials.val = formatted;
-      try {
-        if (typeof localStorage !== 'undefined') {
-          localStorage.setItem(MATERIALS_STORAGE_KEY, JSON.stringify(formatted));
-        }
-      } catch {}
+      if (!search && !category) {
+        materials.val = formatted;
+        try {
+          if (typeof localStorage !== 'undefined') {
+            const key = getMaterialsStorageKey(getEffectiveUserId());
+            localStorage.setItem(key, JSON.stringify(formatted));
+          }
+        } catch {}
+      }
       return formatted;
     }
   } catch {}
@@ -101,13 +123,14 @@ export async function markQuizSolved(id, isSolved = true) {
   quizzes.val = updated;
   try {
     if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(QUIZZES_STORAGE_KEY, JSON.stringify(updated));
+      const key = getQuizzesStorageKey(getEffectiveUserId());
+      localStorage.setItem(key, JSON.stringify(updated));
     }
   } catch {}
   try {
     await fetch('/api/quizzes', {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify({ id, isSolved: val }),
     });
   } catch {}
@@ -120,13 +143,14 @@ export async function markMaterialSolved(id, isSolved = true) {
   materials.val = updated;
   try {
     if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(MATERIALS_STORAGE_KEY, JSON.stringify(updated));
+      const key = getMaterialsStorageKey(getEffectiveUserId());
+      localStorage.setItem(key, JSON.stringify(updated));
     }
   } catch {}
   try {
     await fetch('/api/materials', {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify({ id, isSolved: val }),
     });
   } catch {}
@@ -215,7 +239,7 @@ export function normalizeMaterialSection(s, idx = 0) {
     section_number: sectionNumber,
     readTimeMinutes,
     read_time_minutes: readTimeMinutes,
-    title: s.title || `Bagian ${sectionNumber}`,
+    title: s.title || `${t('dialogs_material_section_label')} ${sectionNumber}`,
     content: s.content || '',
   };
 }
@@ -223,7 +247,9 @@ export function normalizeMaterialSection(s, idx = 0) {
 export async function fetchQuizDetails(id, { shuffle = true } = {}) {
   if (!id) return null;
   try {
-    const res = await fetch(`/api/quizzes?id=${id}`);
+    const res = await fetch(`/api/quizzes?id=${id}`, {
+      headers: { ...getAuthHeaders() },
+    });
     if (res.ok) {
       const data = await res.json();
       if (data?.quiz) {
@@ -248,7 +274,9 @@ export async function fetchQuizDetails(id, { shuffle = true } = {}) {
 export async function fetchMaterialDetails(id) {
   if (!id) return null;
   try {
-    const res = await fetch(`/api/materials?id=${id}`);
+    const res = await fetch(`/api/materials?id=${id}`, {
+      headers: { ...getAuthHeaders() },
+    });
     if (res.ok) {
       const data = await res.json();
       if (data?.material) {
@@ -274,4 +302,13 @@ export function initStudyModules() {
   if (typeof window === 'undefined') return;
   fetchQuizzes().catch(() => {});
   fetchMaterials().catch(() => {});
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('teach4all:auth-changed', () => {
+    quizzes.val = loadCachedQuizzes();
+    materials.val = loadCachedMaterials();
+    fetchQuizzes().catch(() => {});
+    fetchMaterials().catch(() => {});
+  });
 }

@@ -1,4 +1,5 @@
-import { getQuizzes, getQuizById, createQuiz, setQuizSolvedStatus } from './db.js';
+import { getQuizzes, getQuizById, createQuiz, setQuizSolvedStatus, DEFAULT_USER_ID } from './db.js';
+import { enforceRateLimit } from './rateLimiter.js';
 
 function readJsonBody(req) {
   if (req.body !== undefined && req.body !== null) {
@@ -27,18 +28,24 @@ function readJsonBody(req) {
 }
 
 export async function handleQuizzesRequest(req, res, env = {}) {
+  if (!(await enforceRateLimit(req, res, '/api/quizzes', env))) {
+    return;
+  }
+
   const url = new URL(req.url, 'http://localhost');
   const dbUrl = env.DATABASE_URL || process.env.DATABASE_URL;
+  const userId = req.userId || DEFAULT_USER_ID;
 
   if (req.method === 'GET') {
     const id = url.searchParams.get('id');
     const category = url.searchParams.get('category') || undefined;
+    const search = url.searchParams.get('search') || url.searchParams.get('q') || undefined;
     const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '50', 10), 1), 100);
     const offset = Math.max(parseInt(url.searchParams.get('offset') || '0', 10), 0);
 
     try {
       if (id) {
-        const quiz = await getQuizById(id, { databaseUrl: dbUrl });
+        const quiz = await getQuizById(id, { userId, databaseUrl: dbUrl });
         if (!quiz) {
           res.writeHead(404, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: { message: 'Quiz not found.' } }));
@@ -49,7 +56,7 @@ export async function handleQuizzesRequest(req, res, env = {}) {
         return;
       }
 
-      const quizzes = await getQuizzes({ category, limit, offset, databaseUrl: dbUrl });
+      const quizzes = await getQuizzes({ userId, search, category, limit, offset, databaseUrl: dbUrl });
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
       res.end(JSON.stringify({ quizzes }));
     } catch (err) {
@@ -75,7 +82,7 @@ export async function handleQuizzesRequest(req, res, env = {}) {
         res.end(JSON.stringify({ error: { message: 'Title is required.' } }));
         return;
       }
-      const quiz = await createQuiz(payload, payload.questions || [], { databaseUrl: dbUrl });
+      const quiz = await createQuiz({ ...payload, userId }, payload.questions || [], { databaseUrl: dbUrl });
       res.writeHead(201, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ quiz }));
     } catch (err) {
@@ -103,7 +110,7 @@ export async function handleQuizzesRequest(req, res, env = {}) {
         return;
       }
       const isSolved = payload.isSolved !== undefined ? payload.isSolved : payload.is_solved !== undefined ? payload.is_solved : true;
-      const updated = await setQuizSolvedStatus(id, isSolved, { databaseUrl: dbUrl });
+      const updated = await setQuizSolvedStatus(id, isSolved, { userId, databaseUrl: dbUrl });
       if (!updated) {
         res.writeHead(404, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: { message: 'Quiz not found.' } }));

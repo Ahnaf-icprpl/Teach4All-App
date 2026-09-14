@@ -1,6 +1,6 @@
 import van from 'vanjs-core';
 import {
-  fetchConversations, fetchMessages, TEST_USER_ID,
+  fetchConversations, fetchMessages, getEffectiveUserId,
 } from './router.js';
 import { t } from './uiTexts.js';
 
@@ -32,7 +32,7 @@ export function onSearchInput(query) {
   if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
   searchDebounceTimer = setTimeout(async () => {
     try {
-      const data = await fetchConversations({ userId: TEST_USER_ID, query: term, limit: 50 });
+      const data = await fetchConversations({ userId: getEffectiveUserId(), query: term, limit: 50 });
       if (Array.isArray(data?.conversations)) {
         searchResults.val = data.conversations.map(c => {
           const existing = chats.val.find(item => item.id === c.id);
@@ -63,7 +63,7 @@ export async function loadMessagesForChat(id) {
   if (messagesLoading.val) return;
   messagesLoading.val = true;
   try {
-    const data = await fetchMessages(id, { userId: TEST_USER_ID });
+    const data = await fetchMessages(id, { userId: getEffectiveUserId() });
     if (Array.isArray(data?.messages)) {
       const loadedMessages = data.messages
         .filter(m => m && (m.role === 'user' || (m.content && m.content.trim().length > 0)))
@@ -91,7 +91,7 @@ export async function loadMessagesForChat(id) {
 export async function loadChatHistory() {
   historyLoading.val = true;
   try {
-    const data = await fetchConversations({ userId: TEST_USER_ID, limit: CHATS_PAGE_SIZE, offset: 0 });
+    const data = await fetchConversations({ userId: getEffectiveUserId(), limit: CHATS_PAGE_SIZE, offset: 0 });
     if (Array.isArray(data?.conversations)) {
       const dbChats = data.conversations.map(c => ({
         id: c.id,
@@ -123,7 +123,7 @@ export async function loadMoreChats() {
   try {
     const currentCount = chats.val.length;
     const data = await fetchConversations({
-      userId: TEST_USER_ID,
+      userId: getEffectiveUserId(),
       limit: CHATS_PAGE_SIZE,
       offset: currentCount,
     });
@@ -152,4 +152,18 @@ export async function loadMoreChats() {
   } finally {
     historyLoadingMore.val = false;
   }
+}
+
+export function resetChatStore() {
+  chats.val = [];
+  activeId.val = null;
+  searchResults.val = null;
+  hasMoreChats.val = true;
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('teach4all:auth-changed', () => {
+    resetChatStore();
+    loadChatHistory().catch(() => {});
+  });
 }

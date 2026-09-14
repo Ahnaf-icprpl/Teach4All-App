@@ -32,7 +32,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     base: './',
-    envPrefix: ['VITE_', 'ENV'],
+    envPrefix: ['VITE_', 'ENV', 'NEXT_PUBLIC_', 'CLERK_'],
     define: {
       'import.meta.env.ENV': JSON.stringify(appEnv),
       'import.meta.env.env': JSON.stringify(appEnv),

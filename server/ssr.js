@@ -22,6 +22,8 @@ const SVG_ICONS = {
   leaf: '<path d="M19 3C9 2 3 7 5 14c3 8 15 3 14-11Z"/><path d="M4 21 15 9"/>',
   search: '<path d="M21 21l-4.5-4.5"/><path d="M19 10.5a8.5 8.5 0 1 1-17 0 8.5 8.5 0 0 1 17 0"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
+  user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><path d="M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/>',
+  chevron: '<path d="m8 10 4 4 4-4"/>',
 };
 
 export function renderSsrHtml({ htmlTemplate, texts, prompts = [] }) {
@@ -106,13 +108,23 @@ export function renderSsrHtml({ htmlTemplate, texts, prompts = [] }) {
         </div>
       </nav>
       <div class="sidebar-bottom">
-        <div class="profile-button">
-          <span class="avatar">${escapeHtml(texts.sidebar_profile_avatar || 'A')}</span>
-          <span class="profile-copy">
-            <span class="profile-name">${escapeHtml(texts.sidebar_profile_name || '')}</span>
-            <span class="profile-detail">${escapeHtml(texts.sidebar_profile_detail || '')}</span>
+        <div class="profile-dropup-menu" id="profile-dropup-menu" role="menu" aria-hidden="true"></div>
+        <button type="button" class="profile-button is-guest" aria-haspopup="menu" aria-expanded="false" aria-controls="profile-dropup-menu" aria-label="${escapeHtml(texts.sidebar_profile_name || 'Akun Pengguna')}">
+          <span class="avatar">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon">
+              ${SVG_ICONS.user}
+            </svg>
           </span>
-        </div>
+          <span class="profile-copy">
+            <span class="profile-name">${escapeHtml(texts.sidebar_profile_name || 'Akun Pengguna')}</span>
+            <span class="profile-detail">${escapeHtml(texts.sidebar_profile_detail || 'Pribadi')}</span>
+          </span>
+          <span class="profile-chevron">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon">
+              ${SVG_ICONS.chevron}
+            </svg>
+          </span>
+        </button>
       </div>
     </aside>
     <div class="sidebar-scrim" aria-hidden="true"></div>

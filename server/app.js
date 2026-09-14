@@ -1,8 +1,11 @@
 import express from 'express';
+import { authRouter } from './routes/authRoutes.js';
 import { chatRouter } from './routes/chatRoutes.js';
 import { historyRouter } from './routes/historyRoutes.js';
 import { studyRouter } from './routes/studyRoutes.js';
 import { uiRouter } from './routes/uiRoutes.js';
+import { clerkHandshakeMiddleware, authContextMiddleware } from './authApi.js';
+import { enforceRateLimit } from './rateLimiter.js';
 import { load404HtmlTemplate } from './ssr.js';
 
 export function createApp(serverEnv = {}) {
@@ -12,17 +15,25 @@ export function createApp(serverEnv = {}) {
   app.disable('x-powered-by');
   app.set('query parser', 'simple');
 
-  // 2. Request Body Parsing
+  // 2. Request Body Parsing & Auth Handshake Interception
+  app.use(clerkHandshakeMiddleware);
   app.use(express.json({ limit: '500kb' }));
 
+  // 2.5 Authoritative Auth Context Middleware for API routes
+  app.use('/api', authContextMiddleware(serverEnv));
+
   // 3. Mount Domain API Routers
+  app.use('/api', authRouter(serverEnv));
   app.use('/api', chatRouter(serverEnv));
   app.use('/api', historyRouter(serverEnv));
   app.use('/api', studyRouter(serverEnv));
   app.use('/api', uiRouter(serverEnv));
 
   // 4. 404 Handler for Unmatched API Routes
-  app.use('/api', (req, res) => {
+  app.use('/api', async (req, res) => {
+    if (!(await enforceRateLimit(req, res, '*', serverEnv))) {
+      return;
+    }
     const endpoint = req.originalUrl || req.url || '/';
     if (typeof res.status === 'function') {
       res.status(404).json({ error: { message: `Route ${endpoint} not found` } });

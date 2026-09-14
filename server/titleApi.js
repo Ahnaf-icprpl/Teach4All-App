@@ -2,8 +2,10 @@ import {
   checkRateLimit,
   getClientIp,
   getClientLocation,
+  getClientUserId,
   applyRateLimitHeaders,
   getEndpointConfig,
+  enforceRateLimit,
 } from './rateLimiter.js';
 import { saveConversation, DEFAULT_USER_ID } from './db.js';
 import {
@@ -53,31 +55,8 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
         req.on('error', reject);
       });
 
-  // In-memory rate limiting
-  const config = await getEndpointConfig('/api/title', { databaseUrl: serverEnv.DATABASE_URL || process.env.DATABASE_URL });
-  const rateLimit = serverEnv.RATE_LIMIT !== undefined ? serverEnv.RATE_LIMIT : config.rateLimitPerIp;
-  const windowSeconds = serverEnv.WINDOW_SECONDS !== undefined ? serverEnv.WINDOW_SECONDS : config.windowSeconds;
-
-  const rateInfo = await checkRateLimit({
-    endpoint: '/api/title',
-    clientIp,
-    limit: rateLimit,
-    windowSeconds,
-  });
-
-  applyRateLimitHeaders(res, rateInfo);
-
-  if (!rateInfo.allowed) {
-    res.writeHead(429, {
-      'Content-Type': 'application/json',
-      'Retry-After': String(rateInfo.resetSeconds),
-    });
-    res.end(JSON.stringify({
-      error: {
-        message: `Rate limit exceeded. Please wait ${rateInfo.resetSeconds}s before retrying.`,
-        retryAfter: rateInfo.resetSeconds,
-      },
-    }));
+  // In-memory rate limiting against PostgreSQL endpoint policy
+  if (!(await enforceRateLimit(req, res, '/api/title', serverEnv))) {
     return;
   }
 
@@ -103,7 +82,8 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
     }
   }
 
-  const { messages, conversationId, userId } = parsed;
+  const { messages, conversationId } = parsed;
+  const effectiveUserId = req.userId || DEFAULT_USER_ID;
 
   if (!Array.isArray(messages) || messages.length === 0) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -155,7 +135,7 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
           messages: formatTitleMessages(messages),
           max_tokens: 25,
           temperature,
-          user: userId || clientIp,
+          user: effectiveUserId || clientIp,
           ...providerRouting,
         }),
         signal: controller.signal,
@@ -190,7 +170,7 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
     const databaseUrl = serverEnv.DATABASE_URL || process.env.DATABASE_URL;
     saveConversation({
       id: conversationId,
-      userId: userId || DEFAULT_USER_ID,
+      userId: effectiveUserId,
       title: finalTitle,
       databaseUrl,
     }).catch(() => {});

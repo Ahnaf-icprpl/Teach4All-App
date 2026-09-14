@@ -5,7 +5,7 @@ import {
 } from './storage.js';
 import {
   sendMessage as sendApiMessage, generateTitle, generateOfflineTitle,
-  deleteConversationApi, renameConversationApi, TEST_USER_ID,
+  deleteConversationApi, renameConversationApi, TEST_USER_ID, getEffectiveUserId,
 } from './router.js';
 import {
   chats, activeId, historyLoading, historyLoadingMore, hasMoreChats,
@@ -17,7 +17,7 @@ import { isDevEnv } from './env.js';
 import { t, rotatePrompts } from './uiTexts.js';
 
 export {
-  TEST_USER_ID,
+  TEST_USER_ID, getEffectiveUserId,
   chats, activeId, historyLoading, historyLoadingMore, hasMoreChats,
   messagesLoading, search, searchResults, searchLoading,
   onSearchInput, loadMessagesForChat, loadChatHistory, loadMoreChats,
@@ -142,9 +142,7 @@ export function startTopicChat(type, topicOrPrompt) {
   } else if (custom) {
     promptText = `${prefix}${custom}`;
   } else {
-    promptText = isQuiz
-      ? `${prefix}Sains dan Pengetahuan Umum`
-      : `${prefix}Sains dan Konsep Dasar`;
+    promptText = `${prefix}${t('dialogs_cat_basic_science')}`;
   }
 
   modal.val = null;
@@ -222,7 +220,7 @@ export function sendMessage() {
   const messageHistory = chat.messages.concat(userMessage);
 
   if (isNewConversation) {
-    generateTitle(messageHistory, { conversationId: chat.id, userId: TEST_USER_ID })
+    generateTitle(messageHistory, { conversationId: chat.id, userId: getEffectiveUserId() })
       .then(generatedTitle => {
         if (generatedTitle && generatedTitle !== chat.title) {
           chats.val = chats.val.map(c => c.id === chat.id ? { ...c, title: generatedTitle } : c);
@@ -290,7 +288,7 @@ export function sendMessage() {
     conversationTitle: chat.title,
     userMessageId: userMessage.id,
     assistantMessageId: assistantMessage.id,
-    userId: TEST_USER_ID,
+    userId: getEffectiveUserId(),
     webSearch: isQuizIntent ? Boolean(online.val) : (webSearchEnabled.val && online.val),
     signal: abortController.signal,
     onStatus: (status) => {
@@ -372,7 +370,7 @@ export function renameChat(id, title) {
   chats.val = chats.val.map(chat => chat.id === id ? { ...chat, title: trimmed } : chat);
   persist();
   modal.val = null;
-  renameConversationApi(id, trimmed, { userId: TEST_USER_ID }).catch(() => {});
+  renameConversationApi(id, trimmed, { userId: getEffectiveUserId() }).catch(() => {});
 }
 
 export function deleteChat(id) {
@@ -383,7 +381,7 @@ export function deleteChat(id) {
   if (activeId.val === id) activeId.val = null;
   modal.val = null;
   toast(t('state_chat_deleted'));
-  deleteConversationApi(id, { userId: TEST_USER_ID }).catch(() => {});
+  deleteConversationApi(id, { userId: getEffectiveUserId() }).catch(() => {});
 }
 
 export function clearWorkspace() {
