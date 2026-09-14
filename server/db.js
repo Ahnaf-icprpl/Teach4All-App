@@ -3,8 +3,6 @@ import pg from 'pg';
 
 const { Pool } = pg;
 
-export const DEFAULT_USER_ID = '00000000-0000-0000-0000-000000000001';
-
 const pools = new Map();
 
 /**
@@ -109,7 +107,7 @@ export function toUserId(id) {
   if (typeof id === 'string' && id.trim()) {
     return id.trim();
   }
-  return DEFAULT_USER_ID;
+  return null;
 }
 
 /**
@@ -121,11 +119,12 @@ export async function ensureUserExists(userId, databaseUrl = process.env.DATABAS
   const pool = getPool(databaseUrl);
   if (!pool) return;
   try {
+    const username = uId.startsWith('guest_') ? 'teach4all_guest' : 'teach4all_user';
     await pool.query(
       `INSERT INTO users (id, username, updated_at)
-       VALUES ($1, 'teach4all_user', CURRENT_TIMESTAMP)
+       VALUES ($1, $2, CURRENT_TIMESTAMP)
        ON CONFLICT (id) DO NOTHING;`,
-      [uId]
+      [uId, username]
     );
   } catch {}
 }
@@ -204,7 +203,7 @@ export async function queryJson(sql, databaseUrl = process.env.DATABASE_URL) {
  */
 export async function saveConversation({
   id,
-  userId = DEFAULT_USER_ID,
+  userId,
   title = 'New Conversation',
   databaseUrl = process.env.DATABASE_URL,
 } = {}) {
@@ -250,7 +249,7 @@ export async function saveConversation({
 export async function saveMessage({
   id,
   conversationId,
-  userId = DEFAULT_USER_ID,
+  userId,
   role = 'user',
   content = '',
   databaseUrl = process.env.DATABASE_URL,
@@ -303,7 +302,7 @@ export async function saveMessage({
  * Fetch list of conversations for a user (lazy loading metadata).
  */
 export async function getConversations({
-  userId = DEFAULT_USER_ID,
+  userId,
   limit = 50,
   offset = 0,
   query = '',
@@ -399,7 +398,7 @@ export async function getConversations({
  */
 export async function getMessages({
   conversationId,
-  userId = DEFAULT_USER_ID,
+  userId,
   limit = 100,
   offset = 0,
   databaseUrl = process.env.DATABASE_URL,
@@ -447,7 +446,7 @@ export async function getMessages({
  */
 export async function deleteConversation({
   conversationId,
-  userId = DEFAULT_USER_ID,
+  userId,
   databaseUrl = process.env.DATABASE_URL,
 } = {}) {
   const convId = toUuid(conversationId);
@@ -475,7 +474,7 @@ export async function deleteConversation({
  */
 export async function updateConversationTitle({
   conversationId,
-  userId = DEFAULT_USER_ID,
+  userId,
   title,
   databaseUrl = process.env.DATABASE_URL,
 } = {}) {
@@ -543,7 +542,7 @@ export async function deleteMessage(id, { databaseUrl = process.env.DATABASE_URL
 export class ConversationStreamWriter {
   constructor({
     conversationId,
-    userId = DEFAULT_USER_ID,
+    userId,
     title = 'New Conversation',
     userMessage,
     assistantMessageId,
@@ -703,7 +702,7 @@ export class ConversationStreamWriter {
 /**
  * Retrieve list of quizzes with question count aggregation for a specific user.
  */
-export async function getQuizzes({ userId = DEFAULT_USER_ID, search, query: qSearch, category, limit = 50, offset = 0, databaseUrl } = {}) {
+export async function getQuizzes({ userId, search, query: qSearch, category, limit = 50, offset = 0, databaseUrl } = {}) {
   const uId = toUserId(userId);
   const params = [uId];
   let where = 'WHERE q.is_published = true AND q.user_id = $1';
@@ -746,7 +745,7 @@ export async function getQuizzes({ userId = DEFAULT_USER_ID, search, query: qSea
 /**
  * Retrieve quiz by ID including all ordered questions (scoped by user).
  */
-export async function getQuizById(id, { userId = DEFAULT_USER_ID, databaseUrl } = {}) {
+export async function getQuizById(id, { userId, databaseUrl } = {}) {
   if (!id) return null;
   const uId = toUserId(userId);
   const quizRows = await query('SELECT * FROM quizzes WHERE id = $1 AND user_id = $2', [id, uId], databaseUrl);
@@ -760,7 +759,7 @@ export async function getQuizById(id, { userId = DEFAULT_USER_ID, databaseUrl } 
   return { ...quiz, questions };
 }
 
-export async function setQuizSolvedStatus(id, isSolved = true, { userId = DEFAULT_USER_ID, databaseUrl } = {}) {
+export async function setQuizSolvedStatus(id, isSolved = true, { userId, databaseUrl } = {}) {
   if (!id) return null;
   const uId = toUserId(userId);
   const rows = await query(
@@ -859,7 +858,7 @@ export async function createQuiz(quiz, questions = [], { databaseUrl } = {}) {
 /**
  * Retrieve list of learning materials with section count aggregation for a specific user.
  */
-export async function getMaterials({ userId = DEFAULT_USER_ID, search, query: qSearch, category, limit = 50, offset = 0, databaseUrl } = {}) {
+export async function getMaterials({ userId, search, query: qSearch, category, limit = 50, offset = 0, databaseUrl } = {}) {
   const uId = toUserId(userId);
   const params = [uId];
   let where = 'WHERE m.is_published = true AND m.user_id = $1';
@@ -904,7 +903,7 @@ export async function getMaterials({ userId = DEFAULT_USER_ID, search, query: qS
 /**
  * Retrieve learning material by ID including all ordered sections (scoped by user).
  */
-export async function getMaterialById(id, { userId = DEFAULT_USER_ID, databaseUrl } = {}) {
+export async function getMaterialById(id, { userId, databaseUrl } = {}) {
   if (!id) return null;
   const uId = toUserId(userId);
   const matRows = await query('SELECT * FROM materials WHERE id = $1 AND user_id = $2', [id, uId], databaseUrl);
@@ -921,7 +920,7 @@ export async function getMaterialById(id, { userId = DEFAULT_USER_ID, databaseUr
 /**
  * Update the is_solved / is_completed status of a material (scoped by user).
  */
-export async function setMaterialSolvedStatus(id, isSolved = true, { userId = DEFAULT_USER_ID, databaseUrl } = {}) {
+export async function setMaterialSolvedStatus(id, isSolved = true, { userId, databaseUrl } = {}) {
   if (!id) return null;
   const uId = toUserId(userId);
   const val = Boolean(isSolved);

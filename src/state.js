@@ -5,7 +5,7 @@ import {
 } from './storage.js';
 import {
   sendMessage as sendApiMessage, generateTitle, generateOfflineTitle,
-  deleteConversationApi, renameConversationApi, TEST_USER_ID, getEffectiveUserId,
+  deleteConversationApi, renameConversationApi, getEffectiveUserId,
 } from './router.js';
 import {
   chats, activeId, historyLoading, historyLoadingMore, hasMoreChats,
@@ -17,7 +17,7 @@ import { isDevEnv } from './env.js';
 import { t, rotatePrompts } from './uiTexts.js';
 
 export {
-  TEST_USER_ID, getEffectiveUserId,
+  getEffectiveUserId,
   chats, activeId, historyLoading, historyLoadingMore, hasMoreChats,
   messagesLoading, search, searchResults, searchLoading,
   onSearchInput, loadMessagesForChat, loadChatHistory, loadMoreChats,

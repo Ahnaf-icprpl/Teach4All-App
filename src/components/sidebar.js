@@ -48,6 +48,11 @@ function profileDropupMenu() {
       const user = currentUser.val;
       if (!user) {
         return div({ class: 'profile-menu-content' },
+          div({ class: 'profile-menu-header' },
+            span({ class: 'profile-menu-name' }, () => t('auth_guest_name') || t('sidebar_profile_name') || 'Akun Pengguna'),
+            span({ class: 'profile-menu-email' }, () => t('auth_guest_detail') || t('sidebar_profile_detail') || 'Pribadi'),
+          ),
+          div({ class: 'profile-menu-divider' }),
           button({
             type: 'button',
             class: 'profile-menu-item',
@@ -302,7 +307,7 @@ export function Sidebar() {
         'aria-controls': 'profile-dropup-menu',
         'aria-label': () => {
           const user = currentUser.val;
-          return user ? (user.name || user.email || t('sidebar_profile_name')) : t('sidebar_profile_name');
+          return user ? (user.name || user.email || t('sidebar_profile_name')) : (t('auth_guest_name') || t('sidebar_profile_name') || 'Akun Pengguna');
         },
       },
         () => {
@@ -316,11 +321,11 @@ export function Sidebar() {
         span({ class: 'profile-copy' },
           span({ class: 'profile-name' }, () => {
             const user = currentUser.val;
-            return user ? (user.name || user.email || t('sidebar_profile_name')) : t('sidebar_profile_name');
+            return user ? (user.name || user.email || t('sidebar_profile_name')) : (t('auth_guest_name') || t('sidebar_profile_name') || 'Akun Pengguna');
           }),
           span({ class: 'profile-detail' }, () => {
             const user = currentUser.val;
-            return user ? (user.email || t('sidebar_profile_detail')) : t('sidebar_profile_detail');
+            return user ? (user.email || t('sidebar_profile_detail')) : (t('auth_guest_detail') || t('sidebar_profile_detail') || 'Pribadi');
           }),
         ),
         span({ class: () => `profile-chevron ${profileMenuOpen.val ? 'is-open' : ''}` }, icon('chevron')),

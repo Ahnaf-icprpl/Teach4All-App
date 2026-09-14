@@ -1,4 +1,4 @@
-import { createQuiz, DEFAULT_USER_ID } from './db.js';
+import { createQuiz } from './db.js';
 import { diagnoseAndValidateQuizArgs } from './quizValidator.js';
 import { buildWebSearchPlugin } from './webSearch.js';
 
@@ -129,7 +129,7 @@ export async function parseAndExecuteQuizTool(toolCall, { userId, conversationId
 
     const createdQuiz = await createQuiz(
       {
-        userId: userId || DEFAULT_USER_ID,
+        userId: userId || null,
         conversationId: conversationId || null,
         title,
         category,
@@ -200,7 +200,7 @@ export async function handleCompletedToolCalls({
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const execResult = await parseAndExecuteQuizTool(currentQuizCall, {
-      userId: userId || DEFAULT_USER_ID,
+      userId: userId || null,
       conversationId,
       databaseUrl,
     });

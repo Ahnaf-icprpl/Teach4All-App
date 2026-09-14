@@ -1,4 +1,4 @@
-import { createMaterial, DEFAULT_USER_ID } from './db.js';
+import { createMaterial } from './db.js';
 import { diagnoseAndValidateMaterialArgs } from './materialValidator.js';
 import { buildWebSearchPlugin } from './webSearch.js';
 import { accumulateToolCalls } from './quizTool.js';
@@ -103,7 +103,7 @@ export async function parseAndExecuteMaterialTool(toolCall, { userId, conversati
 
     const createdMaterial = await createMaterial(
       {
-        userId: userId || DEFAULT_USER_ID,
+        userId: userId || null,
         conversationId: conversationId || null,
         title,
         category,
@@ -178,7 +178,7 @@ export async function handleCompletedMaterialToolCalls({
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const execResult = await parseAndExecuteMaterialTool(currentCall, {
-      userId: userId || DEFAULT_USER_ID,
+      userId: userId || null,
       conversationId,
       databaseUrl,
     });

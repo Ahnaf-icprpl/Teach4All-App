@@ -3,7 +3,6 @@ export const CHAT_API_URL = './api/chat';
 export const TITLE_API_URL = './api/title';
 export const CONVERSATIONS_API_URL = './api/conversations';
 export const MESSAGES_API_URL = './api/messages';
-export const TEST_USER_ID = '00000000-0000-0000-0000-000000000001';
 export const TIMEOUT_MS = 35000;
 import { cleanTitle, generateOfflineTitle, formatTitleMessages, TITLE_SYSTEM_PROMPT } from './prompts/titlePrompt.js';
 import { getEffectiveUserId, getAuthHeaders } from './auth.js';

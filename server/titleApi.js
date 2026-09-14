@@ -7,7 +7,7 @@ import {
   getEndpointConfig,
   enforceRateLimit,
 } from './rateLimiter.js';
-import { saveConversation, DEFAULT_USER_ID } from './db.js';
+import { saveConversation } from './db.js';
 import {
   formatTitleMessages,
   cleanTitle,
@@ -83,7 +83,13 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
   }
 
   const { messages, conversationId } = parsed;
-  const effectiveUserId = req.userId || DEFAULT_USER_ID;
+  const effectiveUserId = req.userId;
+
+  if (!effectiveUserId) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: { message: 'User ID is required.' } }));
+    return;
+  }
 
   if (!Array.isArray(messages) || messages.length === 0) {
     res.writeHead(400, { 'Content-Type': 'application/json' });

@@ -1,6 +1,50 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { getUiTextsFromDb, getChatPromptsFromDb } from './uiTextsApi.js';
+import { getUiTextsFromDb, getChatPromptsFromDb, getGoogleTagIdFromDb } from './uiTextsApi.js';
+
+let cachedGoogleTagId = null;
+
+export function isProductionEnv(env = {}) {
+  const explicit = env?.ENV || env?.env || process.env.ENV || process.env.env;
+  if (explicit) {
+    return explicit.trim().toLowerCase() === 'production';
+  }
+  const fallback = env?.VERCEL_ENV || env?.NODE_ENV || process.env.VERCEL_ENV || process.env.NODE_ENV || 'development';
+  return fallback.trim().toLowerCase() === 'production';
+}
+
+export function buildGoogleTagHtml(tagId) {
+  if (!tagId || typeof tagId !== 'string' || !tagId.trim()) return '';
+  const cleanId = tagId.trim();
+  return `<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=${cleanId}"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', '${cleanId}');
+</script>`;
+}
+
+export function injectGoogleTag(html, tagId) {
+  if (!html || !tagId) return html;
+  const tagHtml = buildGoogleTagHtml(tagId);
+  if (!tagHtml || html.includes('https://www.googletagmanager.com/gtag/js')) {
+    return html;
+  }
+  if (/<head[^>]*>/i.test(html)) {
+    return html.replace(/(<head[^>]*>)/i, `$1\n  ${tagHtml}`);
+  }
+  return `${tagHtml}\n${html}`;
+}
+
+export function stripGoogleTag(html) {
+  if (!html || typeof html !== 'string') return html;
+  return html
+    .replace(/<!-- Google tag \(gtag\.js\) -->\s*<script async src="https:\/\/www\.googletagmanager\.com\/gtag\/js\?id=[^"]+"><\/script>\s*<script>[\s\S]*?gtag\('config',\s*'[^']+'\);\s*<\/script>\s*/gi, '')
+    .replace(/<!-- Google tag \(gtag\.js\) -->\s*/gi, '');
+}
 
 function escapeHtml(str) {
   if (typeof str !== 'string') return '';
@@ -24,14 +68,17 @@ const SVG_ICONS = {
   plus: '<path d="M12 5v14M5 12h14"/>',
   user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><path d="M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/>',
   chevron: '<path d="m8 10 4 4 4-4"/>',
+  login: '<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17 5-5-5-5"/><path d="M15 12H3"/>',
+  download: '<path d="M12 3v12m-5-5 5 5 5-5"/><path d="M4 16v5h16v-5"/>',
 };
 
-export function renderSsrHtml({ htmlTemplate, texts, prompts = [] }) {
+export function renderSsrHtml({ htmlTemplate, texts, prompts = [], serverEnv = {}, googleTagId = null }) {
   if (!texts || !Object.keys(texts).length || !prompts || !prompts.length) {
     throw new Error('No UI text or prompts available in database to populate SSR.');
   }
 
-  const appEnv = process.env.ENV || process.env.env || 'development';
+  const isProd = isProductionEnv(serverEnv);
+  const appEnv = serverEnv.ENV || serverEnv.env || process.env.ENV || process.env.env || (isProd ? 'production' : 'development');
   const initialDataScript = `<script id="__TEACH4ALL_DATA__">window.__INITIAL_UI_DATA__ = ${JSON.stringify({ texts, prompts, env: appEnv })};</script>`;
   const ssrPrompts = prompts.slice(0, 4);
 
@@ -108,16 +155,43 @@ export function renderSsrHtml({ htmlTemplate, texts, prompts = [] }) {
         </div>
       </nav>
       <div class="sidebar-bottom">
-        <div class="profile-dropup-menu" id="profile-dropup-menu" role="menu" aria-hidden="true"></div>
-        <button type="button" class="profile-button is-guest" aria-haspopup="menu" aria-expanded="false" aria-controls="profile-dropup-menu" aria-label="${escapeHtml(texts.sidebar_profile_name || 'Akun Pengguna')}">
+        <div class="profile-dropup-menu" id="profile-dropup-menu" role="menu" aria-hidden="true">
+          <div class="profile-menu-content">
+            <div class="profile-menu-header">
+              <span class="profile-menu-name">${escapeHtml(texts.auth_guest_name || texts.sidebar_profile_name || 'Akun Pengguna')}</span>
+              <span class="profile-menu-email">${escapeHtml(texts.auth_guest_detail || texts.sidebar_profile_detail || 'Pribadi')}</span>
+            </div>
+            <div class="profile-menu-divider"></div>
+            <button type="button" class="profile-menu-item" role="menuitem">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon">
+                ${SVG_ICONS.login}
+              </svg>
+              <span>${escapeHtml(texts.auth_login_button || 'Masuk')}</span>
+            </button>
+            <button type="button" class="profile-menu-item" role="menuitem">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon">
+                ${SVG_ICONS.user}
+              </svg>
+              <span>${escapeHtml(texts.auth_signup_with_clerk || 'Daftar akun baru')}</span>
+            </button>
+            <div class="profile-menu-divider"></div>
+            <button type="button" class="profile-menu-item" role="menuitem">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon">
+                ${SVG_ICONS.download}
+              </svg>
+              <span>${escapeHtml(texts.auth_export_workspace || 'expor histori chat')}</span>
+            </button>
+          </div>
+        </div>
+        <button type="button" class="profile-button is-guest" aria-haspopup="menu" aria-expanded="false" aria-controls="profile-dropup-menu" aria-label="${escapeHtml(texts.auth_guest_name || texts.sidebar_profile_name || 'Akun Pengguna')}">
           <span class="avatar">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon">
               ${SVG_ICONS.user}
             </svg>
           </span>
           <span class="profile-copy">
-            <span class="profile-name">${escapeHtml(texts.sidebar_profile_name || 'Akun Pengguna')}</span>
-            <span class="profile-detail">${escapeHtml(texts.sidebar_profile_detail || 'Pribadi')}</span>
+            <span class="profile-name">${escapeHtml(texts.auth_guest_name || texts.sidebar_profile_name || 'Akun Pengguna')}</span>
+            <span class="profile-detail">${escapeHtml(texts.auth_guest_detail || texts.sidebar_profile_detail || 'Pribadi')}</span>
           </span>
           <span class="profile-chevron">
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon">
@@ -210,40 +284,77 @@ export function renderSsrHtml({ htmlTemplate, texts, prompts = [] }) {
   rendered = rendered.replace('<body>', `<body>
 ${ssrBody}`);
 
+  const activeTagId = isProd ? (texts.google_tag_id || googleTagId || cachedGoogleTagId) : null;
+  if (activeTagId) {
+    rendered = injectGoogleTag(rendered, activeTagId);
+  } else if (!isProd) {
+    rendered = stripGoogleTag(rendered);
+  }
+
   return rendered;
 }
 
-export function loadHtmlTemplate() {
+export function loadHtmlTemplate(options = {}) {
+  const serverEnv = typeof options === 'object' && options ? (options.serverEnv || {}) : {};
+  const isProd = isProductionEnv(serverEnv);
+
   const distPath = resolve(process.cwd(), 'dist', 'index.html');
-  if (existsSync(distPath)) {
+  const rootPath = resolve(process.cwd(), 'index.html');
+  if (isProd && existsSync(distPath)) {
     return readFileSync(distPath, 'utf8');
   }
-  const rootPath = resolve(process.cwd(), 'index.html');
   if (existsSync(rootPath)) {
     return readFileSync(rootPath, 'utf8');
+  }
+  if (existsSync(distPath)) {
+    return readFileSync(distPath, 'utf8');
   }
   return '';
 }
 
-export function load404HtmlTemplate() {
+export function load404HtmlTemplate(options = {}) {
+  const googleTagId = typeof options === 'string' ? options : (options && typeof options === 'object' ? options.googleTagId : null);
+  const serverEnv = typeof options === 'object' && options ? (options.serverEnv || {}) : {};
+  const isProd = isProductionEnv(serverEnv);
+
   const distPath = resolve(process.cwd(), 'dist', '404.html');
-  if (existsSync(distPath)) {
-    return readFileSync(distPath, 'utf8');
-  }
   const rootPath = resolve(process.cwd(), '404.html');
-  if (existsSync(rootPath)) {
-    return readFileSync(rootPath, 'utf8');
+  let html = '';
+  if (isProd && existsSync(distPath)) {
+    html = readFileSync(distPath, 'utf8');
+  } else if (existsSync(rootPath)) {
+    html = readFileSync(rootPath, 'utf8');
+  } else if (existsSync(distPath)) {
+    html = readFileSync(distPath, 'utf8');
+  } else {
+    html = '<!doctype html><html><head><title>404 Not Found</title></head><body><h1>404 Not Found</h1></body></html>';
   }
-  return '<!doctype html><html><head><title>404 Not Found</title></head><body><h1>404 Not Found</h1></body></html>';
+
+  const activeTagId = isProd ? (googleTagId || cachedGoogleTagId) : null;
+  if (activeTagId) {
+    html = injectGoogleTag(html, activeTagId);
+  } else if (!isProd) {
+    html = stripGoogleTag(html);
+  }
+
+  return html;
 }
 
 export async function handleSsrRequest(req, res, env = {}) {
   const rawUrl = req.url || '/';
   const pathname = rawUrl.split('?')[0];
+  const dbUrl = env.DATABASE_URL || process.env.DATABASE_URL;
 
   const isRoot = pathname === '/' || pathname === '/index.html' || pathname === '';
   if (!isRoot) {
-    const template404 = load404HtmlTemplate();
+    let tagId = null;
+    if (isProductionEnv(env)) {
+      try {
+        tagId = await getGoogleTagIdFromDb(dbUrl);
+        if (tagId) cachedGoogleTagId = tagId;
+      } catch {}
+    }
+    const template404 = load404HtmlTemplate({ googleTagId: tagId, serverEnv: env });
     res.writeHead(404, {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -252,10 +363,12 @@ export async function handleSsrRequest(req, res, env = {}) {
     return;
   }
 
-  const dbUrl = env.DATABASE_URL || process.env.DATABASE_URL;
   try {
     const texts = await getUiTextsFromDb(dbUrl);
     const prompts = await getChatPromptsFromDb(dbUrl);
+    if (texts?.google_tag_id) {
+      cachedGoogleTagId = texts.google_tag_id;
+    }
 
     if (!texts || !Object.keys(texts).length || !prompts || !prompts.length) {
       res.writeHead(503, { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -263,14 +376,14 @@ export async function handleSsrRequest(req, res, env = {}) {
       return;
     }
 
-    const template = loadHtmlTemplate();
+    const template = loadHtmlTemplate({ serverEnv: env });
     if (!template) {
       res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end('HTML template not found.');
       return;
     }
 
-    const rendered = renderSsrHtml({ htmlTemplate: template, texts, prompts });
+    const rendered = renderSsrHtml({ htmlTemplate: template, texts, prompts, serverEnv: env });
     res.writeHead(200, {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'no-cache',

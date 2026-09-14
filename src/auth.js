@@ -6,7 +6,7 @@ export const CLERK_HANDSHAKE_URL = 'https://outgoing-feline-6741.clerk.accounts.
 export const CLERK_SIGN_IN_URL = 'https://outgoing-feline-6741.accounts.dev/sign-in';
 export const CLERK_SIGN_UP_URL = 'https://outgoing-feline-6741.accounts.dev/sign-up';
 export const CLERK_USER_PROFILE_URL = 'https://outgoing-feline-6741.accounts.dev/user';
-export const TEST_FALLBACK_USER_ID = '00000000-0000-0000-0000-000000000001';
+export const GUEST_COOKIE_NAME = 'teach4all_guest_id';
 
 function getStoredUser() {
   if (typeof localStorage === 'undefined') return null;
@@ -24,14 +24,36 @@ export function isAuthenticated() {
   return Boolean(currentUser.val);
 }
 
-export function getEffectiveUserId() {
-  return currentUser.val?.id || TEST_FALLBACK_USER_ID;
-}
-
 function getCookie(name) {
   if (typeof document === 'undefined') return null;
   const match = document.cookie.match(new RegExp('(?:^|;\\s*)' + name + '=([^;]*)'));
   return match ? decodeURIComponent(match[1]) : null;
+}
+
+export function getOrCreateGuestId() {
+  let guestId = getCookie(GUEST_COOKIE_NAME);
+  if (!guestId && typeof localStorage !== 'undefined') {
+    try {
+      guestId = localStorage.getItem(GUEST_COOKIE_NAME);
+    } catch {}
+  }
+  if (!guestId || typeof guestId !== 'string' || !guestId.startsWith('guest_')) {
+    const randomSuffix = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+      ? crypto.randomUUID()
+      : (Math.random().toString(36).slice(2, 11) + Date.now().toString(36));
+    guestId = `guest_${randomSuffix}`;
+  }
+  if (typeof document !== 'undefined') {
+    document.cookie = `${GUEST_COOKIE_NAME}=${guestId}; Path=/; SameSite=Lax`;
+    try {
+      localStorage.setItem(GUEST_COOKIE_NAME, guestId);
+    } catch {}
+  }
+  return guestId;
+}
+
+export function getEffectiveUserId() {
+  return currentUser.val?.id || getOrCreateGuestId();
 }
 
 export function getAuthHeaders() {
@@ -53,6 +75,10 @@ export function getAuthHeaders() {
   }
   if (sessionId) {
     headers['X-Session-ID'] = sessionId;
+  }
+  const guestId = getOrCreateGuestId();
+  if (guestId && !token) {
+    headers['X-Guest-ID'] = guestId;
   }
   return headers;
 }
@@ -171,6 +197,12 @@ export async function checkAuth() {
     }
 
     const data = await res.json();
+    if (data && data.guestId && typeof document !== 'undefined') {
+      document.cookie = `${GUEST_COOKIE_NAME}=${data.guestId}; Path=/; SameSite=Lax`;
+      try {
+        localStorage.setItem(GUEST_COOKIE_NAME, data.guestId);
+      } catch {}
+    }
     if (data && data.authenticated && data.user) {
       currentUser.val = data.user;
       if (typeof localStorage !== 'undefined') {
@@ -229,10 +261,12 @@ export async function logout() {
       localStorage.removeItem('teach4all_user');
       localStorage.removeItem('teach4all_session');
       localStorage.removeItem('teach4all_session_id');
+      localStorage.removeItem(GUEST_COOKIE_NAME);
     }
     document.cookie = '__session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
     document.cookie = 'clerk_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
     document.cookie = 'clerk_session_id=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+    document.cookie = `${GUEST_COOKIE_NAME}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
     await fetch('./api/auth/logout', { method: 'POST' });
   } catch {}
   currentUser.val = null;

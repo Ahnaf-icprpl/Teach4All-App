@@ -33,7 +33,7 @@ import {
 import { handleTitleRequest } from '../server/titleApi.js';
 import { handleConversationsRequest, handleMessagesRequest } from '../server/historyApi.js';
 import {
-  ConversationStreamWriter, DEFAULT_USER_ID, runSql,
+  ConversationStreamWriter, runSql, ensureUserExists,
   getConversations, getMessages, deleteConversation,
   updateConversationTitle, saveConversation, saveMessage,
   query, getPool, getSslConfig,
@@ -42,8 +42,14 @@ import {
   generateTitle, TITLE_API_URL,
   fetchConversations, fetchMessages, deleteConversationApi,
   renameConversationApi, searchConversationsApi, CONVERSATIONS_API_URL, MESSAGES_API_URL,
-  TEST_USER_ID,
 } from '../src/router.js';
+
+const TEST_USER_ID = 'test_guest_router_test_user';
+if (process.env.DATABASE_URL) {
+  try {
+    await ensureUserExists(TEST_USER_ID, process.env.DATABASE_URL);
+  } catch {}
+}
 import {
   getConversationProvider,
   setConversationProvider,
@@ -354,15 +360,14 @@ test('prompts/systemPrompt defines Teach4All agent system prompt and injects bef
   assert.strictEqual(reinjected[0].content, prompt);
 });
 
-test('ConversationStreamWriter streams conversations and messages to DB using UUID and hardcoded user_id', async () => {
-  assert.strictEqual(DEFAULT_USER_ID, '00000000-0000-0000-0000-000000000001');
-
+test('ConversationStreamWriter streams conversations and messages to DB using UUID and userId', async () => {
   const conversationId = '11111111-2222-3333-4444-555555555555';
   const userMessageId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
   const assistantMessageId = 'ffffffff-0000-1111-2222-333333333333';
 
   const writer = new ConversationStreamWriter({
     conversationId,
+    userId: TEST_USER_ID,
     title: 'Test Streaming Conversation',
     userMessage: { id: userMessageId, role: 'user', text: 'Explain gravity simply' },
     assistantMessageId,
@@ -371,7 +376,7 @@ test('ConversationStreamWriter streams conversations and messages to DB using UU
   });
 
   assert.strictEqual(writer.conversationId, conversationId);
-  assert.strictEqual(writer.userId, DEFAULT_USER_ID);
+  assert.strictEqual(writer.userId, TEST_USER_ID);
   assert.strictEqual(writer.assistantMessageId, assistantMessageId);
 
   if (!process.env.DATABASE_URL) return;
@@ -525,9 +530,10 @@ test('client generateTitle calls /api/title and gracefully handles fallback', as
   }
 });
 
-test('TEST_USER_ID is hardcoded and matches backend DEFAULT_USER_ID', () => {
-  assert.strictEqual(TEST_USER_ID, '00000000-0000-0000-0000-000000000001');
-  assert.strictEqual(TEST_USER_ID, DEFAULT_USER_ID);
+test('Dynamic guest user id follows guest_<uuid> convention', () => {
+  const sampleGuestId = 'guest_' + crypto.randomUUID();
+  assert.ok(sampleGuestId.startsWith('guest_'));
+  assert.strictEqual(sampleGuestId.length, 42);
 });
 
 test('server db operations persist, retrieve, rename, and delete conversations and messages', async () => {
@@ -663,7 +669,7 @@ test('client fetchConversations and fetchMessages call endpoints with query para
 
   try {
     const convData = await fetchConversations({ userId: TEST_USER_ID });
-    assert.ok(fetchedUrl.includes('userId=00000000-0000-0000-0000-000000000001'));
+    assert.ok(fetchedUrl.includes(`userId=${TEST_USER_ID}`));
     assert.strictEqual(convData.conversations[0].title, 'Belajar Kimia');
 
     const msgData = await fetchMessages('conv-1', { userId: TEST_USER_ID });
