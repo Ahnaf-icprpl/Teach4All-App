@@ -1,16 +1,16 @@
 # Agent Rules for Teach4All
 
-These rules apply to all code files (`.js`, `.mjs`, `.css`) in the `src/` directory.
+These rules apply to all application code files (`.js`, `.mjs`, `.cjs`, `.css`) across `src/`, `server/`, `api/`, `prompts/`, `scripts/`, and future application directories.
 
 ## File Size Limits
 
-- Every code file must stay below **500 lines**.
-- The `npm run check` script enforces this.
+- Every application code file must stay below **500 lines**.
+- The `npm run check` script enforces this dynamically across the codebase (excluding `node_modules`, `dist`, and `tests`).
 - If a file approaches 400+ lines, proactively refactor:
   - Extract utilities to a separate module.
   - Split a large component into smaller pieces.
   - Move styles into a dedicated CSS file if needed.
-- Non-code files (package.json, README.md, configs) have no line limit.
+- Non-code files (package.json, README.md, markdown) and test suites have no line limit.
 
 ## Build From First Principles
 

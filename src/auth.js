@@ -8,11 +8,34 @@ export const CLERK_SIGN_UP_URL = 'https://outgoing-feline-6741.accounts.dev/sign
 export const CLERK_USER_PROFILE_URL = 'https://outgoing-feline-6741.accounts.dev/user';
 export const GUEST_COOKIE_NAME = 'teach4all_guest_id';
 
+function getCookie(name) {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(new RegExp('(?:^|;\\s*)' + name + '=([^;]*)'));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 function getStoredUser() {
   if (typeof localStorage === 'undefined') return null;
   try {
+    const token = getCookie('__session') || getCookie('clerk_session');
+    const sessionId = getCookie('clerk_session_id');
+    const localToken = localStorage.getItem('teach4all_session');
+    const localSessionId = localStorage.getItem('teach4all_session_id');
+
+    // If there is zero active session credential, the user is an unauthenticated guest
+    if (!token && !sessionId && !localToken && !localSessionId) {
+      localStorage.removeItem('teach4all_user');
+      return null;
+    }
+
     const raw = localStorage.getItem('teach4all_user');
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const user = JSON.parse(raw);
+      if (user && user.id && !String(user.id).startsWith('guest_') && user.id !== '00000000-0000-0000-0000-000000000001') {
+        return user;
+      }
+      localStorage.removeItem('teach4all_user');
+    }
   } catch {}
   return null;
 }
@@ -22,12 +45,6 @@ export const authLoading = van.state(true);
 
 export function isAuthenticated() {
   return Boolean(currentUser.val);
-}
-
-function getCookie(name) {
-  if (typeof document === 'undefined') return null;
-  const match = document.cookie.match(new RegExp('(?:^|;\\s*)' + name + '=([^;]*)'));
-  return match ? decodeURIComponent(match[1]) : null;
 }
 
 export function getOrCreateGuestId() {
@@ -182,7 +199,7 @@ export async function checkAuth() {
 
     const res = await fetch('./api/whoami', { headers });
     if (!res.ok) {
-      if (res.status === 401) {
+      if (res.status >= 400 && res.status < 500) {
         currentUser.val = null;
         if (typeof localStorage !== 'undefined') {
           try {
