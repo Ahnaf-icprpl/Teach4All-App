@@ -53,27 +53,59 @@ export default defineConfig(({ mode }) => {
         async transformIndexHtml(html, ctx) {
           const path = ctx?.path || '';
           const filename = ctx?.filename || '';
-          if (path.includes('404') || filename.includes('404') || html.includes('Galat 404')) {
+          const dbUrl = process.env.DATABASE_URL || env.DATABASE_URL;
+          const isProdBuild = mode === 'production' || appEnv === 'production';
+
+          if (path.includes('404') || filename.includes('404') || html.includes('404')) {
+            if (isProdBuild && dbUrl) {
+              try {
+                const { getGoogleTagIdFromDb } = await import('./server/uiTextsApi.js');
+                const tagId = await getGoogleTagIdFromDb(dbUrl);
+                if (tagId) {
+                  const { injectGoogleTag } = await import('./server/ssr.js');
+                  return injectGoogleTag(html, tagId);
+                }
+              } catch {}
+            }
             return html;
           }
+
           try {
-            const dbUrl = process.env.DATABASE_URL || env.DATABASE_URL;
             if (dbUrl) {
               const { getUiTextsFromDb, getChatPromptsFromDb } = await import('./server/uiTextsApi.js');
               const { renderSsrHtml } = await import('./server/ssr.js');
               const texts = await getUiTextsFromDb(dbUrl);
               const prompts = await getChatPromptsFromDb(dbUrl);
               if (texts && Object.keys(texts).length && prompts && prompts.length) {
-                return renderSsrHtml({ htmlTemplate: html, texts, prompts });
+                return renderSsrHtml({
+                  htmlTemplate: html,
+                  texts,
+                  prompts,
+                  serverEnv: { ENV: isProdBuild ? 'production' : appEnv },
+                });
               }
             }
           } catch {}
           return html;
         },
-        generateBundle(options, bundle) {
+        async generateBundle(options, bundle) {
+          const dbUrl = process.env.DATABASE_URL || env.DATABASE_URL;
+          const isProdBuild = mode === 'production' || appEnv === 'production';
+          let tagId = null;
+          if (isProdBuild && dbUrl) {
+            try {
+              const { getGoogleTagIdFromDb } = await import('./server/uiTextsApi.js');
+              tagId = await getGoogleTagIdFromDb(dbUrl);
+            } catch {}
+          }
           for (const [fileName, chunk] of Object.entries(bundle)) {
             if (fileName === '404.html' && chunk.type === 'asset' && typeof chunk.source === 'string') {
-              chunk.source = chunk.source.replace(/<link rel="stylesheet"[^>]*>/g, '');
+              let src = chunk.source.replace(/<link rel="stylesheet"[^>]*>/g, '');
+              if (tagId) {
+                const { injectGoogleTag } = await import('./server/ssr.js');
+                src = injectGoogleTag(src, tagId);
+              }
+              chunk.source = src;
             }
           }
         },

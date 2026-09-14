@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { enforceRateLimit, getClientIp } from './rateLimiter.js';
-import { syncUserToDb, DEFAULT_USER_ID } from './db.js';
+import { syncUserToDb, ensureUserExists } from './db.js';
 
 let jwksCache = { keys: null, expiresAt: 0 };
 const userCache = new Map();
@@ -358,6 +358,7 @@ export async function handleWhoamiRequest(req, res, serverEnv = {}) {
     authenticated: authResult.authenticated,
     user: authResult.user,
     sessionId: authResult.sessionId || null,
+    guestId: req.isGuest ? req.userId : null,
   });
 
   if (typeof res.json === 'function') {
@@ -565,6 +566,8 @@ export function clerkHandshakeMiddleware(req, res, next) {
  * binding req.user, req.userId, and req.isGuest authoritatively.
  */
 export function authContextMiddleware(serverEnv = {}) {
+  const dbUrl = serverEnv.DATABASE_URL || process.env.DATABASE_URL;
+
   return async (req, res, next) => {
     try {
       const auth = await authenticateClerkRequest(req, serverEnv);
@@ -573,14 +576,36 @@ export function authContextMiddleware(serverEnv = {}) {
         req.userId = auth.user.id;
         req.isGuest = false;
       } else {
+        const cookies = parseCookies(req.headers?.cookie || '');
+        let guestId = cookies.teach4all_guest_id || req.headers?.['x-guest-id'] || req.headers?.['x-guest-session'];
+
+        if (!guestId || typeof guestId !== 'string' || !/^guest_[a-zA-Z0-9_-]{8,64}$/.test(guestId.trim())) {
+          guestId = `guest_${crypto.randomUUID()}`;
+          if (res && typeof res.setHeader === 'function' && !res.headersSent) {
+            res.setHeader('Set-Cookie', `teach4all_guest_id=${guestId}; Path=/; SameSite=Lax`);
+          }
+        } else {
+          guestId = guestId.trim();
+        }
+
         req.user = null;
-        req.userId = DEFAULT_USER_ID;
+        req.userId = guestId;
         req.isGuest = true;
+
+        if (dbUrl) {
+          await ensureUserExists(guestId, dbUrl);
+        }
       }
     } catch {
+      const fallbackGuestId = `guest_${crypto.randomUUID()}`;
       req.user = null;
-      req.userId = DEFAULT_USER_ID;
+      req.userId = fallbackGuestId;
       req.isGuest = true;
+      if (dbUrl) {
+        try {
+          await ensureUserExists(fallbackGuestId, dbUrl);
+        } catch {}
+      }
     }
     next();
   };

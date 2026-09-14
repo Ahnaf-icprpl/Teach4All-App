@@ -56,7 +56,7 @@ export function createApp(serverEnv = {}) {
       !cleanUrl.startsWith('/node_modules/') &&
       !cleanUrl.includes('.')
     ) {
-      const p404 = load404HtmlTemplate();
+      const p404 = load404HtmlTemplate({ serverEnv });
       if (typeof res.status === 'function') {
         res.status(404).type('text/html; charset=utf-8').send(p404);
       } else {

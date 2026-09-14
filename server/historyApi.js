@@ -5,7 +5,6 @@ import {
   enforceRateLimit,
 } from './rateLimiter.js';
 import {
-  DEFAULT_USER_ID,
   getConversations,
   getMessages,
   deleteConversation,
@@ -32,7 +31,13 @@ export async function handleConversationsRequest(req, res, serverEnv = {}) {
   const clientIp = getClientIp(req);
   const parsedUrl = new URL(req.url || '/', 'http://localhost');
   const databaseUrl = serverEnv.DATABASE_URL || process.env.DATABASE_URL;
-  const effectiveUserId = req.userId || DEFAULT_USER_ID;
+  const effectiveUserId = req.userId;
+
+  if (!effectiveUserId) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: { message: 'User ID is required.' } }));
+    return;
+  }
 
   if (!(await enforceRateLimit(req, res, '/api/conversations', serverEnv))) {
     return;
@@ -125,7 +130,13 @@ export async function handleMessagesRequest(req, res, serverEnv = {}) {
 
   const parsedUrl = new URL(req.url || '/', 'http://localhost');
   const databaseUrl = serverEnv.DATABASE_URL || process.env.DATABASE_URL;
-  const effectiveUserId = req.userId || DEFAULT_USER_ID;
+  const effectiveUserId = req.userId;
+
+  if (!effectiveUserId) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: { message: 'User ID is required.' } }));
+    return;
+  }
 
   if (!(await enforceRateLimit(req, res, '/api/messages', serverEnv))) {
     return;

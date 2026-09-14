@@ -8,7 +8,7 @@ import {
   enforceRateLimit,
 } from './rateLimiter.js';
 import { getSystemPrompt, injectSystemPrompt } from '../prompts/systemPrompt.js';
-import { ConversationStreamWriter, DEFAULT_USER_ID } from './db.js';
+import { ConversationStreamWriter } from './db.js';
 import {
   getConversationProvider,
   setConversationProvider,
@@ -105,7 +105,13 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
     webSearch,
   } = parsed;
 
-  const effectiveUserId = req.userId || DEFAULT_USER_ID;
+  const effectiveUserId = req.userId;
+
+  if (!effectiveUserId) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: { message: 'User ID is required.' } }));
+    return;
+  }
 
   if (!Array.isArray(messages) || messages.length === 0) {
     res.writeHead(400, { 'Content-Type': 'application/json' });

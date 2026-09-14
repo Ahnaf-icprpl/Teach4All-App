@@ -26,6 +26,16 @@ export async function getChatPromptsFromDb(databaseUrl = process.env.DATABASE_UR
   })) : [];
 }
 
+export async function getGoogleTagIdFromDb(databaseUrl = process.env.DATABASE_URL) {
+  try {
+    const rows = await query("SELECT value FROM ui_texts WHERE key = 'google_tag_id' LIMIT 1;", [], databaseUrl);
+    if (Array.isArray(rows) && rows.length > 0 && rows[0].value) {
+      return String(rows[0].value).trim();
+    }
+  } catch {}
+  return null;
+}
+
 export async function handleUiTextsRequest(req, res, env = {}) {
   if (req.method !== 'GET') {
     res.writeHead(405, { 'Content-Type': 'application/json' });

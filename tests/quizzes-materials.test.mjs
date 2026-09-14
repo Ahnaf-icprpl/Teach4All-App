@@ -19,7 +19,7 @@ import {
   setMaterialSolvedStatus,
   query,
   runSql,
-  DEFAULT_USER_ID,
+  ensureUserExists,
 } from '../server/db.js';
 
 import { handleQuizzesRequest } from '../server/quizzesApi.js';
@@ -181,14 +181,17 @@ test('server db helpers getQuizById and getMaterialById fetch detailed items in 
 test('createQuiz and createMaterial insert records and cascade delete cleanly', async () => {
   if (!DB_URL) return;
 
+  const testUserId = 'test_guest_' + crypto.randomUUID();
   const testQuizId = '99999999-1111-2222-3333-444444444444';
   const testMaterialId = '99999999-5555-6666-7777-888888888888';
 
   try {
+    await ensureUserExists(testUserId, DB_URL);
+
     // 1. Create Quiz
     const createdQuiz = await createQuiz({
       id: testQuizId,
-      userId: DEFAULT_USER_ID,
+      userId: testUserId,
       title: 'Automated Test Quiz',
       category: 'dialogs_cat_physics',
       summary: 'Testing quiz creation and cascading',
@@ -223,7 +226,7 @@ test('createQuiz and createMaterial insert records and cascade delete cleanly', 
     // 2. Create Material
     const createdMaterial = await createMaterial({
       id: testMaterialId,
-      userId: DEFAULT_USER_ID,
+      userId: testUserId,
       title: 'Automated Test Material',
       category: 'dialogs_cat_math',
       summary: 'Testing material creation and cascading',
@@ -271,6 +274,7 @@ test('createQuiz and createMaterial insert records and cascade delete cleanly', 
     try {
       await runSql(`DELETE FROM quizzes WHERE id = '${testQuizId}';`, DB_URL);
       await runSql(`DELETE FROM materials WHERE id = '${testMaterialId}';`, DB_URL);
+      await runSql(`DELETE FROM users WHERE id = '${testUserId}';`, DB_URL);
     } catch {}
   }
 });

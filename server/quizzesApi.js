@@ -1,4 +1,4 @@
-import { getQuizzes, getQuizById, createQuiz, setQuizSolvedStatus, DEFAULT_USER_ID } from './db.js';
+import { getQuizzes, getQuizById, createQuiz, setQuizSolvedStatus } from './db.js';
 import { enforceRateLimit } from './rateLimiter.js';
 
 function readJsonBody(req) {
@@ -34,7 +34,13 @@ export async function handleQuizzesRequest(req, res, env = {}) {
 
   const url = new URL(req.url, 'http://localhost');
   const dbUrl = env.DATABASE_URL || process.env.DATABASE_URL;
-  const userId = req.userId || DEFAULT_USER_ID;
+  const userId = req.userId;
+
+  if (!userId) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: { message: 'User ID is required.' } }));
+    return;
+  }
 
   if (req.method === 'GET') {
     const id = url.searchParams.get('id');

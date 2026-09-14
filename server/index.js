@@ -14,11 +14,11 @@ if (existsSync(distPath)) {
 }
 
 // Serve SSR HTML for entry pages
-app.get(['/', '/index.html'], (req, res) => handleSsrRequest(req, res));
+app.get(['/', '/index.html'], (req, res) => handleSsrRequest(req, res, process.env));
 
 // 404 Fallback
 app.use((req, res) => {
-  res.status(404).type('text/html; charset=utf-8').send(load404HtmlTemplate());
+  res.status(404).type('text/html; charset=utf-8').send(load404HtmlTemplate({ serverEnv: process.env }));
 });
 
 app.listen(port, '0.0.0.0', () => {
