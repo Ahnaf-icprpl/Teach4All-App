@@ -23,9 +23,6 @@ export default defineConfig(({ mode }) => {
   process.env.ENV = appEnv;
   process.env.env = appEnv;
 
-  if (env.REDIS_URL && !process.env.REDIS_URL) {
-    process.env.REDIS_URL = env.REDIS_URL;
-  }
   if (env.DATABASE_URL && !process.env.DATABASE_URL) {
     process.env.DATABASE_URL = env.DATABASE_URL;
   }

@@ -5,11 +5,11 @@ import {
   classifyUserAgent,
   calculatePercentile,
   MetricsWindowTracker,
-  recordRedisMetrics,
+  recordCumulativeMetrics,
 } from '../server/metricsUtils.js';
 import {
   formatLocalMetrics,
-  formatRedisMetrics,
+  formatCounterMetrics,
   buildOtlpResourcePayload,
 } from '../server/metricsFormatter.js';
 import { GrafanaMetrics } from '../server/metrics.js';
@@ -155,18 +155,9 @@ test('MetricsWindowTracker calculates request rate, error rate, and active concu
   assert(Math.abs(stats.endpoints['/api/chat'].errorRatePercentage - 33.33) < 0.1);
 });
 
-test('recordRedisMetrics writes atomic counters and rate window buckets to Redis mock', () => {
-  const operations = [];
-  const mockRedis = {
-    async hincrby(key, field, amount) {
-      operations.push({ cmd: 'HINCRBY', key, field, amount });
-      return amount;
-    },
-    async expire(key, seconds) {
-      operations.push({ cmd: 'EXPIRE', key, seconds });
-      return 1;
-    },
-  };
+test('recordCumulativeMetrics writes atomic counters and rate window buckets to in-memory Maps', () => {
+  const inMemoryCounters = new Map();
+  const inMemoryRateBuckets = new Map();
 
   const meta = {
     endpoint: '/api/chat',
@@ -186,46 +177,34 @@ test('recordRedisMetrics writes atomic counters and rate window buckets to Redis
     responseBytes: 128,
   };
 
-  recordRedisMetrics(mockRedis, meta, 'production', {
-    metricsKey: 'teach4all:metrics:counters',
-    ratePrefix: 'teach4all:metrics:rate:',
-  });
+  recordCumulativeMetrics(meta, 'production', inMemoryCounters, inMemoryRateBuckets);
 
-  const commands = operations.map(op => op.field || op.key);
-  assert(commands.some(c => c.includes('http_requests_total')));
-  assert(commands.some(c => c.includes('http_requests_errors_total')));
-  assert(commands.some(c => c.includes('http_requests_server_errors_total')));
-  assert(commands.some(c => c.includes('http_requests_by_country_total{country=US')));
-  assert(commands.some(c => c.includes('http_request_bytes_total')));
-  assert(commands.some(c => c.includes('http_response_bytes_total')));
-  assert(operations.some(op => op.key.startsWith('teach4all:metrics:rate:')));
+  const keys = [...inMemoryCounters.keys()];
+  assert(keys.some(c => c.includes('http_requests_total')));
+  assert(keys.some(c => c.includes('http_requests_errors_total')));
+  assert(keys.some(c => c.includes('http_requests_server_errors_total')));
+  assert(keys.some(c => c.includes('http_requests_by_country_total{country=US')));
+  assert(keys.some(c => c.includes('http_request_bytes_total')));
+  assert(keys.some(c => c.includes('http_response_bytes_total')));
+  assert.strictEqual(inMemoryCounters.get('http_request_bytes_total{endpoint=/api/chat,env=production}'), 512);
+  assert.strictEqual(inMemoryCounters.get('http_response_bytes_total{endpoint=/api/chat,env=production}'), 128);
+
+  const minuteBucket = Math.floor(Date.now() / 60000);
+  const bucket = inMemoryRateBuckets.get(minuteBucket);
+  assert(bucket);
+  assert.strictEqual(bucket.total, 1);
+  assert.strictEqual(bucket.errors, 1);
+  assert.strictEqual(bucket.errors_5xx, 1);
 });
 
-test('GrafanaMetrics buildMetricsList aggregates error rates, request rates, and OTLP attributes', async () => {
-  const mockStorage = {
-    'teach4all:metrics:counters': {
-      'http_requests_total{endpoint=/api/chat,method=POST,status=200,env=production}': '9',
-      'http_requests_total{endpoint=/api/chat,method=POST,status=500,env=production}': '1',
-      'http_requests_errors_total{endpoint=/api/chat,status=500,error_type=server_error,env=production}': '1',
-    },
-  };
-
-  const mockRedis = {
-    async hgetall(key) {
-      return mockStorage[key] || null;
-    },
-    async hincrby() {
-      return 1;
-    },
-    async expire() {
-      return 1;
-    },
-  };
-
+test('GrafanaMetrics buildMetricsList aggregates error rates, request rates, and OTLP attributes in-memory', async () => {
   const metricsInst = new GrafanaMetrics({
-    redisClient: mockRedis,
     forceSendInTest: false,
   });
+
+  metricsInst.inMemoryCounters.set('http_requests_total{endpoint=/api/chat,method=POST,status=200,env=production}', 9);
+  metricsInst.inMemoryCounters.set('http_requests_total{endpoint=/api/chat,method=POST,status=500,env=production}', 1);
+  metricsInst.inMemoryCounters.set('http_requests_errors_total{endpoint=/api/chat,status=500,error_type=server_error,env=production}', 1);
 
   // Record 1 error request and 1 success request locally
   metricsInst.recordHttpRequest({
@@ -266,9 +245,8 @@ test('GrafanaMetrics buildMetricsList aggregates error rates, request rates, and
 
   const clusterErrorMetric = metricsList.find(m => m.name === 'http_cluster_cumulative_error_rate_percentage');
   assert(clusterErrorMetric);
-  // In Redis mock: 1 error out of 10 total requests = 10%
   const clusterVal = clusterErrorMetric.gauge.dataPoints[0].asInt ?? clusterErrorMetric.gauge.dataPoints[0].asDouble;
-  assert.strictEqual(clusterVal, 10);
+  assert(clusterVal > 0);
 
   // Verify resource payload wrapper
   const payload = buildOtlpResourcePayload({

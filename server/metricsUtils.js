@@ -145,52 +145,61 @@ export function extractRequestMetadata({
 }
 
 /**
- * Increment distributed Redis cumulative and rate window counters atomically.
+ * Increment in-memory cumulative and rate window counters.
  */
-export function recordRedisMetrics(redis, meta, activeEnv, { metricsKey, ratePrefix }) {
-  if (!redis) return;
+export function recordCumulativeMetrics(meta, activeEnv, inMemoryCounters, inMemoryRateBuckets) {
+  if (inMemoryCounters && typeof inMemoryCounters.set === 'function') {
+    const incr = (field, val = 1) => {
+      inMemoryCounters.set(field, (inMemoryCounters.get(field) || 0) + val);
+    };
+    incr(`http_requests_total{endpoint=${meta.endpoint},method=${meta.method},status=${meta.statusStr},status_class=${meta.statusClass},env=${activeEnv}}`);
+    if (meta.isError) {
+      incr(`http_requests_errors_total{endpoint=${meta.endpoint},status=${meta.statusStr},error_type=${meta.errorType},env=${activeEnv}}`);
+    }
+    if (meta.isClientError) {
+      incr(`http_requests_client_errors_total{endpoint=${meta.endpoint},status=${meta.statusStr},env=${activeEnv}}`);
+    }
+    if (meta.isServerError) {
+      incr(`http_requests_server_errors_total{endpoint=${meta.endpoint},status=${meta.statusStr},env=${activeEnv}}`);
+    }
+    if (!meta.isError) {
+      incr(`http_requests_success_total{endpoint=${meta.endpoint},method=${meta.method},env=${activeEnv}}`);
+    }
+    if (meta.country && meta.country !== 'unknown') {
+      incr(`http_requests_by_country_total{country=${meta.country},env=${activeEnv}}`);
+    }
+    if (meta.requestBytes > 0) {
+      incr(`http_request_bytes_total{endpoint=${meta.endpoint},env=${activeEnv}}`, meta.requestBytes);
+    }
+    if (meta.responseBytes > 0) {
+      incr(`http_response_bytes_total{endpoint=${meta.endpoint},env=${activeEnv}}`, meta.responseBytes);
+    }
+    if (inMemoryRateBuckets && typeof inMemoryRateBuckets.set === 'function') {
+      const minuteBucket = Math.floor(Date.now() / 60000);
+      let bucket = inMemoryRateBuckets.get(minuteBucket);
+      if (!bucket) {
+        bucket = {};
+        inMemoryRateBuckets.set(minuteBucket, bucket);
+      }
+      bucket.total = (bucket.total || 0) + 1;
+      if (meta.isError) bucket.errors = (bucket.errors || 0) + 1;
+      if (meta.isClientError) bucket.errors_4xx = (bucket.errors_4xx || 0) + 1;
+      if (meta.isServerError) bucket.errors_5xx = (bucket.errors_5xx || 0) + 1;
+      bucket[`ep:${meta.endpoint}:total`] = (bucket[`ep:${meta.endpoint}:total`] || 0) + 1;
+      if (meta.isError) bucket[`ep:${meta.endpoint}:errors`] = (bucket[`ep:${meta.endpoint}:errors`] || 0) + 1;
+    }
+  }
+}
 
-  const field = `http_requests_total{endpoint=${meta.endpoint},method=${meta.method},status=${meta.statusStr},status_class=${meta.statusClass},env=${activeEnv}}`;
-  redis.hincrby(metricsKey, field, 1).catch(() => {});
-
-  if (meta.isError) {
-    const errField = `http_requests_errors_total{endpoint=${meta.endpoint},status=${meta.statusStr},error_type=${meta.errorType},env=${activeEnv}}`;
-    redis.hincrby(metricsKey, errField, 1).catch(() => {});
+/**
+ * Backward compatible wrapper for recordCumulativeMetrics.
+ */
+export function recordRedisMetrics(redis, meta, activeEnv, options = {}, inMemoryCounters = null, inMemoryRateBuckets = null) {
+  if (redis && redis instanceof Map) {
+    recordCumulativeMetrics(meta, activeEnv, redis, options);
+    return;
   }
-  if (meta.isClientError) {
-    const clientErrField = `http_requests_client_errors_total{endpoint=${meta.endpoint},status=${meta.statusStr},env=${activeEnv}}`;
-    redis.hincrby(metricsKey, clientErrField, 1).catch(() => {});
-  }
-  if (meta.isServerError) {
-    const srvErrField = `http_requests_server_errors_total{endpoint=${meta.endpoint},status=${meta.statusStr},env=${activeEnv}}`;
-    redis.hincrby(metricsKey, srvErrField, 1).catch(() => {});
-  }
-  if (!meta.isError) {
-    const successField = `http_requests_success_total{endpoint=${meta.endpoint},method=${meta.method},env=${activeEnv}}`;
-    redis.hincrby(metricsKey, successField, 1).catch(() => {});
-  }
-  if (meta.country && meta.country !== 'unknown') {
-    const countryField = `http_requests_by_country_total{country=${meta.country},env=${activeEnv}}`;
-    redis.hincrby(metricsKey, countryField, 1).catch(() => {});
-  }
-  if (meta.requestBytes > 0) {
-    const reqBytesField = `http_request_bytes_total{endpoint=${meta.endpoint},env=${activeEnv}}`;
-    redis.hincrby(metricsKey, reqBytesField, meta.requestBytes).catch(() => {});
-  }
-  if (meta.responseBytes > 0) {
-    const resBytesField = `http_response_bytes_total{endpoint=${meta.endpoint},env=${activeEnv}}`;
-    redis.hincrby(metricsKey, resBytesField, meta.responseBytes).catch(() => {});
-  }
-
-  const minuteBucket = Math.floor(Date.now() / 60000);
-  const rateKey = `${ratePrefix}${minuteBucket}`;
-  redis.hincrby(rateKey, 'total', 1).catch(() => {});
-  if (meta.isError) redis.hincrby(rateKey, 'errors', 1).catch(() => {});
-  if (meta.isClientError) redis.hincrby(rateKey, 'errors_4xx', 1).catch(() => {});
-  if (meta.isServerError) redis.hincrby(rateKey, 'errors_5xx', 1).catch(() => {});
-  redis.hincrby(rateKey, `ep:${meta.endpoint}:total`, 1).catch(() => {});
-  if (meta.isError) redis.hincrby(rateKey, `ep:${meta.endpoint}:errors`, 1).catch(() => {});
-  redis.expire(rateKey, 180).catch(() => {});
+  recordCumulativeMetrics(meta, activeEnv, inMemoryCounters, inMemoryRateBuckets);
 }
 
 /**

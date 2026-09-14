@@ -1,17 +1,16 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { getRedisClient } from './redis.js';
 import { getActiveEnv } from './logger.js';
 import {
   toOtlpMetricAttributes,
   parseMetricKey,
   extractRequestMetadata,
-  recordRedisMetrics,
+  recordCumulativeMetrics,
   MetricsWindowTracker,
 } from './metricsUtils.js';
 import {
   formatLocalMetrics,
-  formatRedisMetrics,
+  formatCounterMetrics,
   recordCalculatedGauges,
   buildOtlpResourcePayload,
 } from './metricsFormatter.js';
@@ -43,17 +42,12 @@ export const DEFAULT_METRICS_URL =
   'https://otlp-gateway-prod-ap-southeast-2.grafana.net/otlp/v1/metrics';
 export const DEFAULT_SERVICE_NAME = 'teach4all';
 
-const REDIS_METRICS_KEY = 'teach4all:metrics:counters';
-const REDIS_RATE_PREFIX = 'teach4all:metrics:rate:';
-
 export class GrafanaMetrics {
   constructor({
     instanceId = process.env.GRAFANA_METRICS_INSTANCE_ID || process.env.GRAFANA_INSTANCE_ID || DEFAULT_METRICS_INSTANCE_ID,
     apiKey = process.env.GRAFANA_METRICS_API_KEY || DEFAULT_METRICS_API_KEY,
     metricsUrl = process.env.GRAFANA_METRICS_URL || DEFAULT_METRICS_URL,
     serviceName = process.env.GRAFANA_SERVICE_NAME || DEFAULT_SERVICE_NAME,
-    redisUrl = process.env.REDIS_URL,
-    redisClient = null,
     flushIntervalMs = 5000,
     forceSendInTest = false,
   } = {}) {
@@ -61,12 +55,12 @@ export class GrafanaMetrics {
     this.apiKey = apiKey;
     this.metricsUrl = metricsUrl;
     this.serviceName = serviceName;
-    this.redisUrl = redisUrl;
-    this.redisClient = redisClient;
     this.flushIntervalMs = flushIntervalMs;
     this.forceSendInTest = forceSendInTest;
 
     this.localDataPoints = [];
+    this.inMemoryCounters = new Map();
+    this.inMemoryRateBuckets = new Map();
     this.flushTimer = null;
     this.flushing = false;
     this.windowTracker = new MetricsWindowTracker();
@@ -74,11 +68,6 @@ export class GrafanaMetrics {
 
   get env() {
     return getActiveEnv();
-  }
-
-  getRedis() {
-    if (this.redisClient) return this.redisClient;
-    return getRedisClient(this.redisUrl);
   }
 
   /**
@@ -135,7 +124,7 @@ export class GrafanaMetrics {
 
   /**
    * Record HTTP request count, errors, error rate, latency, and data sizes.
-   * Atomically increments Redis hash to handle Vercel serverless fan-out across lambdas.
+   * Atomically increments in-memory counters and rate buckets.
    */
   recordHttpRequest(options = {}) {
     const meta = extractRequestMetadata(options);
@@ -143,11 +132,8 @@ export class GrafanaMetrics {
     // 1. Record into window tracker for local rate & error calculations
     this.windowTracker.recordRequest(meta);
 
-    // 2. Record atomic counters in Redis across fanned-out instances
-    recordRedisMetrics(this.getRedis(), meta, this.env, {
-      metricsKey: REDIS_METRICS_KEY,
-      ratePrefix: REDIS_RATE_PREFIX,
-    });
+    // 2. Record atomic counters in-memory
+    recordCumulativeMetrics(meta, this.env, this.inMemoryCounters, this.inMemoryRateBuckets);
 
     // 3. Record instantaneous latency gauge in local memory
     if (meta.durationMs > 0) {
@@ -220,16 +206,15 @@ export class GrafanaMetrics {
    * Record chat completion streaming metrics (chunks and bytes transferred).
    */
   recordStreamMetric({ chunks = 0, bytes = 0, model = 'default', durationMs = 0 }) {
-    const redis = this.getRedis();
     const activeEnv = this.env;
 
-    if (redis) {
-      if (chunks > 0) {
-        redis.hincrby(REDIS_METRICS_KEY, `chat_stream_chunks_total{model=${model},env=${activeEnv}}`, chunks).catch(() => {});
-      }
-      if (bytes > 0) {
-        redis.hincrby(REDIS_METRICS_KEY, `chat_stream_bytes_total{model=${model},env=${activeEnv}}`, bytes).catch(() => {});
-      }
+    if (chunks > 0) {
+      const k = `chat_stream_chunks_total{model=${model},env=${activeEnv}}`;
+      this.inMemoryCounters.set(k, (this.inMemoryCounters.get(k) || 0) + chunks);
+    }
+    if (bytes > 0) {
+      const k = `chat_stream_bytes_total{model=${model},env=${activeEnv}}`;
+      this.inMemoryCounters.set(k, (this.inMemoryCounters.get(k) || 0) + bytes);
     }
 
     if (chunks > 0) {
@@ -262,12 +247,10 @@ export class GrafanaMetrics {
    */
   recordRateLimitHit({ endpoint = '/api/chat' }) {
     const cleanEndpoint = (endpoint.split('?')[0] || '/api/chat').replace(/\/+$/, '') || '/api/chat';
-    const redis = this.getRedis();
     const activeEnv = this.env;
 
-    if (redis) {
-      redis.hincrby(REDIS_METRICS_KEY, `ratelimit_blocked_total{endpoint=${cleanEndpoint},env=${activeEnv}}`, 1).catch(() => {});
-    }
+    const k = `ratelimit_blocked_total{endpoint=${cleanEndpoint},env=${activeEnv}}`;
+    this.inMemoryCounters.set(k, (this.inMemoryCounters.get(k) || 0) + 1);
 
     this.record('ratelimit_blocked_total', 1, {
       unit: '1',
@@ -280,12 +263,10 @@ export class GrafanaMetrics {
    * Record client-side reported errors.
    */
   recordClientError({ type = 'unknown', path = '/' }) {
-    const redis = this.getRedis();
     const activeEnv = this.env;
 
-    if (redis) {
-      redis.hincrby(REDIS_METRICS_KEY, `client_errors_total{type=${type},env=${activeEnv}}`, 1).catch(() => {});
-    }
+    const k = `client_errors_total{type=${type},env=${activeEnv}}`;
+    this.inMemoryCounters.set(k, (this.inMemoryCounters.get(k) || 0) + 1);
 
     this.record('client_errors_total', 1, {
       unit: '1',
@@ -305,20 +286,14 @@ export class GrafanaMetrics {
   }
 
   /**
-   * Calculates rate gauges and aggregates local and Redis metrics into an OTLP metrics list.
+   * Calculates rate gauges and aggregates local and in-memory metrics into an OTLP metrics list.
    */
   async buildMetricsList() {
-    const redis = this.getRedis();
     const activeEnv = this.env;
     const timeUnixNano = String(BigInt(Date.now()) * 1000000n);
 
-    let rateHash = null;
-    if (redis) {
-      try {
-        const minuteBucket = Math.floor(Date.now() / 60000);
-        rateHash = await redis.hgetall(`${REDIS_RATE_PREFIX}${minuteBucket}`);
-      } catch {}
-    }
+    const minuteBucket = Math.floor(Date.now() / 60000);
+    const rateHash = this.inMemoryRateBuckets.get(minuteBucket) || null;
 
     const localStats = this.windowTracker.computeWindowStats();
     recordCalculatedGauges(this, localStats, rateHash);
@@ -327,20 +302,18 @@ export class GrafanaMetrics {
     const pointsToSend = this.localDataPoints.splice(0, this.localDataPoints.length);
     const localMetrics = formatLocalMetrics(pointsToSend);
 
-    let redisMetrics = [];
-    if (redis) {
-      try {
-        const rawHash = await redis.hgetall(REDIS_METRICS_KEY);
-        redisMetrics = formatRedisMetrics(rawHash, activeEnv, timeUnixNano);
-      } catch {}
+    let counterMetrics = [];
+    if (this.inMemoryCounters.size > 0) {
+      const rawHash = Object.fromEntries(this.inMemoryCounters);
+      counterMetrics = formatCounterMetrics(rawHash, activeEnv, timeUnixNano);
     }
 
-    return [...localMetrics, ...redisMetrics];
+    return [...localMetrics, ...counterMetrics];
   }
 
   /**
    * Flush all aggregated metrics to Grafana Cloud OTLP Gateway.
-   * Reads fanned-out Redis counters and local data points.
+   * Reads in-memory counters and local data points.
    */
   async flush() {
     if (this.flushing) return;

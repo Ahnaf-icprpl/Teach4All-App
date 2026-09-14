@@ -6,7 +6,6 @@ import {
   recordRequestMetric,
   getEndpointConfig,
 } from './rateLimiter.js';
-import { getRedisClient } from './redis.js';
 import { getSystemPrompt, injectSystemPrompt } from '../prompts/systemPrompt.js';
 import { ConversationStreamWriter, DEFAULT_USER_ID } from './db.js';
 import {
@@ -47,10 +46,8 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
     return;
   }
 
-  // Check rate limit via Redis (high-throughput in-memory check without touching PostgreSQL)
-  const redisUrl = serverEnv.REDIS_URL || process.env.REDIS_URL;
-  const redisClient = getRedisClient(redisUrl);
-  const config = await getEndpointConfig('/api/chat', { redisClient });
+  // Check rate limit completely in-memory
+  const config = await getEndpointConfig('/api/chat', { databaseUrl: serverEnv.DATABASE_URL || process.env.DATABASE_URL });
   const rateLimit = serverEnv.RATE_LIMIT !== undefined ? serverEnv.RATE_LIMIT : config.rateLimitPerIp;
   const windowSeconds = serverEnv.WINDOW_SECONDS !== undefined ? serverEnv.WINDOW_SECONDS : config.windowSeconds;
 
@@ -59,7 +56,6 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
     clientIp,
     limit: rateLimit,
     windowSeconds,
-    redisClient,
   });
 
   applyRateLimitHeaders(res, rateInfo);
@@ -84,8 +80,8 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
     return;
   }
 
-  // Record ephemeral request metric into Redis (zero DB writes)
-  recordRequestMetric(clientIp, '/api/chat', { redisClient });
+  // Record ephemeral request metric in memory (zero DB writes)
+  recordRequestMetric(clientIp, '/api/chat');
 
   const apiKey = (serverEnv.OPENROUTER_API_KEY !== undefined
     ? serverEnv.OPENROUTER_API_KEY
@@ -179,7 +175,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
 
   const startTime = Date.now();
   const promptText = lastUserMsg ? (lastUserMsg.text || lastUserMsg.content || '') : '';
-  const cachedProvider = conversationId ? await getConversationProvider(conversationId, { redisClient }) : null;
+  const cachedProvider = conversationId ? await getConversationProvider(conversationId) : null;
   const providerRouting = buildProviderRoutingPayload(conversationId, cachedProvider);
 
   const isQuizRequest = (promptText && /\b(kuis|quiz|soal|latihan|evaluasi|test me)\b/i.test(promptText)) ||
@@ -283,7 +279,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
 
     let detectedProvider = extractProvider(upstream.headers) || cachedProvider;
     if (conversationId && detectedProvider) {
-      setConversationProvider(conversationId, detectedProvider, { redisClient }).catch(() => {});
+      setConversationProvider(conversationId, detectedProvider).catch(() => {});
     }
 
     res.writeHead(200, {
@@ -328,7 +324,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
             if (conversationId && !detectedProvider && json.provider) {
               detectedProvider = extractProvider(null, json);
               if (detectedProvider) {
-                setConversationProvider(conversationId, detectedProvider, { redisClient }).catch(() => {});
+                setConversationProvider(conversationId, detectedProvider).catch(() => {});
               }
             }
             const delta = json.choices?.[0]?.delta?.content || '';

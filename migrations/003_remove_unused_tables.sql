@@ -2,7 +2,7 @@
 -- Description: Drop unused client_ip_requests table and ensure proper constraints, indexes, and triggers
 
 -- 1. Drop unused client_ip_requests table and associated indexes
--- High-volume requests and rate limits are handled in-memory by Redis (zero DB writes on request path)
+-- High-volume requests and rate limits are handled in-memory (zero DB writes on request path)
 DROP TABLE IF EXISTS client_ip_requests CASCADE;
 
 -- 2. Add validation check constraints to endpoint_rate_limits

@@ -28,13 +28,13 @@ Teach4All uses a lightweight, transaction-safe migration runner built directly o
 
 ---
 
-## High Volume Strategy: PostgreSQL vs. Redis Separation
+## High Volume Strategy: PostgreSQL vs. In-Memory Separation
 
 A critical architectural rule: **Do NOT write every single HTTP request to PostgreSQL.**
 
 Under high volume (thousands of concurrent requests):
-- **Hot-Path Isolation (Redis)**: Rate-limiting, concurrency counters, and request throttling run exclusively in Redis using atomic Lua scripts (`EVAL`) in sub-millisecond in-memory time (`server/redis.js` and `server/rateLimiter.js`). Zero SQL queries are made during HTTP request processing.
-- **Fail-Open Circuit Breaker**: If Redis experiences a network partition, the system fails over to a local sliding window in-memory store (`memory-fallback`), never falling back to hammering PostgreSQL.
+- **Hot-Path Isolation (In-Memory)**: Rate-limiting, IP tracking, concurrency counters, and request throttling run exclusively in-memory using local fixed window and sliding window algorithms in sub-microsecond time (`server/rateLimiter.js`). Zero SQL queries are made during HTTP request processing.
+- **Fail-Safe Operation**: Rate limit policies and endpoint rules are cached in-memory with automatic TTL refresh, avoiding database latency or downtime dependency.
 - **Asynchronous Batch Flusher (`BatchMetricsBuffer`)**: If request stats (`client_ip_requests`) must be preserved in PostgreSQL, requests are buffered in-memory at 0ms latency. A background worker periodically flushes the aggregated delta using a single batch multi-row UPSERT:
   ```sql
   INSERT INTO client_ip_requests (ip_address, endpoint, request_count, window_start, last_request_at)
@@ -52,8 +52,8 @@ Under high volume (thousands of concurrent requests):
 [ Incoming Requests ] (10,000 req/min)
          │
          ▼
-[ Fast Rate Limiter ] ─── Sub-millisecond ───> [ Redis Cloud (EVAL Lua) ]
-         │                                     (Atomic INCR + EXPIRE, 0 DB writes)
+[ Fast Rate Limiter ] ─── Sub-microsecond ───> [ In-Memory Store ]
+         │                                     (Atomic Map counters, 0 DB writes)
    Allowed / 429
          │
          ▼
@@ -72,7 +72,6 @@ Ensure your local `.env` contains the required connection strings:
 
 ```ini
 DATABASE_URL=postgresql://<user>:<password>@<host>:<port>/<database>
-REDIS_URL=redis://default:<password>@<host>:<port>
 ```
 
 > **Security Note**: Never commit `.env` to Git. Ensure `.env` is listed in your [`.gitignore`](./.gitignore).

@@ -42,29 +42,29 @@ export function formatLocalMetrics(dataPoints = []) {
 }
 
 /**
- * Format global Redis counter hash into OpenTelemetry metric structures.
+ * Format in-memory cumulative counter hash into OpenTelemetry metric structures.
  */
-export function formatRedisMetrics(rawHash = {}, activeEnv = 'development', timeUnixNano = '') {
+export function formatCounterMetrics(rawHash = {}, activeEnv = 'development', timeUnixNano = '') {
   if (!rawHash || typeof rawHash !== 'object') return [];
 
   const metricsList = [];
-  const redisGrouped = new Map();
+  const counterGrouped = new Map();
   let cumTotalReqs = 0;
   let cumTotalErrors = 0;
 
-  for (const [field, countStr] of Object.entries(rawHash)) {
-    const count = parseInt(countStr, 10);
+  for (const [field, countVal] of Object.entries(rawHash)) {
+    const count = typeof countVal === 'number' ? countVal : parseInt(countVal, 10);
     if (isNaN(count)) continue;
 
     const { name, attributes } = parseMetricKey(field);
     if (name === 'http_requests_total') cumTotalReqs += count;
     if (name === 'http_requests_errors_total') cumTotalErrors += count;
 
-    if (!redisGrouped.has(name)) {
-      redisGrouped.set(name, []);
+    if (!counterGrouped.has(name)) {
+      counterGrouped.set(name, []);
     }
 
-    redisGrouped.get(name).push({
+    counterGrouped.get(name).push({
       asInt: count,
       timeUnixNano,
       attributes: toOtlpMetricAttributes({
@@ -74,11 +74,11 @@ export function formatRedisMetrics(rawHash = {}, activeEnv = 'development', time
     });
   }
 
-  for (const [name, dataPoints] of redisGrouped.entries()) {
+  for (const [name, dataPoints] of counterGrouped.entries()) {
     metricsList.push({
       name,
       unit: name.includes('_bytes_') ? 'By' : '1',
-      description: `Global cumulative ${name} aggregated across Vercel instances via Redis`,
+      description: `Cumulative ${name} aggregated in-memory`,
       gauge: { dataPoints },
     });
   }
@@ -103,6 +103,8 @@ export function formatRedisMetrics(rawHash = {}, activeEnv = 'development', time
 
   return metricsList;
 }
+
+export const formatRedisMetrics = formatCounterMetrics;
 
 /**
  * Computes request rate, error rate, and latency gauges and queues them on the metrics instance.

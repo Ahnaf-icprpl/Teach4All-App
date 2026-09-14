@@ -6,7 +6,6 @@ import {
   recordRequestMetric,
   getEndpointConfig,
 } from './rateLimiter.js';
-import { getRedisClient } from './redis.js';
 import { saveConversation, DEFAULT_USER_ID } from './db.js';
 import {
   formatTitleMessages,
@@ -59,10 +58,8 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
         req.on('error', reject);
       });
 
-  // Rate limiting check via Redis
-  const redisUrl = serverEnv.REDIS_URL || process.env.REDIS_URL;
-  const redisClient = getRedisClient(redisUrl);
-  const config = await getEndpointConfig('/api/title', { redisClient });
+  // In-memory rate limiting
+  const config = await getEndpointConfig('/api/title', { databaseUrl: serverEnv.DATABASE_URL || process.env.DATABASE_URL });
   const rateLimit = serverEnv.RATE_LIMIT !== undefined ? serverEnv.RATE_LIMIT : config.rateLimitPerIp;
   const windowSeconds = serverEnv.WINDOW_SECONDS !== undefined ? serverEnv.WINDOW_SECONDS : config.windowSeconds;
 
@@ -71,7 +68,6 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
     clientIp,
     limit: rateLimit,
     windowSeconds,
-    redisClient,
   });
 
   applyRateLimitHeaders(res, rateInfo);
@@ -96,7 +92,7 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
     return;
   }
 
-  recordRequestMetric(clientIp, '/api/title', { redisClient });
+  recordRequestMetric(clientIp, '/api/title');
 
   let parsed = req.body;
   if (parsed === undefined || parsed === null || (typeof parsed !== 'object' && typeof parsed !== 'string')) {
@@ -156,7 +152,7 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
   let finalTitle = fallbackTitle;
   let usedSource = 'fallback';
 
-  const cachedProvider = conversationId ? await getConversationProvider(conversationId, { redisClient }) : null;
+  const cachedProvider = conversationId ? await getConversationProvider(conversationId) : null;
   const providerRouting = buildProviderRoutingPayload(conversationId, cachedProvider);
 
   if (apiKey && !isPlaceholderKey(apiKey)) {
@@ -191,13 +187,13 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
       if (upstream.ok) {
         let detectedProvider = extractProvider(upstream.headers) || cachedProvider;
         if (conversationId && detectedProvider) {
-          setConversationProvider(conversationId, detectedProvider, { redisClient }).catch(() => {});
+          setConversationProvider(conversationId, detectedProvider).catch(() => {});
         }
         const json = await upstream.json();
         if (conversationId && !detectedProvider && json?.provider) {
           detectedProvider = extractProvider(null, json);
           if (detectedProvider) {
-            setConversationProvider(conversationId, detectedProvider, { redisClient }).catch(() => {});
+            setConversationProvider(conversationId, detectedProvider).catch(() => {});
           }
         }
         const rawContent = json?.choices?.[0]?.message?.content;

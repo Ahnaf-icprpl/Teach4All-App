@@ -4,7 +4,6 @@ import {
   applyRateLimitHeaders,
   recordRequestMetric,
 } from './rateLimiter.js';
-import { getRedisClient } from './redis.js';
 import {
   DEFAULT_USER_ID,
   getConversations,
@@ -37,16 +36,12 @@ export async function handleConversationsRequest(req, res, serverEnv = {}) {
   const parsedUrl = new URL(req.url || '/', 'http://localhost');
   const databaseUrl = serverEnv.DATABASE_URL || process.env.DATABASE_URL;
 
-  // Rate limiting check via Redis
-  const redisUrl = serverEnv.REDIS_URL || process.env.REDIS_URL;
-  const redisClient = getRedisClient(redisUrl);
-
+  // In-memory rate limiting check
   const rateInfo = await checkRateLimit({
     endpoint: '/api/conversations',
     clientIp,
     limit: 120,
     windowSeconds: 60,
-    redisClient,
   });
 
   applyRateLimitHeaders(res, rateInfo);
@@ -68,7 +63,7 @@ export async function handleConversationsRequest(req, res, serverEnv = {}) {
     return;
   }
 
-  recordRequestMetric(clientIp, '/api/conversations', { redisClient });
+  recordRequestMetric(clientIp, '/api/conversations');
 
   if (method === 'GET') {
     const userId = parsedUrl.searchParams.get('userId') || DEFAULT_USER_ID;
@@ -205,15 +200,11 @@ export async function handleMessagesRequest(req, res, serverEnv = {}) {
   const parsedUrl = new URL(req.url || '/', 'http://localhost');
   const databaseUrl = serverEnv.DATABASE_URL || process.env.DATABASE_URL;
 
-  const redisUrl = serverEnv.REDIS_URL || process.env.REDIS_URL;
-  const redisClient = getRedisClient(redisUrl);
-
   const rateInfo = await checkRateLimit({
     endpoint: '/api/messages',
     clientIp,
     limit: 120,
     windowSeconds: 60,
-    redisClient,
   });
 
   applyRateLimitHeaders(res, rateInfo);
@@ -235,7 +226,7 @@ export async function handleMessagesRequest(req, res, serverEnv = {}) {
     return;
   }
 
-  recordRequestMetric(clientIp, '/api/messages', { redisClient });
+  recordRequestMetric(clientIp, '/api/messages');
 
   const conversationId = parsedUrl.searchParams.get('conversationId') || parsedUrl.searchParams.get('id');
   const userId = parsedUrl.searchParams.get('userId') || DEFAULT_USER_ID;
