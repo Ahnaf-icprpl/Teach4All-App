@@ -1,8 +1,9 @@
 {
   "cleanUrls": false,
   "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index.js" },
     { "source": "/", "destination": "/api/ssr" },
     { "source": "/index.html", "destination": "/api/ssr" },
-    { "source": "/((?!assets/|icon\\.svg|manifest\\.webmanifest|sw\\.js|api/).*)", "destination": "/api/ssr" }
+    { "source": "/((?!assets/|icon\\.svg|manifest\\.webmanifest|sw\\.js).*)", "destination": "/api/ssr" }
   ]
 }

@@ -2,6 +2,32 @@ import { getMaterials, getMaterialById, createMaterial, setMaterialSolvedStatus 
 import { logger } from './logger.js';
 import { getClientIp } from './rateLimiter.js';
 
+function readJsonBody(req) {
+  if (req.body !== undefined && req.body !== null) {
+    if (typeof req.body === 'object') return Promise.resolve(req.body);
+    try {
+      return Promise.resolve(JSON.parse(req.body || '{}'));
+    } catch {
+      return Promise.reject(new Error('Invalid JSON'));
+    }
+  }
+  return new Promise((resolve, reject) => {
+    let data = '';
+    req.on('data', chunk => {
+      data += chunk;
+      if (data.length > 1e6) reject(new Error('Payload Too Large'));
+    });
+    req.on('end', () => {
+      try {
+        resolve(JSON.parse(data || '{}'));
+      } catch {
+        reject(new Error('Invalid JSON'));
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
 export async function handleMaterialsRequest(req, res, env = {}) {
   const clientIp = getClientIp(req);
   const url = new URL(req.url, 'http://localhost');
@@ -38,17 +64,9 @@ export async function handleMaterialsRequest(req, res, env = {}) {
   }
 
   if (req.method === 'POST') {
-    let body = '';
+    let payload;
     try {
-      body = await new Promise((resolve, reject) => {
-        let data = '';
-        req.on('data', chunk => {
-          data += chunk;
-          if (data.length > 1e6) reject(new Error('Payload Too Large'));
-        });
-        req.on('end', () => resolve(data));
-        req.on('error', reject);
-      });
+      payload = await readJsonBody(req);
     } catch (err) {
       res.writeHead(err.message === 'Payload Too Large' ? 413 : 400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: { message: err.message || 'Invalid request' } }));
@@ -56,7 +74,6 @@ export async function handleMaterialsRequest(req, res, env = {}) {
     }
 
     try {
-      const payload = JSON.parse(body || '{}');
       if (!payload.title || typeof payload.title !== 'string') {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: { message: 'Title is required.' } }));
@@ -74,17 +91,9 @@ export async function handleMaterialsRequest(req, res, env = {}) {
   }
 
   if (req.method === 'PATCH') {
-    let body = '';
+    let payload;
     try {
-      body = await new Promise((resolve, reject) => {
-        let data = '';
-        req.on('data', chunk => {
-          data += chunk;
-          if (data.length > 1e6) reject(new Error('Payload Too Large'));
-        });
-        req.on('end', () => resolve(data));
-        req.on('error', reject);
-      });
+      payload = await readJsonBody(req);
     } catch (err) {
       res.writeHead(err.message === 'Payload Too Large' ? 413 : 400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: { message: err.message || 'Invalid request' } }));
@@ -92,7 +101,6 @@ export async function handleMaterialsRequest(req, res, env = {}) {
     }
 
     try {
-      const payload = JSON.parse(body || '{}');
       const id = payload.id || url.searchParams.get('id');
       if (!id) {
         res.writeHead(400, { 'Content-Type': 'application/json' });

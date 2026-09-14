@@ -3,6 +3,14 @@ import { logger, truncateText, logDevRequest } from './logger.js';
 import { metrics } from './metrics.js';
 
 function readJsonBody(req, maxBytes = 50000) {
+  if (req.body !== undefined && req.body !== null) {
+    if (typeof req.body === 'object') return Promise.resolve(req.body);
+    try {
+      return Promise.resolve(JSON.parse(req.body || '{}'));
+    } catch {
+      return Promise.reject(new Error('Invalid JSON'));
+    }
+  }
   return new Promise((resolve, reject) => {
     let data = '';
     req.on('data', chunk => {

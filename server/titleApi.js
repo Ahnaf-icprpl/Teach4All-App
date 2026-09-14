@@ -47,15 +47,17 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
   }
 
   // Attach stream listeners immediately so events are not missed during async rate-limiting
-  const bodyPromise = new Promise((resolve, reject) => {
-    let data = '';
-    req.on('data', chunk => {
-      data += chunk;
-      if (data.length > 5e5) reject(new Error('Payload Too Large'));
-    });
-    req.on('end', () => resolve(data));
-    req.on('error', reject);
-  });
+  const bodyPromise = (req.body !== undefined && req.body !== null)
+    ? Promise.resolve(typeof req.body === 'string' ? req.body : JSON.stringify(req.body))
+    : new Promise((resolve, reject) => {
+        let data = '';
+        req.on('data', chunk => {
+          data += chunk;
+          if (data.length > 5e5) reject(new Error('Payload Too Large'));
+        });
+        req.on('end', () => resolve(data));
+        req.on('error', reject);
+      });
 
   // Rate limiting check via Redis
   const redisUrl = serverEnv.REDIS_URL || process.env.REDIS_URL;
@@ -96,30 +98,33 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
 
   recordRequestMetric(clientIp, '/api/title', { redisClient });
 
-  let bodyStr = '';
-  try {
-    bodyStr = await bodyPromise;
-  } catch (err) {
-    const status = err.message === 'Payload Too Large' ? 413 : 400;
-    logger.warn('Title request body reading error', {
-      endpoint: '/api/title',
-      client_ip: clientIp,
-      status,
-      error: err.message,
-    });
-    res.writeHead(status, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: { message: err.message || 'Invalid request' } }));
-    return;
-  }
-
-  let parsed;
-  try {
-    parsed = JSON.parse(bodyStr || '{}');
-  } catch {
-    logger.warn('Invalid JSON in title request body', { endpoint: '/api/title', client_ip: clientIp });
-    res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: { message: 'Invalid JSON body' } }));
-    return;
+  let parsed = req.body;
+  if (parsed === undefined || parsed === null || (typeof parsed !== 'object' && typeof parsed !== 'string')) {
+    let bodyStr = '';
+    try {
+      bodyStr = await bodyPromise;
+      parsed = JSON.parse(bodyStr || '{}');
+    } catch (err) {
+      const status = err.message === 'Payload Too Large' ? 413 : 400;
+      logger.warn('Title request body reading error', {
+        endpoint: '/api/title',
+        client_ip: clientIp,
+        status,
+        error: err.message,
+      });
+      res.writeHead(status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: err.message || 'Invalid request' } }));
+      return;
+    }
+  } else if (typeof parsed === 'string') {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      logger.warn('Invalid JSON in title request body', { endpoint: '/api/title', client_ip: clientIp });
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: 'Invalid JSON body' } }));
+      return;
+    }
   }
 
   const { messages, conversationId, userId } = parsed;

@@ -16,6 +16,9 @@ import { logger, logDevRequest } from './logger.js';
 import { metrics } from './metrics.js';
 
 function readBody(req) {
+  if (req.body !== undefined && req.body !== null) {
+    return Promise.resolve(typeof req.body === 'string' ? req.body : JSON.stringify(req.body));
+  }
   return new Promise((resolve, reject) => {
     let data = '';
     req.on('data', chunk => {
