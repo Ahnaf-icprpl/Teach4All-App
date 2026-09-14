@@ -2,7 +2,6 @@ import van from 'vanjs-core';
 import {
   fetchConversations, fetchMessages, TEST_USER_ID,
 } from './router.js';
-import { reportClientError } from './errorLogger.js';
 import { t } from './uiTexts.js';
 
 export const CHATS_PAGE_SIZE = 20;
@@ -54,10 +53,6 @@ export function onSearchInput(query) {
         chat.title.toLowerCase().includes(qLower) ||
         (chat.messages && chat.messages.some(message => message.text?.toLowerCase().includes(qLower))),
       );
-      reportClientError({
-        type: 'client_search_db_failed',
-        message: err.message,
-      });
     } finally {
       searchLoading.val = false;
     }
@@ -87,10 +82,7 @@ export async function loadMessagesForChat(id) {
       });
     }
   } catch (err) {
-    reportClientError({
-      type: 'client_lazy_load_failed',
-      message: err.message,
-    });
+    // Silent failover
   } finally {
     messagesLoading.val = false;
   }
@@ -119,10 +111,7 @@ export async function loadChatHistory() {
         : dbChats.length === CHATS_PAGE_SIZE;
     }
   } catch (err) {
-    reportClientError({
-      type: 'client_load_history_failed',
-      message: err.message,
-    });
+    // Silent failover
   } finally {
     historyLoading.val = false;
   }
@@ -159,10 +148,7 @@ export async function loadMoreChats() {
       hasMoreChats.val = false;
     }
   } catch (err) {
-    reportClientError({
-      type: 'client_load_more_failed',
-      message: err.message,
-    });
+    // Silent failover
   } finally {
     historyLoadingMore.val = false;
   }

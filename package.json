@@ -10,7 +10,7 @@
     "preview": "vite preview --host 0.0.0.0",
     "check": "node scripts/check.mjs",
     "test": "node --test tests/*.test.mjs",
-    "test:api": "node --test tests/router.test.mjs tests/redis.test.mjs",
+    "test:api": "node --test tests/router.test.mjs tests/rateLimiter.test.mjs",
     "test:e2e": "playwright test",
     "start": "node server/index.js",
     "migrate": "node scripts/migrate.mjs"

@@ -1,21 +1,35 @@
-import { getRedisClient } from './redis.js';
 import { query } from './db.js';
 
 /**
- * In-memory fallback rate-limiter in case Redis is unavailable or unconfigured.
- * Prevents hammering PostgreSQL while guaranteeing high-throughput availability.
+ * In-memory rate-limiter store.
+ * High-performance, zero-latency rate-limiting without Redis or PostgreSQL overhead.
  */
-const inMemoryStore = new Map();
+export const inMemoryStore = new Map();
+const inMemoryConfigCache = new Map();
+
+export function clearRateLimitStore() {
+  inMemoryStore.clear();
+  inMemoryConfigCache.clear();
+}
 
 // Periodic cleanup of expired in-memory buckets every 60s
-setInterval(() => {
+const cleanupInterval = setInterval(() => {
   const now = Date.now();
   for (const [key, record] of inMemoryStore.entries()) {
     if (record.resetAt <= now) {
       inMemoryStore.delete(key);
     }
   }
-}, 60000).unref();
+  for (const [key, record] of inMemoryConfigCache.entries()) {
+    if (record.expiresAt <= now) {
+      inMemoryConfigCache.delete(key);
+    }
+  }
+}, 60000);
+
+if (cleanupInterval.unref) {
+  cleanupInterval.unref();
+}
 
 /**
  * Resolves the true client IP address with priority for Vercel Edge Network,
@@ -87,62 +101,17 @@ export function getClientLocation(req) {
 }
 
 /**
- * Lua script for atomic sliding/fixed window rate-limiting in Redis.
- * Increments request count and attaches TTL on the first request of the window.
- */
-const RATE_LIMIT_LUA = `
-local current = redis.call("INCR", KEYS[1])
-if tonumber(current) == 1 then
-  redis.call("EXPIRE", KEYS[1], ARGV[1])
-end
-local ttl = redis.call("TTL", KEYS[1])
-if ttl < 0 then
-  redis.call("EXPIRE", KEYS[1], ARGV[1])
-  ttl = tonumber(ARGV[1])
-end
-return {current, ttl}
-`;
-
-/**
- * Checks rate limit for a client IP and endpoint.
- *
- * High volume architecture:
- * 1. Never writes to PostgreSQL on individual requests.
- * 2. Uses atomic Redis operations (sub-millisecond in-memory execution).
- * 3. Gracefully falls back to in-memory store if Redis is unavailable.
+ * Checks rate limit for a client IP and endpoint completely in-memory.
  */
 export async function checkRateLimit({
   endpoint = '/api/chat',
   clientIp = '127.0.0.1',
-  limit = 120, // 120 requests per IP per window (matching migration 002)
+  limit = 120,
   windowSeconds = 60,
-  redisUrl = process.env.REDIS_URL,
-  redisClient = getRedisClient(redisUrl),
 } = {}) {
   const sanitizedIp = String(clientIp || '127.0.0.1').replace(/[^a-zA-Z0-9:._-]/g, '');
   const key = `ratelimit:${endpoint}:${sanitizedIp}`;
 
-  if (redisClient) {
-    try {
-      const [count, ttl] = await redisClient.eval(RATE_LIMIT_LUA, 1, key, windowSeconds);
-      const current = Number(count);
-      const remaining = Math.max(0, limit - current);
-      const allowed = current <= limit;
-
-      return {
-        allowed,
-        current,
-        limit,
-        remaining,
-        resetSeconds: Math.max(1, Number(ttl)),
-        source: 'redis',
-      };
-    } catch {
-      // If Redis call errors, seamlessly fall through to memory fallback
-    }
-  }
-
-  // In-memory fallback
   const now = Date.now();
   let record = inMemoryStore.get(key);
   if (!record || record.resetAt <= now) {
@@ -162,7 +131,7 @@ export async function checkRateLimit({
     limit,
     remaining,
     resetSeconds,
-    source: 'memory-fallback',
+    source: 'memory',
   };
 }
 
@@ -182,27 +151,19 @@ export function applyRateLimitHeaders(res, rateInfo) {
 }
 
 /**
- * Retrieves endpoint configuration policy from PostgreSQL with Redis caching.
+ * Retrieves endpoint configuration policy from PostgreSQL with in-memory caching.
  * Authoritative source: endpoint_rate_limits table.
- * Caches in Redis for 300 seconds to ensure 0 database round-trips on hot requests.
+ * Caches in memory for 300 seconds to ensure 0 database round-trips on hot requests.
  */
 export async function getEndpointConfig(endpoint = '/api/chat', {
   databaseUrl = process.env.DATABASE_URL,
-  redisClient = getRedisClient(),
 } = {}) {
-  // 1. Check Redis cache first (sub-millisecond, zero DB queries)
-  if (redisClient) {
-    try {
-      const cached = await redisClient.get(`ratelimit:config:${endpoint}`);
-      if (cached) {
-        return JSON.parse(cached);
-      }
-    } catch {
-      // ignore cache errors
-    }
+  const now = Date.now();
+  const cached = inMemoryConfigCache.get(endpoint);
+  if (cached && cached.expiresAt > now) {
+    return cached.config;
   }
 
-  // 2. Query PostgreSQL authoritative configuration if databaseUrl is available
   let config = { rateLimitPerIp: 120, burstLimit: 25, windowSeconds: 60 };
   if (databaseUrl) {
     try {
@@ -223,25 +184,10 @@ export async function getEndpointConfig(endpoint = '/api/chat', {
     }
   }
 
-  // Cache policy in Redis for 300 seconds so hot requests make 0 DB round-trips
-  if (redisClient) {
-    try {
-      await redisClient.set(`ratelimit:config:${endpoint}`, JSON.stringify(config), 'EX', 300);
-    } catch {}
-  }
+  inMemoryConfigCache.set(endpoint, {
+    config,
+    expiresAt: now + 300000,
+  });
 
   return config;
-}
-
-/**
- * Ephemeral request metrics tracking in Redis (zero DB writes).
- */
-export async function recordRequestMetric(clientIp, endpoint = '/api/chat', { redisClient = getRedisClient() } = {}) {
-  if (!redisClient) return;
-  try {
-    const today = new Date().toISOString().slice(0, 10);
-    await redisClient.hincrby(`ratelimit:metrics:${today}`, `${endpoint}`, 1);
-  } catch {
-    // ignore metrics errors under high volume
-  }
 }

@@ -3,7 +3,6 @@ import { resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import { createApp } from './app.js';
 import { handleSsrRequest, load404HtmlTemplate } from './ssr.js';
-import { logger } from './logger.js';
 
 const app = createApp(process.env);
 const port = process.env.PORT || 3000;
@@ -23,5 +22,5 @@ app.use((req, res) => {
 });
 
 app.listen(port, '0.0.0.0', () => {
-  logger.info(`Teach4All Express server listening on http://0.0.0.0:${port}`);
+  console.log(`Teach4All Express server listening on http://0.0.0.0:${port}`);
 });

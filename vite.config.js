@@ -23,32 +23,11 @@ export default defineConfig(({ mode }) => {
   process.env.ENV = appEnv;
   process.env.env = appEnv;
 
-  if (env.REDIS_URL && !process.env.REDIS_URL) {
-    process.env.REDIS_URL = env.REDIS_URL;
-  }
   if (env.DATABASE_URL && !process.env.DATABASE_URL) {
     process.env.DATABASE_URL = env.DATABASE_URL;
   }
   if (env.OPENROUTER_API_KEY && !process.env.OPENROUTER_API_KEY) {
     process.env.OPENROUTER_API_KEY = env.OPENROUTER_API_KEY;
-  }
-  if (env.GRAFANA_API_KEY && !process.env.GRAFANA_API_KEY) {
-    process.env.GRAFANA_API_KEY = env.GRAFANA_API_KEY;
-  }
-  if (env.GRAFANA_INSTANCE_ID && !process.env.GRAFANA_INSTANCE_ID) {
-    process.env.GRAFANA_INSTANCE_ID = env.GRAFANA_INSTANCE_ID;
-  }
-  if (env.GRAFANA_OTLP_URL && !process.env.GRAFANA_OTLP_URL) {
-    process.env.GRAFANA_OTLP_URL = env.GRAFANA_OTLP_URL;
-  }
-  if (env.GRAFANA_METRICS_API_KEY && !process.env.GRAFANA_METRICS_API_KEY) {
-    process.env.GRAFANA_METRICS_API_KEY = env.GRAFANA_METRICS_API_KEY;
-  }
-  if (env.GRAFANA_METRICS_INSTANCE_ID && !process.env.GRAFANA_METRICS_INSTANCE_ID) {
-    process.env.GRAFANA_METRICS_INSTANCE_ID = env.GRAFANA_METRICS_INSTANCE_ID;
-  }
-  if (env.GRAFANA_METRICS_URL && !process.env.GRAFANA_METRICS_URL) {
-    process.env.GRAFANA_METRICS_URL = env.GRAFANA_METRICS_URL;
   }
 
   return {

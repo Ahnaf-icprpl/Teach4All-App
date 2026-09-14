@@ -3,10 +3,8 @@ import {
   getClientIp,
   getClientLocation,
   applyRateLimitHeaders,
-  recordRequestMetric,
   getEndpointConfig,
 } from './rateLimiter.js';
-import { getRedisClient } from './redis.js';
 import { getSystemPrompt, injectSystemPrompt } from '../prompts/systemPrompt.js';
 import { ConversationStreamWriter, DEFAULT_USER_ID } from './db.js';
 import {
@@ -15,8 +13,6 @@ import {
   buildProviderRoutingPayload,
   extractProvider,
 } from './providerCache.js';
-import { logger, logDevRequest } from './logger.js';
-import { metrics } from './metrics.js';
 import { buildWebSearchPlugin, buildWebSearchTool, isWebSearchRequested } from './webSearch.js';
 import { buildQuizTool, accumulateToolCalls, handleCompletedToolCalls } from './quizTool.js';
 import { createChatMiddleware, dispatchApi } from './chatMiddleware.js';
@@ -38,19 +34,15 @@ export function formatMessages(messages) {
 
 export async function handleChatRequest(req, res, serverEnv = {}) {
   const clientIp = getClientIp(req);
-  logDevRequest(req, '/api/chat');
 
   if (req.method !== 'POST') {
-    logger.warn('Method Not Allowed on /api/chat', { endpoint: '/api/chat', method: req.method, client_ip: clientIp });
     res.writeHead(405, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: { message: 'Method Not Allowed' } }));
     return;
   }
 
-  // Check rate limit via Redis (high-throughput in-memory check without touching PostgreSQL)
-  const redisUrl = serverEnv.REDIS_URL || process.env.REDIS_URL;
-  const redisClient = getRedisClient(redisUrl);
-  const config = await getEndpointConfig('/api/chat', { redisClient });
+  // Check rate limit completely in-memory
+  const config = await getEndpointConfig('/api/chat', { databaseUrl: serverEnv.DATABASE_URL || process.env.DATABASE_URL });
   const rateLimit = serverEnv.RATE_LIMIT !== undefined ? serverEnv.RATE_LIMIT : config.rateLimitPerIp;
   const windowSeconds = serverEnv.WINDOW_SECONDS !== undefined ? serverEnv.WINDOW_SECONDS : config.windowSeconds;
 
@@ -59,18 +51,11 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
     clientIp,
     limit: rateLimit,
     windowSeconds,
-    redisClient,
   });
 
   applyRateLimitHeaders(res, rateInfo);
 
   if (!rateInfo.allowed) {
-    metrics.recordRateLimitHit({ endpoint: '/api/chat' });
-    logger.warn('Chat rate limit exceeded', {
-      endpoint: '/api/chat',
-      client_ip: clientIp,
-      retry_after: rateInfo.resetSeconds,
-    });
     res.writeHead(429, {
       'Content-Type': 'application/json',
       'Retry-After': String(rateInfo.resetSeconds),
@@ -84,9 +69,6 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
     return;
   }
 
-  // Record ephemeral request metric into Redis (zero DB writes)
-  recordRequestMetric(clientIp, '/api/chat', { redisClient });
-
   const apiKey = (serverEnv.OPENROUTER_API_KEY !== undefined
     ? serverEnv.OPENROUTER_API_KEY
     : (process.env.OPENROUTER_API_KEY || '')).trim();
@@ -95,7 +77,6 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
     : (process.env.OPENROUTER_MODEL || DEFAULT_MODEL)).trim();
 
   if (!apiKey || isPlaceholderKey(apiKey)) {
-    logger.warn('OpenRouter API key is unconfigured or placeholder', { endpoint: '/api/chat' });
     res.writeHead(503, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       error: {
@@ -121,12 +102,6 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
       parsed = JSON.parse(bodyStr || '{}');
     } catch (err) {
       const status = err.message === 'Payload Too Large' ? 413 : 400;
-      logger.warn('Chat request body reading error', {
-        endpoint: '/api/chat',
-        client_ip: clientIp,
-        status,
-        error: err.message,
-      });
       res.writeHead(status, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: { message: err.message || 'Invalid request' } }));
       return;
@@ -135,7 +110,6 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
     try {
       parsed = JSON.parse(parsed);
     } catch {
-      logger.warn('Invalid JSON in chat request body', { endpoint: '/api/chat', client_ip: clientIp });
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: { message: 'Invalid JSON body' } }));
       return;
@@ -153,7 +127,6 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
   } = parsed;
 
   if (!Array.isArray(messages) || messages.length === 0) {
-    logger.warn('Chat request missing messages array', { endpoint: '/api/chat', client_ip: clientIp });
     res.writeHead(400, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: { message: 'messages array is required' } }));
     return;
@@ -179,7 +152,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
 
   const startTime = Date.now();
   const promptText = lastUserMsg ? (lastUserMsg.text || lastUserMsg.content || '') : '';
-  const cachedProvider = conversationId ? await getConversationProvider(conversationId, { redisClient }) : null;
+  const cachedProvider = conversationId ? await getConversationProvider(conversationId) : null;
   const providerRouting = buildProviderRoutingPayload(conversationId, cachedProvider);
 
   const isQuizRequest = (promptText && /\b(kuis|quiz|soal|latihan|evaluasi|test me)\b/i.test(promptText)) ||
@@ -188,21 +161,6 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
   const enableSearch = isWebSearchRequested(webSearch, { isQuiz: isQuizRequest });
   const webPlugin = enableSearch ? buildWebSearchPlugin(serverEnv) : null;
   const quizTool = buildQuizTool(serverEnv);
-
-  const clientLoc = getClientLocation(req);
-  logger.info('Chat stream requested', {
-    endpoint: '/api/chat',
-    conversation_id: conversationId,
-    client_ip: clientIp,
-    ...(clientLoc?.country ? { client_country: clientLoc.country } : {}),
-    ...(clientLoc?.city ? { client_city: clientLoc.city } : {}),
-    model,
-    prompt: promptText,
-    messages_count: messages.length,
-    cached_provider: cachedProvider || 'none',
-    web_search: enableSearch ? (webPlugin?.engine || 'parallel') : 'disabled',
-    tools_count: 1,
-  });
 
   const formattedMessages = formatMessages(messages);
   const controller = new AbortController();
@@ -260,16 +218,6 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
         userMsg = `OpenRouter error (${status}): ${errorMsg}`;
       }
 
-      logger.error('OpenRouter upstream error', {
-        endpoint: '/api/chat',
-        status,
-        model,
-        conversation_id: conversationId,
-        client_ip: clientIp,
-        duration_ms: Date.now() - startTime,
-        error: errorMsg || userMsg,
-      });
-
       res.writeHead(status, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: { message: userMsg } }));
       return;
@@ -283,7 +231,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
 
     let detectedProvider = extractProvider(upstream.headers) || cachedProvider;
     if (conversationId && detectedProvider) {
-      setConversationProvider(conversationId, detectedProvider, { redisClient }).catch(() => {});
+      setConversationProvider(conversationId, detectedProvider).catch(() => {});
     }
 
     res.writeHead(200, {
@@ -328,7 +276,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
             if (conversationId && !detectedProvider && json.provider) {
               detectedProvider = extractProvider(null, json);
               if (detectedProvider) {
-                setConversationProvider(conversationId, detectedProvider, { redisClient }).catch(() => {});
+                setConversationProvider(conversationId, detectedProvider).catch(() => {});
               }
             }
             const delta = json.choices?.[0]?.delta?.content || '';
@@ -442,43 +390,13 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
       }
 
       await streamWriter.finish();
-      const streamDurationMs = Date.now() - startTime;
-      metrics.recordStreamMetric({
-        chunks: chunkCount,
-        bytes: bytesStreamed,
-        model,
-        durationMs: streamDurationMs,
-      });
-      logger.info('Chat completion stream finished', {
-        endpoint: '/api/chat',
-        conversation_id: conversationId,
-        client_ip: clientIp,
-        provider: detectedProvider,
-        model,
-        duration_ms: streamDurationMs,
-        chunks_count: chunkCount,
-        bytes_streamed: bytesStreamed,
-      });
     } finally {
       res.end();
     }
   } catch (err) {
     if (controller.signal.aborted) {
-      logger.info('Chat request aborted by client', {
-        endpoint: '/api/chat',
-        conversation_id: conversationId,
-        client_ip: clientIp,
-        duration_ms: Date.now() - startTime,
-        chunks_count: chunkCount,
-      });
       return;
     }
-    logger.error('Unhandled proxy error in chatApi', {
-      endpoint: '/api/chat',
-      client_ip: clientIp,
-      duration_ms: Date.now() - startTime,
-      error: err.message,
-    });
     if (!res.headersSent) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: { message: 'Server proxy error communicating with OpenRouter.' } }));

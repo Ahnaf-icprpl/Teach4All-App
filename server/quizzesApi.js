@@ -1,6 +1,4 @@
 import { getQuizzes, getQuizById, createQuiz, setQuizSolvedStatus } from './db.js';
-import { logger } from './logger.js';
-import { getClientIp } from './rateLimiter.js';
 
 function readJsonBody(req) {
   if (req.body !== undefined && req.body !== null) {
@@ -29,7 +27,6 @@ function readJsonBody(req) {
 }
 
 export async function handleQuizzesRequest(req, res, env = {}) {
-  const clientIp = getClientIp(req);
   const url = new URL(req.url, 'http://localhost');
   const dbUrl = env.DATABASE_URL || process.env.DATABASE_URL;
 
@@ -56,7 +53,6 @@ export async function handleQuizzesRequest(req, res, env = {}) {
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
       res.end(JSON.stringify({ quizzes }));
     } catch (err) {
-      logger.error('Failed to retrieve quizzes from database', { error: err.message, client_ip: clientIp });
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: { message: 'Failed to retrieve quizzes.' } }));
     }
@@ -83,7 +79,6 @@ export async function handleQuizzesRequest(req, res, env = {}) {
       res.writeHead(201, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ quiz }));
     } catch (err) {
-      logger.error('Failed to create quiz in database', { error: err.message, client_ip: clientIp });
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: { message: 'Failed to create quiz.' } }));
     }
@@ -117,7 +112,6 @@ export async function handleQuizzesRequest(req, res, env = {}) {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ quiz: updated }));
     } catch (err) {
-      logger.error('Failed to update quiz solved status in database', { error: err.message, client_ip: clientIp });
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: { message: 'Failed to update quiz.' } }));
     }

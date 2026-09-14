@@ -14,7 +14,6 @@ import {
 } from './chatStore.js';
 import { createReply } from './replies.js';
 import { isDevEnv } from './env.js';
-import { reportClientError } from './errorLogger.js';
 import { t, rotatePrompts } from './uiTexts.js';
 
 export {

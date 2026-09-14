@@ -3,10 +3,8 @@ import {
   getClientIp,
   getClientLocation,
   applyRateLimitHeaders,
-  recordRequestMetric,
   getEndpointConfig,
 } from './rateLimiter.js';
-import { getRedisClient } from './redis.js';
 import { saveConversation, DEFAULT_USER_ID } from './db.js';
 import {
   formatTitleMessages,
@@ -20,8 +18,6 @@ import {
   buildProviderRoutingPayload,
   extractProvider,
 } from './providerCache.js';
-import { logger, logDevRequest } from './logger.js';
-import { metrics } from './metrics.js';
 
 export const DEFAULT_MODEL = 'google/gemini-2.5-flash-lite';
 export const DEFAULT_TITLE_TEMPERATURE = 0.85;
@@ -37,10 +33,8 @@ function isPlaceholderKey(key) {
 
 export async function handleTitleRequest(req, res, serverEnv = {}) {
   const clientIp = getClientIp(req);
-  logDevRequest(req, '/api/title');
 
   if (req.method !== 'POST') {
-    logger.warn('Method Not Allowed on /api/title', { endpoint: '/api/title', method: req.method, client_ip: clientIp });
     res.writeHead(405, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: { message: 'Method Not Allowed' } }));
     return;
@@ -59,10 +53,8 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
         req.on('error', reject);
       });
 
-  // Rate limiting check via Redis
-  const redisUrl = serverEnv.REDIS_URL || process.env.REDIS_URL;
-  const redisClient = getRedisClient(redisUrl);
-  const config = await getEndpointConfig('/api/title', { redisClient });
+  // In-memory rate limiting
+  const config = await getEndpointConfig('/api/title', { databaseUrl: serverEnv.DATABASE_URL || process.env.DATABASE_URL });
   const rateLimit = serverEnv.RATE_LIMIT !== undefined ? serverEnv.RATE_LIMIT : config.rateLimitPerIp;
   const windowSeconds = serverEnv.WINDOW_SECONDS !== undefined ? serverEnv.WINDOW_SECONDS : config.windowSeconds;
 
@@ -71,18 +63,11 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
     clientIp,
     limit: rateLimit,
     windowSeconds,
-    redisClient,
   });
 
   applyRateLimitHeaders(res, rateInfo);
 
   if (!rateInfo.allowed) {
-    metrics.recordRateLimitHit({ endpoint: '/api/title' });
-    logger.warn('Title rate limit exceeded', {
-      endpoint: '/api/title',
-      client_ip: clientIp,
-      retry_after: rateInfo.resetSeconds,
-    });
     res.writeHead(429, {
       'Content-Type': 'application/json',
       'Retry-After': String(rateInfo.resetSeconds),
@@ -96,8 +81,6 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
     return;
   }
 
-  recordRequestMetric(clientIp, '/api/title', { redisClient });
-
   let parsed = req.body;
   if (parsed === undefined || parsed === null || (typeof parsed !== 'object' && typeof parsed !== 'string')) {
     let bodyStr = '';
@@ -106,12 +89,6 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
       parsed = JSON.parse(bodyStr || '{}');
     } catch (err) {
       const status = err.message === 'Payload Too Large' ? 413 : 400;
-      logger.warn('Title request body reading error', {
-        endpoint: '/api/title',
-        client_ip: clientIp,
-        status,
-        error: err.message,
-      });
       res.writeHead(status, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: { message: err.message || 'Invalid request' } }));
       return;
@@ -120,7 +97,6 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
     try {
       parsed = JSON.parse(parsed);
     } catch {
-      logger.warn('Invalid JSON in title request body', { endpoint: '/api/title', client_ip: clientIp });
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: { message: 'Invalid JSON body' } }));
       return;
@@ -130,7 +106,6 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
   const { messages, conversationId, userId } = parsed;
 
   if (!Array.isArray(messages) || messages.length === 0) {
-    logger.warn('Title request missing messages array', { endpoint: '/api/title', client_ip: clientIp });
     res.writeHead(400, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: { message: 'messages array is required' } }));
     return;
@@ -156,7 +131,7 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
   let finalTitle = fallbackTitle;
   let usedSource = 'fallback';
 
-  const cachedProvider = conversationId ? await getConversationProvider(conversationId, { redisClient }) : null;
+  const cachedProvider = conversationId ? await getConversationProvider(conversationId) : null;
   const providerRouting = buildProviderRoutingPayload(conversationId, cachedProvider);
 
   if (apiKey && !isPlaceholderKey(apiKey)) {
@@ -191,13 +166,13 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
       if (upstream.ok) {
         let detectedProvider = extractProvider(upstream.headers) || cachedProvider;
         if (conversationId && detectedProvider) {
-          setConversationProvider(conversationId, detectedProvider, { redisClient }).catch(() => {});
+          setConversationProvider(conversationId, detectedProvider).catch(() => {});
         }
         const json = await upstream.json();
         if (conversationId && !detectedProvider && json?.provider) {
           detectedProvider = extractProvider(null, json);
           if (detectedProvider) {
-            setConversationProvider(conversationId, detectedProvider, { redisClient }).catch(() => {});
+            setConversationProvider(conversationId, detectedProvider).catch(() => {});
           }
         }
         const rawContent = json?.choices?.[0]?.message?.content;
@@ -206,12 +181,6 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
       }
     } catch (err) {
       // Gracefully fall back to deterministic title on upstream error or timeout
-      logger.warn('Title generation LLM call failed, using fallback', {
-        endpoint: '/api/title',
-        conversation_id: conversationId,
-        client_ip: clientIp,
-        error: err.message,
-      });
       finalTitle = fallbackTitle;
     }
   }
@@ -226,26 +195,6 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
       databaseUrl,
     }).catch(() => {});
   }
-
-  const clientLoc = getClientLocation(req);
-  const titleDurationMs = Date.now() - startTime;
-  metrics.record('title_generation_duration_ms', titleDurationMs, {
-    unit: 'ms',
-    description: 'Title generation duration in milliseconds',
-    attributes: { model, source: usedSource },
-  });
-  logger.info('Title generated successfully', {
-    endpoint: '/api/title',
-    conversation_id: conversationId,
-    client_ip: clientIp,
-    ...(clientLoc?.country ? { client_country: clientLoc.country } : {}),
-    ...(clientLoc?.city ? { client_city: clientLoc.city } : {}),
-    title: finalTitle,
-    prompt: firstUserText,
-    model,
-    source: usedSource,
-    duration_ms: titleDurationMs,
-  });
 
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ title: finalTitle }));

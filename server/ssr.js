@@ -1,7 +1,6 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { getUiTextsFromDb, getChatPromptsFromDb } from './uiTextsApi.js';
-import { logger } from './logger.js';
 
 function escapeHtml(str) {
   if (typeof str !== 'string') return '';
@@ -266,7 +265,6 @@ export async function handleSsrRequest(req, res, env = {}) {
     });
     res.end(rendered);
   } catch (err) {
-    logger.error('SSR render failed', { error: err.message });
     res.writeHead(503, { 'Content-Type': 'text/plain; charset=utf-8' });
     res.end('UI texts could not be loaded from database.');
   }
