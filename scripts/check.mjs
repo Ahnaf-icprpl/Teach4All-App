@@ -1,20 +1,36 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, extname } from 'node:path';
 
-const root = 'src';
 const maxLines = 500;
-const extensions = new Set(['.js', '.mjs', '.css']);
+const extensions = new Set(['.js', '.mjs', '.cjs', '.css']);
+const ignoredDirs = new Set([
+  'node_modules',
+  '.git',
+  'dist',
+  'coverage',
+  '.cache',
+  '.system_generated',
+  'tests',
+]);
 
-function walk(dir, files = []) {
+function walk(dir = '.', files = []) {
   for (const name of readdirSync(dir)) {
-    const path = join(dir, name);
-    if (statSync(path).isDirectory()) walk(path, files);
-    else if (extensions.has(extname(path))) files.push(path);
+    if (ignoredDirs.has(name)) continue;
+    const path = dir === '.' ? name : join(dir, name);
+    try {
+      const st = statSync(path);
+      if (st.isDirectory()) {
+        walk(path, files);
+      } else if (extensions.has(extname(path))) {
+        files.push(path);
+      }
+    } catch {}
   }
   return files;
 }
 
-const files = walk(root);
+const files = walk('.');
+files.sort();
 const violations = [];
 
 for (const file of files) {
@@ -23,9 +39,9 @@ for (const file of files) {
 }
 
 if (violations.length) {
-  console.error('Code files exceed 500 lines:');
+  console.error(`Code files exceed ${maxLines} lines limit:`);
   violations.forEach(v => console.error(`  ${v.file}: ${v.lines} lines`));
   process.exit(1);
 }
 
-console.log(`All ${files.length} code files within limit.`);
+console.log(`All ${files.length} application code files within limit.`);
