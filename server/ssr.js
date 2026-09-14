@@ -158,8 +158,8 @@ export function renderSsrHtml({ htmlTemplate, texts, prompts = [], serverEnv = {
         <div class="profile-dropup-menu" id="profile-dropup-menu" role="menu" aria-hidden="true">
           <div class="profile-menu-content">
             <div class="profile-menu-header">
-              <span class="profile-menu-name">${escapeHtml(texts.auth_guest_name || texts.sidebar_profile_name || 'Akun Pengguna')}</span>
-              <span class="profile-menu-email">${escapeHtml(texts.auth_guest_detail || texts.sidebar_profile_detail || 'Pribadi')}</span>
+              <span class="profile-menu-name">${escapeHtml(texts.auth_guest_name || 'Akun Tamu')}</span>
+              <span class="profile-menu-email">${escapeHtml(texts.auth_guest_detail || 'Klik untuk masuk')}</span>
             </div>
             <div class="profile-menu-divider"></div>
             <button type="button" class="profile-menu-item" role="menuitem">
@@ -183,15 +183,15 @@ export function renderSsrHtml({ htmlTemplate, texts, prompts = [], serverEnv = {
             </button>
           </div>
         </div>
-        <button type="button" class="profile-button is-guest" aria-haspopup="menu" aria-expanded="false" aria-controls="profile-dropup-menu" aria-label="${escapeHtml(texts.auth_guest_name || texts.sidebar_profile_name || 'Akun Pengguna')}">
+        <button type="button" class="profile-button is-guest" aria-haspopup="menu" aria-expanded="false" aria-controls="profile-dropup-menu" aria-label="${escapeHtml(texts.auth_guest_name || 'Akun Tamu')}">
           <span class="avatar">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon">
               ${SVG_ICONS.user}
             </svg>
           </span>
           <span class="profile-copy">
-            <span class="profile-name">${escapeHtml(texts.auth_guest_name || texts.sidebar_profile_name || 'Akun Pengguna')}</span>
-            <span class="profile-detail">${escapeHtml(texts.auth_guest_detail || texts.sidebar_profile_detail || 'Pribadi')}</span>
+            <span class="profile-name">${escapeHtml(texts.auth_guest_name || 'Akun Tamu')}</span>
+            <span class="profile-detail">${escapeHtml(texts.auth_guest_detail || 'Klik untuk masuk')}</span>
           </span>
           <span class="profile-chevron">
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon">

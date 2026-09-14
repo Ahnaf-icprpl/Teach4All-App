@@ -49,8 +49,8 @@ function profileDropupMenu() {
       if (!user) {
         return div({ class: 'profile-menu-content' },
           div({ class: 'profile-menu-header' },
-            span({ class: 'profile-menu-name' }, () => t('auth_guest_name') || t('sidebar_profile_name') || 'Akun Pengguna'),
-            span({ class: 'profile-menu-email' }, () => t('auth_guest_detail') || t('sidebar_profile_detail') || 'Pribadi'),
+            span({ class: 'profile-menu-name' }, () => t('auth_guest_name') || 'Akun Tamu'),
+            span({ class: 'profile-menu-email' }, () => t('auth_guest_detail') || 'Klik untuk masuk'),
           ),
           div({ class: 'profile-menu-divider' }),
           button({
@@ -307,7 +307,7 @@ export function Sidebar() {
         'aria-controls': 'profile-dropup-menu',
         'aria-label': () => {
           const user = currentUser.val;
-          return user ? (user.name || user.email || t('sidebar_profile_name')) : (t('auth_guest_name') || t('sidebar_profile_name') || 'Akun Pengguna');
+          return user ? (user.name || user.email || t('sidebar_profile_name')) : (t('auth_guest_name') || 'Akun Tamu');
         },
       },
         () => {
@@ -321,11 +321,11 @@ export function Sidebar() {
         span({ class: 'profile-copy' },
           span({ class: 'profile-name' }, () => {
             const user = currentUser.val;
-            return user ? (user.name || user.email || t('sidebar_profile_name')) : (t('auth_guest_name') || t('sidebar_profile_name') || 'Akun Pengguna');
+            return user ? (user.name || user.email || t('sidebar_profile_name')) : (t('auth_guest_name') || 'Akun Tamu');
           }),
           span({ class: 'profile-detail' }, () => {
             const user = currentUser.val;
-            return user ? (user.email || t('sidebar_profile_detail')) : (t('auth_guest_detail') || t('sidebar_profile_detail') || 'Pribadi');
+            return user ? (user.email || t('sidebar_profile_detail')) : (t('auth_guest_detail') || 'Klik untuk masuk');
           }),
         ),
         span({ class: () => `profile-chevron ${profileMenuOpen.val ? 'is-open' : ''}` }, icon('chevron')),
