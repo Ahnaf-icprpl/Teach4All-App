@@ -1,6 +1,6 @@
 export const THEME_STORAGE_KEY = 'teach4all.theme.v1';
-export const QUIZZES_STORAGE_KEY = 'teach4all.quizzes.v1';
-export const MATERIALS_STORAGE_KEY = 'teach4all.materials.v1';
+export const QUIZZES_STORAGE_KEY = 'teach4all.quizzes.v2';
+export const MATERIALS_STORAGE_KEY = 'teach4all.materials.v2';
 export const LOCAL_DB_NAME = 'teach4all_localdb';
 export const LOCAL_DB_STORE = 'settings';
 export const MAX_CHATS = 100;

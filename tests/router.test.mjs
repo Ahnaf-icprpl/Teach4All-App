@@ -1383,6 +1383,18 @@ test('migration 020 defines sidebar lazy loading UI texts without fallback', asy
   }
 });
 
+test('migration 021 defines statements to delete seeded quizzes and materials', async () => {
+  const filePath = resolve(process.cwd(), 'migrations/021_remove_seeded_quizzes_and_materials.sql');
+  assert.ok(existsSync(filePath), 'migration 021 file must exist');
+  const sql = readFileSync(filePath, 'utf8');
+  assert.ok(sql.includes('DELETE FROM quiz_questions'), 'must delete quiz_questions');
+  assert.ok(sql.includes('DELETE FROM quizzes'), 'must delete quizzes');
+  assert.ok(sql.includes('DELETE FROM material_sections'), 'must delete material_sections');
+  assert.ok(sql.includes('DELETE FROM materials'), 'must delete materials');
+  assert.ok(sql.includes('00000000-0000-0000-0001-000000000001'), 'must target seeded quiz id 1');
+  assert.ok(sql.includes('00000000-0000-0000-0002-000000000001'), 'must target seeded material id 1');
+});
+
 test('getConversations strictly sorts by latest interacted with timestamp', async () => {
   const { saveConversation, saveMessage, getConversations, deleteConversation } = await import('../server/db.js');
   const dbUrl = process.env.DATABASE_URL;

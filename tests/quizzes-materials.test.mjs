@@ -115,28 +115,20 @@ test('migration 011 defines quizzes, quiz_questions, materials, and material_sec
 });
 
 test('storage keys include versioned keys for quizzes and materials', () => {
-  assert.strictEqual(QUIZZES_STORAGE_KEY, 'teach4all.quizzes.v1');
-  assert.strictEqual(MATERIALS_STORAGE_KEY, 'teach4all.materials.v1');
+  assert.strictEqual(QUIZZES_STORAGE_KEY, 'teach4all.quizzes.v2');
+  assert.strictEqual(MATERIALS_STORAGE_KEY, 'teach4all.materials.v2');
 });
 
 test('studyModules exports fallback seeds and reactive state', () => {
   assert.ok(Array.isArray(FALLBACK_QUIZZES), 'FALLBACK_QUIZZES must be an array');
-  assert.strictEqual(FALLBACK_QUIZZES.length, 5, 'Should have 5 fallback quizzes');
+  assert.strictEqual(FALLBACK_QUIZZES.length, 0, 'Should have 0 fallback quizzes without mock data');
   assert.ok(Array.isArray(FALLBACK_MATERIALS), 'FALLBACK_MATERIALS must be an array');
-  assert.strictEqual(FALLBACK_MATERIALS.length, 5, 'Should have 5 fallback materials');
+  assert.strictEqual(FALLBACK_MATERIALS.length, 0, 'Should have 0 fallback materials without mock data');
 
   const currentQuizzes = quizzes.val;
   const currentMaterials = materials.val;
-  assert.ok(Array.isArray(currentQuizzes) && currentQuizzes.length >= 5);
-  assert.ok(Array.isArray(currentMaterials) && currentMaterials.length >= 5);
-
-  const q1 = currentQuizzes[0];
-  assert.ok(q1.id && q1.title && q1.category);
-  assert.strictEqual(typeof (q1.questionCount ?? q1.question_count), 'number');
-
-  const m1 = currentMaterials[0];
-  assert.ok(m1.id && m1.title && m1.category);
-  assert.strictEqual(typeof (m1.sectionCount ?? m1.section_count ?? m1.part_count), 'number');
+  assert.ok(Array.isArray(currentQuizzes));
+  assert.ok(Array.isArray(currentMaterials));
 });
 
 test('server db helpers getQuizzes and getMaterials fetch relational data with counts', async () => {
