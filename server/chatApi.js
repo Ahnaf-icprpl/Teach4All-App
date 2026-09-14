@@ -2,8 +2,10 @@ import {
   checkRateLimit,
   getClientIp,
   getClientLocation,
+  getClientUserId,
   applyRateLimitHeaders,
   getEndpointConfig,
+  enforceRateLimit,
 } from './rateLimiter.js';
 import { getSystemPrompt, injectSystemPrompt } from '../prompts/systemPrompt.js';
 import { ConversationStreamWriter, DEFAULT_USER_ID } from './db.js';
@@ -42,31 +44,8 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
     return;
   }
 
-  // Check rate limit completely in-memory
-  const config = await getEndpointConfig('/api/chat', { databaseUrl: serverEnv.DATABASE_URL || process.env.DATABASE_URL });
-  const rateLimit = serverEnv.RATE_LIMIT !== undefined ? serverEnv.RATE_LIMIT : config.rateLimitPerIp;
-  const windowSeconds = serverEnv.WINDOW_SECONDS !== undefined ? serverEnv.WINDOW_SECONDS : config.windowSeconds;
-
-  const rateInfo = await checkRateLimit({
-    endpoint: '/api/chat',
-    clientIp,
-    limit: rateLimit,
-    windowSeconds,
-  });
-
-  applyRateLimitHeaders(res, rateInfo);
-
-  if (!rateInfo.allowed) {
-    res.writeHead(429, {
-      'Content-Type': 'application/json',
-      'Retry-After': String(rateInfo.resetSeconds),
-    });
-    res.end(JSON.stringify({
-      error: {
-        message: `Rate limit exceeded. Too many requests. Please wait ${rateInfo.resetSeconds}s before retrying.`,
-        retryAfter: rateInfo.resetSeconds,
-      },
-    }));
+  // Check rate limit completely in-memory against PostgreSQL endpoint policy
+  if (!(await enforceRateLimit(req, res, '/api/chat', serverEnv))) {
     return;
   }
 
@@ -123,9 +102,10 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
     conversationTitle,
     userMessageId,
     assistantMessageId,
-    userId,
     webSearch,
   } = parsed;
+
+  const effectiveUserId = req.userId || DEFAULT_USER_ID;
 
   if (!Array.isArray(messages) || messages.length === 0) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -137,7 +117,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
   const lastUserMsg = messages.slice().reverse().find(m => m && m.role === 'user');
   const streamWriter = new ConversationStreamWriter({
     conversationId,
-    userId: userId || DEFAULT_USER_ID,
+    userId: effectiveUserId,
     title: conversationTitle || (lastUserMsg ? (lastUserMsg.text || lastUserMsg.content || '').slice(0, 60) : 'New Conversation'),
     userMessage: lastUserMsg ? {
       id: userMessageId || lastUserMsg.id,
@@ -189,7 +169,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
         model,
         messages: formattedMessages,
         stream: true,
-        user: userId || clientIp,
+        user: effectiveUserId || clientIp,
         tools: [quizTool, materialTool],
         ...(isQuizRequest && !isMaterialRequest ? { tool_choice: { type: 'function', function: { name: 'create_quiz' } } } : {}),
         ...(isMaterialRequest && !isQuizRequest ? { tool_choice: { type: 'function', function: { name: MATERIAL_TOOL_NAME } } } : {}),
@@ -345,7 +325,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
         await handleCompletedMaterialToolCalls({
           toolCallsMap: accumulatedToolCalls,
           serverEnv,
-          userId,
+          userId: effectiveUserId,
           clientIp,
           conversationId,
           formattedMessages,
@@ -363,7 +343,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
         await handleCompletedToolCalls({
           toolCallsMap: accumulatedToolCalls,
           serverEnv,
-          userId,
+          userId: effectiveUserId,
           clientIp,
           conversationId,
           formattedMessages,
@@ -387,7 +367,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
             },
           },
           serverEnv,
-          userId,
+          userId: effectiveUserId,
           clientIp,
           conversationId,
           formattedMessages: [
@@ -415,7 +395,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
             },
           },
           serverEnv,
-          userId,
+          userId: effectiveUserId,
           clientIp,
           conversationId,
           formattedMessages: [

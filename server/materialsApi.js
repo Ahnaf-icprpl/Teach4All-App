@@ -1,4 +1,5 @@
-import { getMaterials, getMaterialById, createMaterial, setMaterialSolvedStatus } from './db.js';
+import { getMaterials, getMaterialById, createMaterial, setMaterialSolvedStatus, DEFAULT_USER_ID } from './db.js';
+import { enforceRateLimit } from './rateLimiter.js';
 
 function readJsonBody(req) {
   if (req.body !== undefined && req.body !== null) {
@@ -27,8 +28,13 @@ function readJsonBody(req) {
 }
 
 export async function handleMaterialsRequest(req, res, env = {}) {
+  if (!(await enforceRateLimit(req, res, '/api/materials', env))) {
+    return;
+  }
+
   const url = new URL(req.url, 'http://localhost');
   const dbUrl = env.DATABASE_URL || process.env.DATABASE_URL;
+  const userId = req.userId || DEFAULT_USER_ID;
 
   if (req.method === 'GET') {
     const id = url.searchParams.get('id');
@@ -39,7 +45,7 @@ export async function handleMaterialsRequest(req, res, env = {}) {
 
     try {
       if (id) {
-        const material = await getMaterialById(id, { databaseUrl: dbUrl });
+        const material = await getMaterialById(id, { userId, databaseUrl: dbUrl });
         if (!material) {
           res.writeHead(404, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: { message: 'Material not found.' } }));
@@ -50,7 +56,7 @@ export async function handleMaterialsRequest(req, res, env = {}) {
         return;
       }
 
-      const materials = await getMaterials({ search, category, limit, offset, databaseUrl: dbUrl });
+      const materials = await getMaterials({ userId, search, category, limit, offset, databaseUrl: dbUrl });
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
       res.end(JSON.stringify({ materials }));
     } catch (err) {
@@ -76,7 +82,7 @@ export async function handleMaterialsRequest(req, res, env = {}) {
         res.end(JSON.stringify({ error: { message: 'Title is required.' } }));
         return;
       }
-      const material = await createMaterial(payload, payload.sections || [], { databaseUrl: dbUrl });
+      const material = await createMaterial({ ...payload, userId }, payload.sections || [], { databaseUrl: dbUrl });
       res.writeHead(201, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ material }));
     } catch (err) {
@@ -104,7 +110,7 @@ export async function handleMaterialsRequest(req, res, env = {}) {
         return;
       }
       const isSolved = payload.isSolved !== undefined ? payload.isSolved : payload.is_solved !== undefined ? payload.is_solved : true;
-      const updated = await setMaterialSolvedStatus(id, isSolved, { databaseUrl: dbUrl });
+      const updated = await setMaterialSolvedStatus(id, isSolved, { userId, databaseUrl: dbUrl });
       if (!updated) {
         res.writeHead(404, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: { message: 'Material not found.' } }));

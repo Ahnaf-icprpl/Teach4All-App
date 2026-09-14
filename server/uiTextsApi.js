@@ -1,4 +1,5 @@
 import { query } from './db.js';
+import { enforceRateLimit } from './rateLimiter.js';
 
 export async function getUiTextsFromDb(databaseUrl = process.env.DATABASE_URL) {
   const rows = await query('SELECT key, value FROM ui_texts ORDER BY key ASC;', [], databaseUrl);
@@ -32,6 +33,10 @@ export async function handleUiTextsRequest(req, res, env = {}) {
     return;
   }
 
+  if (!(await enforceRateLimit(req, res, '/api/ui-texts', env))) {
+    return;
+  }
+
   try {
     const dbUrl = env.DATABASE_URL || process.env.DATABASE_URL;
     const texts = await getUiTextsFromDb(dbUrl);
@@ -53,6 +58,10 @@ export async function handleChatPromptsRequest(req, res, env = {}) {
   if (req.method !== 'GET') {
     res.writeHead(405, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: { message: 'Method not allowed' } }));
+    return;
+  }
+
+  if (!(await enforceRateLimit(req, res, '/api/chat-prompts', env))) {
     return;
   }
 

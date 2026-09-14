@@ -4,11 +4,144 @@ import {
   chats, activeId, newChat, selectChat, modal, sidebarOpen,
   sidebarCollapsed, search, searchResults, searchLoading,
   onSearchInput, openQuickChat, historyLoading,
-  historyLoadingMore, hasMoreChats, loadMoreChats,
+  historyLoadingMore, hasMoreChats, loadMoreChats, exportWorkspace,
 } from '../state.js';
+import { currentUser, login, signup, logout, openUserProfile } from '../auth.js';
 import { t } from '../uiTexts.js';
 
-const { aside, div, nav, button, span, input, h2, p } = van.tags;
+const { aside, div, nav, button, span, input, h2, p, img } = van.tags;
+
+export const profileMenuOpen = van.state(false);
+
+function closeProfileMenu(restoreFocus = false) {
+  profileMenuOpen.val = false;
+  if (restoreFocus && typeof document !== 'undefined') {
+    const btn = document.querySelector('.profile-button');
+    if (btn) btn.focus();
+  }
+}
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('click', (event) => {
+    if (!profileMenuOpen.val) return;
+    const sidebarBottom = document.querySelector('.sidebar-bottom');
+    if (sidebarBottom && !sidebarBottom.contains(event.target)) {
+      closeProfileMenu(false);
+    }
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (profileMenuOpen.val && event.key === 'Escape') {
+      closeProfileMenu(true);
+    }
+  });
+}
+
+function profileDropupMenu() {
+  return div({
+    class: () => `profile-dropup-menu ${profileMenuOpen.val ? 'is-open' : ''}`,
+    id: 'profile-dropup-menu',
+    role: 'menu',
+    'aria-hidden': () => String(!profileMenuOpen.val),
+  },
+    () => {
+      const user = currentUser.val;
+      if (!user) {
+        return div({ class: 'profile-menu-content' },
+          button({
+            type: 'button',
+            class: 'profile-menu-item',
+            role: 'menuitem',
+            onclick: (e) => {
+              e.stopPropagation();
+              closeProfileMenu(false);
+              login();
+            },
+          },
+            icon('login'),
+            span(() => t('auth_login_button')),
+          ),
+          button({
+            type: 'button',
+            class: 'profile-menu-item',
+            role: 'menuitem',
+            onclick: (e) => {
+              e.stopPropagation();
+              closeProfileMenu(false);
+              signup();
+            },
+          },
+            icon('user'),
+            span(() => t('auth_signup_with_clerk')),
+          ),
+          div({ class: 'profile-menu-divider' }),
+          button({
+            type: 'button',
+            class: 'profile-menu-item',
+            role: 'menuitem',
+            onclick: (e) => {
+              e.stopPropagation();
+              closeProfileMenu(false);
+              exportWorkspace();
+            },
+          },
+            icon('download'),
+            span(() => t('auth_export_workspace')),
+          ),
+        );
+      }
+
+      const displayName = user.name || user.email || t('sidebar_profile_name');
+      return div({ class: 'profile-menu-content' },
+        div({ class: 'profile-menu-header' },
+          span({ class: 'profile-menu-name' }, displayName),
+          user.email ? span({ class: 'profile-menu-email' }, user.email) : null,
+        ),
+        div({ class: 'profile-menu-divider' }),
+        button({
+          type: 'button',
+          class: 'profile-menu-item',
+          role: 'menuitem',
+          onclick: (e) => {
+            e.stopPropagation();
+            closeProfileMenu(false);
+            openUserProfile();
+          },
+        },
+          icon('settings'),
+          span(() => t('auth_manage_account')),
+        ),
+        button({
+          type: 'button',
+          class: 'profile-menu-item',
+          role: 'menuitem',
+          onclick: (e) => {
+            e.stopPropagation();
+            closeProfileMenu(false);
+            exportWorkspace();
+          },
+        },
+          icon('download'),
+          span(() => t('auth_export_workspace')),
+        ),
+        div({ class: 'profile-menu-divider' }),
+        button({
+          type: 'button',
+          class: 'profile-menu-item danger-item',
+          role: 'menuitem',
+          onclick: async (e) => {
+            e.stopPropagation();
+            closeProfileMenu(false);
+            await logout();
+          },
+        },
+          icon('logout'),
+          span(() => t('auth_logout_button')),
+        ),
+      );
+    },
+  );
+}
 
 function emptyHistory() {
   return div({ class: 'empty-history' },
@@ -148,10 +281,49 @@ export function Sidebar() {
       div({ class: 'section-heading' }, h2(() => t('sidebar_history_heading')), () => span({ class: 'chat-count' }, chats.val.length || '')),
       conversationList,
     ),
-    div({ class: 'sidebar-bottom' },
-      div({ class: 'profile-button' },
-        span({ class: 'avatar' }, () => t('sidebar_profile_avatar')),
-        span({ class: 'profile-copy' }, span({ class: 'profile-name' }, () => t('sidebar_profile_name')), span({ class: 'profile-detail' }, () => t('sidebar_profile_detail'))),
+    div({
+      class: 'sidebar-bottom',
+      onclick: (e) => {
+        if (e.target.closest('.profile-dropup-menu')) return;
+        e.stopPropagation();
+        profileMenuOpen.val = !profileMenuOpen.val;
+      },
+    },
+      profileDropupMenu(),
+      button({
+        type: 'button',
+        class: () => `profile-button ${currentUser.val ? 'is-authenticated' : 'is-guest'} ${profileMenuOpen.val ? 'is-menu-open' : ''}`,
+        onclick: (e) => {
+          e.stopPropagation();
+          profileMenuOpen.val = !profileMenuOpen.val;
+        },
+        'aria-haspopup': 'menu',
+        'aria-expanded': () => String(profileMenuOpen.val),
+        'aria-controls': 'profile-dropup-menu',
+        'aria-label': () => {
+          const user = currentUser.val;
+          return user ? (user.name || user.email || t('sidebar_profile_name')) : t('sidebar_profile_name');
+        },
+      },
+        () => {
+          const user = currentUser.val;
+          if (!user) return span({ class: 'avatar' }, icon('user'));
+          const displayName = user.name || user.email || t('sidebar_profile_name');
+          return user.avatarUrl
+            ? img({ src: user.avatarUrl, alt: displayName, class: 'avatar avatar-img', 'aria-hidden': 'true', referrerpolicy: 'no-referrer' })
+            : span({ class: 'avatar' }, (displayName[0] || 'U').toUpperCase());
+        },
+        span({ class: 'profile-copy' },
+          span({ class: 'profile-name' }, () => {
+            const user = currentUser.val;
+            return user ? (user.name || user.email || t('sidebar_profile_name')) : t('sidebar_profile_name');
+          }),
+          span({ class: 'profile-detail' }, () => {
+            const user = currentUser.val;
+            return user ? (user.email || t('sidebar_profile_detail')) : t('sidebar_profile_detail');
+          }),
+        ),
+        span({ class: () => `profile-chevron ${profileMenuOpen.val ? 'is-open' : ''}` }, icon('chevron')),
       ),
     ),
   );

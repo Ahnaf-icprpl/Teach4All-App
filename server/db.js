@@ -102,6 +102,74 @@ export function toUuid(id) {
   return crypto.randomUUID();
 }
 
+/**
+ * Normalize and validate user ID (supports Clerk user IDs and guest UUIDs).
+ */
+export function toUserId(id) {
+  if (typeof id === 'string' && id.trim()) {
+    return id.trim();
+  }
+  return DEFAULT_USER_ID;
+}
+
+/**
+ * Ensure a user record exists in the database.
+ */
+export async function ensureUserExists(userId, databaseUrl = process.env.DATABASE_URL) {
+  const uId = toUserId(userId);
+  if (!uId || !databaseUrl) return;
+  const pool = getPool(databaseUrl);
+  if (!pool) return;
+  try {
+    await pool.query(
+      `INSERT INTO users (id, username, updated_at)
+       VALUES ($1, 'teach4all_user', CURRENT_TIMESTAMP)
+       ON CONFLICT (id) DO NOTHING;`,
+      [uId]
+    );
+  } catch {}
+}
+
+/**
+ * Upsert Clerk user profile info into the database users table.
+ */
+export async function syncUserToDb(user = {}, databaseUrl = process.env.DATABASE_URL) {
+  const userId = typeof user?.id === 'string' ? user.id.trim() : null;
+  if (!userId || !databaseUrl) return null;
+  const pool = getPool(databaseUrl);
+  if (!pool) return null;
+
+  const sql = `
+    INSERT INTO users (id, email, name, first_name, last_name, avatar_url, username, updated_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+    ON CONFLICT (id) DO UPDATE SET
+      email = COALESCE(EXCLUDED.email, users.email),
+      name = COALESCE(EXCLUDED.name, users.name),
+      first_name = COALESCE(EXCLUDED.first_name, users.first_name),
+      last_name = COALESCE(EXCLUDED.last_name, users.last_name),
+      avatar_url = COALESCE(EXCLUDED.avatar_url, users.avatar_url),
+      username = COALESCE(EXCLUDED.username, users.username),
+      updated_at = CURRENT_TIMESTAMP
+    RETURNING *;
+  `;
+
+  try {
+    const res = await pool.query(sql, [
+      userId,
+      user.email || null,
+      user.name || null,
+      user.firstName || user.first_name || null,
+      user.lastName || user.last_name || null,
+      user.avatarUrl || user.avatar_url || null,
+      user.username || null,
+    ]);
+    return res.rows[0] || null;
+  } catch (err) {
+    console.error('Failed to sync user to database:', err.message);
+    return null;
+  }
+}
+
 export const inMemoryConversations = new Map();
 export const inMemoryMessages = new Map();
 
@@ -141,7 +209,7 @@ export async function saveConversation({
   databaseUrl = process.env.DATABASE_URL,
 } = {}) {
   const convId = toUuid(id);
-  const uId = toUuid(userId);
+  const uId = toUserId(userId);
   const cleanTitle = (title || 'New Conversation').slice(0, 255);
 
   // Sync to in-memory store
@@ -155,6 +223,7 @@ export async function saveConversation({
   });
 
   if (databaseUrl) {
+    await ensureUserExists(uId, databaseUrl);
     const sql = `
       INSERT INTO conversations (id, user_id, title, updated_at)
       VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
@@ -188,7 +257,7 @@ export async function saveMessage({
 } = {}) {
   const msgId = toUuid(id);
   const convId = toUuid(conversationId);
-  const uId = toUuid(userId);
+  const uId = toUserId(userId);
   const safeRole = ['user', 'assistant', 'system'].includes(role) ? role : 'user';
 
   // Sync to in-memory store
@@ -208,6 +277,7 @@ export async function saveMessage({
   }
 
   if (databaseUrl) {
+    await ensureUserExists(uId, databaseUrl);
     const sql = `
       INSERT INTO messages (id, conversation_id, user_id, role, content, created_at)
       VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
@@ -239,7 +309,7 @@ export async function getConversations({
   query = '',
   databaseUrl = process.env.DATABASE_URL,
 } = {}) {
-  const uId = toUuid(userId);
+  const uId = toUserId(userId);
   const numLimit = Math.max(1, Math.min(100, Number(limit) || 50));
   const numOffset = Math.max(0, Number(offset) || 0);
   const trimmedQuery = typeof query === 'string' ? query.trim() : '';
@@ -335,7 +405,7 @@ export async function getMessages({
   databaseUrl = process.env.DATABASE_URL,
 } = {}) {
   const convId = toUuid(conversationId);
-  const uId = toUuid(userId);
+  const uId = toUserId(userId);
   const numLimit = Math.max(1, Math.min(200, Number(limit) || 100));
   const numOffset = Math.max(0, Number(offset) || 0);
 
@@ -381,7 +451,7 @@ export async function deleteConversation({
   databaseUrl = process.env.DATABASE_URL,
 } = {}) {
   const convId = toUuid(conversationId);
-  const uId = toUuid(userId);
+  const uId = toUserId(userId);
 
   inMemoryConversations.delete(convId);
   inMemoryMessages.delete(convId);
@@ -410,7 +480,7 @@ export async function updateConversationTitle({
   databaseUrl = process.env.DATABASE_URL,
 } = {}) {
   const convId = toUuid(conversationId);
-  const uId = toUuid(userId);
+  const uId = toUserId(userId);
   const cleanTitle = (title || 'New Conversation').slice(0, 255);
 
   const existing = inMemoryConversations.get(convId);
@@ -481,7 +551,7 @@ export class ConversationStreamWriter {
     throttleMs = 1500,
   } = {}) {
     this.conversationId = toUuid(conversationId);
-    this.userId = toUuid(userId);
+    this.userId = toUserId(userId);
     this.title = title;
     this.userMessage = userMessage;
     this.assistantMessageId = toUuid(assistantMessageId);
@@ -631,11 +701,12 @@ export class ConversationStreamWriter {
 }
 
 /**
- * Retrieve list of quizzes with question count aggregation.
+ * Retrieve list of quizzes with question count aggregation for a specific user.
  */
-export async function getQuizzes({ search, query: qSearch, category, limit = 50, offset = 0, databaseUrl } = {}) {
-  const params = [];
-  let where = 'WHERE q.is_published = true';
+export async function getQuizzes({ userId = DEFAULT_USER_ID, search, query: qSearch, category, limit = 50, offset = 0, databaseUrl } = {}) {
+  const uId = toUserId(userId);
+  const params = [uId];
+  let where = 'WHERE q.is_published = true AND q.user_id = $1';
   if (category) {
     params.push(category);
     where += ` AND q.category = $${params.length}`;
@@ -673,11 +744,12 @@ export async function getQuizzes({ search, query: qSearch, category, limit = 50,
 }
 
 /**
- * Retrieve quiz by ID including all ordered questions.
+ * Retrieve quiz by ID including all ordered questions (scoped by user).
  */
-export async function getQuizById(id, { databaseUrl } = {}) {
+export async function getQuizById(id, { userId = DEFAULT_USER_ID, databaseUrl } = {}) {
   if (!id) return null;
-  const quizRows = await query('SELECT * FROM quizzes WHERE id = $1', [id], databaseUrl);
+  const uId = toUserId(userId);
+  const quizRows = await query('SELECT * FROM quizzes WHERE id = $1 AND user_id = $2', [id, uId], databaseUrl);
   if (!quizRows.length) return null;
   const quiz = quizRows[0];
   const questions = await query(
@@ -688,14 +760,12 @@ export async function getQuizById(id, { databaseUrl } = {}) {
   return { ...quiz, questions };
 }
 
-/**
- * Update the is_solved status of a quiz.
- */
-export async function setQuizSolvedStatus(id, isSolved = true, { databaseUrl } = {}) {
+export async function setQuizSolvedStatus(id, isSolved = true, { userId = DEFAULT_USER_ID, databaseUrl } = {}) {
   if (!id) return null;
+  const uId = toUserId(userId);
   const rows = await query(
-    'UPDATE quizzes SET is_solved = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *;',
-    [Boolean(isSolved), id],
+    'UPDATE quizzes SET is_solved = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND user_id = $3 RETURNING *;',
+    [Boolean(isSolved), id, uId],
     databaseUrl
   );
   return rows[0] || null;
@@ -712,6 +782,10 @@ export async function createQuiz(quiz, questions = [], { databaseUrl } = {}) {
   if (!pool) return null;
   const client = await pool.connect();
   try {
+    const dbUrl = databaseUrl || quiz?.databaseUrl;
+    if (quiz.userId) {
+      await ensureUserExists(quiz.userId, dbUrl);
+    }
     await client.query('BEGIN');
     const qRes = await client.query(
       `INSERT INTO quizzes (id, user_id, conversation_id, title, slug, category, summary, difficulty, icon, color, prompt, is_published, is_solved)
@@ -719,7 +793,7 @@ export async function createQuiz(quiz, questions = [], { databaseUrl } = {}) {
        RETURNING *;`,
       [
         quiz.id || null,
-        quiz.userId || null,
+        quiz.userId ? toUserId(quiz.userId) : null,
         quiz.conversationId || null,
         quiz.title,
         quiz.slug || null,
@@ -783,11 +857,12 @@ export async function createQuiz(quiz, questions = [], { databaseUrl } = {}) {
 }
 
 /**
- * Retrieve list of learning materials with section count aggregation.
+ * Retrieve list of learning materials with section count aggregation for a specific user.
  */
-export async function getMaterials({ search, query: qSearch, category, limit = 50, offset = 0, databaseUrl } = {}) {
-  const params = [];
-  let where = 'WHERE m.is_published = true';
+export async function getMaterials({ userId = DEFAULT_USER_ID, search, query: qSearch, category, limit = 50, offset = 0, databaseUrl } = {}) {
+  const uId = toUserId(userId);
+  const params = [uId];
+  let where = 'WHERE m.is_published = true AND m.user_id = $1';
   if (category) {
     params.push(category);
     where += ` AND m.category = $${params.length}`;
@@ -827,11 +902,12 @@ export async function getMaterials({ search, query: qSearch, category, limit = 5
 }
 
 /**
- * Retrieve learning material by ID including all ordered sections.
+ * Retrieve learning material by ID including all ordered sections (scoped by user).
  */
-export async function getMaterialById(id, { databaseUrl } = {}) {
+export async function getMaterialById(id, { userId = DEFAULT_USER_ID, databaseUrl } = {}) {
   if (!id) return null;
-  const matRows = await query('SELECT * FROM materials WHERE id = $1', [id], databaseUrl);
+  const uId = toUserId(userId);
+  const matRows = await query('SELECT * FROM materials WHERE id = $1 AND user_id = $2', [id, uId], databaseUrl);
   if (!matRows.length) return null;
   const material = matRows[0];
   const sections = await query(
@@ -843,14 +919,15 @@ export async function getMaterialById(id, { databaseUrl } = {}) {
 }
 
 /**
- * Update the is_solved / is_completed status of a material.
+ * Update the is_solved / is_completed status of a material (scoped by user).
  */
-export async function setMaterialSolvedStatus(id, isSolved = true, { databaseUrl } = {}) {
+export async function setMaterialSolvedStatus(id, isSolved = true, { userId = DEFAULT_USER_ID, databaseUrl } = {}) {
   if (!id) return null;
+  const uId = toUserId(userId);
   const val = Boolean(isSolved);
   const rows = await query(
-    'UPDATE materials SET is_solved = $1, is_completed = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *;',
-    [val, id],
+    'UPDATE materials SET is_solved = $1, is_completed = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND user_id = $3 RETURNING *;',
+    [val, id, uId],
     databaseUrl
   );
   return rows[0] || null;
@@ -867,6 +944,10 @@ export async function createMaterial(material, sections = [], { databaseUrl } = 
   if (!pool) return null;
   const client = await pool.connect();
   try {
+    const dbUrl = databaseUrl || material?.databaseUrl;
+    if (material.userId) {
+      await ensureUserExists(material.userId, dbUrl);
+    }
     await client.query('BEGIN');
     const isSolvedVal = Boolean(material.isSolved ?? material.is_solved ?? material.isCompleted ?? material.is_completed ?? false);
     const mRes = await client.query(
@@ -875,7 +956,7 @@ export async function createMaterial(material, sections = [], { databaseUrl } = 
        RETURNING *;`,
       [
         material.id || null,
-        material.userId || null,
+        material.userId ? toUserId(material.userId) : null,
         material.conversationId || null,
         material.title,
         material.slug || null,
