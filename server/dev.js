@@ -5,7 +5,7 @@ import { createServer as createViteServer } from 'vite';
 import { createApp } from './app.js';
 import { getUiDataFromDb, getUiTextsFromDb, getChatPromptsFromDb } from './uiTextsApi.js';
 import { authenticateClerkRequest } from './clerkVerifier.js';
-import { renderSsrHtml, load404HtmlTemplate } from './ssr.js';
+import { renderSsrHtml, load404HtmlTemplate, injectBundledStyles } from './ssr.js';
 
 try {
   if (typeof process.loadEnvFile === 'function') {
@@ -74,7 +74,7 @@ app.get(['/', '/index.html'], async (req, res, next) => {
       res.status(200).type('text/html; charset=utf-8').send(rendered);
     } else {
       // Fallback to transformed client HTML if DB not ready
-      res.status(200).type('text/html; charset=utf-8').send(transformedHtml);
+      res.status(200).type('text/html; charset=utf-8').send(injectBundledStyles(transformedHtml, { isProd: false }));
     }
   } catch (err) {
     vite.ssrFixStacktrace(err);
