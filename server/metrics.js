@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import client from 'prom-client';
+import { enforceRateLimit } from './rateLimiter.js';
 
 try {
   if (typeof process.loadEnvFile === 'function') {
@@ -195,6 +196,10 @@ export function metricsMiddleware(req, res, next) {
  * Handler for GET /metrics endpoint.
  */
 export async function handleMetricsRequest(req, res, serverEnv = {}) {
+  if (!(await enforceRateLimit(req, res, '/metrics', serverEnv))) {
+    return;
+  }
+
   if (!verifyMetricsAuth(req, serverEnv)) {
     res.setHeader('WWW-Authenticate', 'Basic realm="Prometheus Metrics", Bearer error="invalid_token"');
     res.setHeader('Cache-Control', 'no-store');
