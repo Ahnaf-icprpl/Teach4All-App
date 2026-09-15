@@ -22,33 +22,41 @@ client.register.setDefaultLabels({
   env: initialMetricsEnv,
 });
 
-// Initialize default system and Node.js process metrics
-client.collectDefaultMetrics({
-  register: client.register,
-  timeout: 5000,
-});
+// Initialize default system and Node.js process metrics (if not already registered)
+if (!client.register.getSingleMetric('process_cpu_user_seconds_total')) {
+  client.collectDefaultMetrics({
+    register: client.register,
+    timeout: 5000,
+  });
+}
 
 // Custom HTTP request counter
-export const httpRequestsTotal = new client.Counter({
-  name: 'http_requests_total',
-  help: 'Total number of HTTP requests processed by the server',
-  labelNames: ['method', 'route', 'status_code'],
-});
+export const httpRequestsTotal =
+  client.register.getSingleMetric('http_requests_total') ||
+  new client.Counter({
+    name: 'http_requests_total',
+    help: 'Total number of HTTP requests processed by the server',
+    labelNames: ['method', 'route', 'status_code'],
+  });
 
 // Custom HTTP request duration histogram
-export const httpRequestDurationSeconds = new client.Histogram({
-  name: 'http_request_duration_seconds',
-  help: 'Duration of HTTP requests in seconds',
-  labelNames: ['method', 'route', 'status_code'],
-  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
-});
+export const httpRequestDurationSeconds =
+  client.register.getSingleMetric('http_request_duration_seconds') ||
+  new client.Histogram({
+    name: 'http_request_duration_seconds',
+    help: 'Duration of HTTP requests in seconds',
+    labelNames: ['method', 'route', 'status_code'],
+    buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
+  });
 
 // In-flight HTTP requests gauge
-export const httpRequestsInFlight = new client.Gauge({
-  name: 'http_requests_in_flight',
-  help: 'Current number of active in-flight HTTP requests',
-  labelNames: ['method'],
-});
+export const httpRequestsInFlight =
+  client.register.getSingleMetric('http_requests_in_flight') ||
+  new client.Gauge({
+    name: 'http_requests_in_flight',
+    help: 'Current number of active in-flight HTTP requests',
+    labelNames: ['method'],
+  });
 
 /**
  * Normalizes URL path to reduce metric cardinality.

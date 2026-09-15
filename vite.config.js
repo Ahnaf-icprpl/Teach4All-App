@@ -42,6 +42,7 @@ export default defineConfig(({ mode }) => {
       {
         name: 'openrouter-api-server',
         configureServer(server) {
+          if (server.config.server.middlewareMode) return;
           const app = createApp({ ...env, ENV: appEnv, env: appEnv });
           server.middlewares.use(app);
         },

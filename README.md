@@ -169,7 +169,7 @@ npm run migrate
 
 ### 4. Start Development Server
 ```bash
-# Starts Vite dev server with integrated Express middleware on http://localhost:5173
+# Starts full-stack Express dev server with Vite middleware mode, auto-reload, and OpenTelemetry
 npm run dev
 ```
 
