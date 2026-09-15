@@ -7,7 +7,7 @@ import { uiRouter } from './routes/uiRoutes.js';
 import { clerkHandshakeMiddleware, authContextMiddleware } from './authApi.js';
 import { enforceRateLimit } from './rateLimiter.js';
 import { load404HtmlTemplate } from './ssr.js';
-import { metricsMiddleware } from './metrics.js';
+import { metricsMiddleware, handleMetricsRequest } from './metrics.js';
 import { logger, requestLoggerMiddleware } from './logger.js';
 
 export function createApp(serverEnv = {}) {
@@ -20,6 +20,7 @@ export function createApp(serverEnv = {}) {
   // 1.5 OTLP Telemetry (Metrics & Request Logging with Trace Correlation)
   app.use(metricsMiddleware);
   app.use(requestLoggerMiddleware);
+  app.get('/metrics', (req, res) => handleMetricsRequest(req, res, serverEnv));
 
   // 2. Request Body Parsing & Auth Handshake Interception
   app.use(clerkHandshakeMiddleware);

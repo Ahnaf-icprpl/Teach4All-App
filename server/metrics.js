@@ -1,4 +1,5 @@
 import { metrics } from '@opentelemetry/api';
+import { enforceRateLimit } from './rateLimiter.js';
 
 const meter = metrics.getMeter('teach4all');
 
@@ -63,4 +64,32 @@ export function metricsMiddleware(req, res, next) {
   next();
 }
 
+/**
+ * Handler for GET /metrics endpoint.
+ * Enforces rate limiting and reports OTLP metrics export status.
+ */
+export async function handleMetricsRequest(req, res, serverEnv = {}) {
+  if (!(await enforceRateLimit(req, res, '/metrics', serverEnv))) {
+    return;
+  }
+
+  const message = '# OpenTelemetry metrics active. Metrics are exported via OTLP gateway.\n';
+  if (typeof res.setHeader === 'function') {
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  }
+  if (typeof res.status === 'function') {
+    res.status(200).send(message);
+  } else if (typeof res.writeHead === 'function') {
+    res.writeHead(200, {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
+    });
+    res.end(message);
+  } else if (typeof res.end === 'function') {
+    res.end(message);
+  }
+}
+
 export default metricsMiddleware;
+

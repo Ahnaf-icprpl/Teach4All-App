@@ -1,4 +1,5 @@
 import { toUuid, toUserId } from './dbCore.js';
+import { enforceRateLimit } from './rateLimiter.js';
 
 // In-memory registry of active background chat tasks
 const tasks = new Map();
@@ -198,44 +199,80 @@ export function failChatTask(conversationId, error) {
 /**
  * HTTP handler for GET /api/chat/status
  */
-export function handleChatStatusRequest(req, res) {
-  const conversationId = req.query.conversationId || req.query.id;
+export async function handleChatStatusRequest(req, res, serverEnv = {}) {
+  if (!(await enforceRateLimit(req, res, '/api/chat/status', serverEnv))) {
+    return;
+  }
+
+  const parsedUrl = req.url ? new URL(req.url, 'http://localhost') : null;
+  const conversationId = req.query?.conversationId || req.query?.id || parsedUrl?.searchParams.get('conversationId') || parsedUrl?.searchParams.get('id');
   if (!conversationId) {
-    res.status(400).json({ error: { message: 'conversationId query parameter is required' } });
+    if (typeof res.status === 'function') {
+      res.status(400).json({ error: { message: 'conversationId query parameter is required' } });
+    } else {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: 'conversationId query parameter is required' } }));
+    }
     return;
   }
 
   const task = getChatTask(conversationId);
   if (!task) {
-    res.status(200).json({ active: false, status: 'none' });
+    if (typeof res.status === 'function') {
+      res.status(200).json({ active: false, status: 'none' });
+    } else {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ active: false, status: 'none' }));
+    }
     return;
   }
 
   // Verify ownership
   if (req.userId && task.userId && req.userId !== task.userId) {
-    res.status(403).json({ error: { message: 'Unauthorized task access' } });
+    if (typeof res.status === 'function') {
+      res.status(403).json({ error: { message: 'Unauthorized task access' } });
+    } else {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: 'Unauthorized task access' } }));
+    }
     return;
   }
 
   const isActive = task.status === 'processing' || task.status === 'building';
-  res.status(200).json({
+  const payload = {
     active: isActive,
     status: task.status,
     type: task.type,
     startedAt: task.startedAt,
     assistantMessageId: task.assistantMessageId,
     contentPreview: task.accumulatedText ? task.accumulatedText.slice(-300) : '',
-  });
+  };
+  if (typeof res.status === 'function') {
+    res.status(200).json(payload);
+  } else {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(payload));
+  }
 }
 
 /**
  * HTTP handler for GET /api/chat/stream
  * Allows re-attaching or polling the live SSE stream of an active background task.
  */
-export function handleChatStreamRequest(req, res) {
-  const conversationId = req.query.conversationId || req.query.id;
+export async function handleChatStreamRequest(req, res, serverEnv = {}) {
+  if (!(await enforceRateLimit(req, res, '/api/chat/stream', serverEnv))) {
+    return;
+  }
+
+  const parsedUrl = req.url ? new URL(req.url, 'http://localhost') : null;
+  const conversationId = req.query?.conversationId || req.query?.id || parsedUrl?.searchParams.get('conversationId') || parsedUrl?.searchParams.get('id');
   if (!conversationId) {
-    res.status(400).json({ error: { message: 'conversationId query parameter is required' } });
+    if (typeof res.status === 'function') {
+      res.status(400).json({ error: { message: 'conversationId query parameter is required' } });
+    } else {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: 'conversationId query parameter is required' } }));
+    }
     return;
   }
 
