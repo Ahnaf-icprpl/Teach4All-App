@@ -181,11 +181,18 @@ function Composer() {
     maxlength: MAX_INPUT,
     'aria-label': () => t('chat_composer_aria'),
     value: () => draft.val,
-    oninput: event => setDraft(event.target.value),
+    oninput: event => {
+      setDraft(event.target.value);
+      autoResize();
+    },
     onpaste: handlePaste,
     onkeydown: event => {
-      if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
-        if (!window.matchMedia('(pointer: coarse)').matches) {
+      if (event.key === 'Enter') {
+        if (event.shiftKey) {
+          requestAnimationFrame(autoResize);
+          return;
+        }
+        if (!event.isComposing) {
           event.preventDefault();
           sendMessage();
         }
