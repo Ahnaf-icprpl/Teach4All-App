@@ -208,7 +208,7 @@ export async function handleCompletedToolCalls({
 
     if (execResult.success && execResult.quiz) {
       const cardMarker = formatQuizCardMarker(execResult.quiz);
-      if (!res.writableEnded && res.writable) {
+      if (!res.writableEnded && res.writable !== false) {
         res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: cardMarker } }] })}\n\n`);
       }
       if (typeof broadcast === 'function') broadcast(cardMarker);
@@ -220,7 +220,7 @@ export async function handleCompletedToolCalls({
         ? `Interactive quiz **${execResult.quiz.title}** (${count} questions) is ready! Click **Start Quiz** above to begin practicing.`
         : `Kuis interaktif **${execResult.quiz.title}** (${count} pertanyaan) berhasil dibuat dan siap dikerjakan! Klik tombol **Mulai Kuis** di atas untuk mulai berlatih.`;
 
-      if (!res.writableEnded && res.writable) {
+      if (!res.writableEnded && res.writable !== false) {
         res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: messageText } }] })}\n\n`);
       }
       if (typeof broadcast === 'function') broadcast(messageText);

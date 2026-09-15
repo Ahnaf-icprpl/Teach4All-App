@@ -2,7 +2,7 @@
   .workspace { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--bg); }
   .chat-stage { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; overflow-y: auto; padding: 0 42px; }
   .welcome { text-align: center; margin-top: clamp(38px, 7.7vh, 92px); flex-shrink: 0; }
-  .welcome-symbol { display: inline-flex; align-items: center; justify-content: center; width: 59px; height: 59px; border-radius: 19px; background: var(--off-white); border: 0; color: var(--gold-amber); position: relative; transform: rotate(-5deg); box-shadow: var(--shadow); margin-bottom: 22px; }
+  .welcome-symbol { display: inline-flex; align-items: center; justify-content: center; width: 59px; height: 59px; border-radius: 19px; background: var(--off-white); border: 0; color: #875500; position: relative; transform: rotate(-5deg); box-shadow: var(--shadow); margin-bottom: 22px; }
   .welcome-symbol .icon { width: 35px; height: 35px; transform: rotate(5deg); stroke-width: 1.45; }
   .symbol-dot { position: absolute; width: 10px; height: 10px; border-radius: 50%; background: var(--terracotta); border: 0; right: -3px; top: -2px; }
   .welcome h1 { font-size: clamp(35px, 3.5vw, 49px); font-weight: 450; line-height: 1.2; letter-spacing: -2px; color: var(--near-black); }
@@ -36,10 +36,10 @@
   .suggestion-card:hover { transform: translateY(-3px); background: var(--off-white); }
   .suggestion-icon { display: inline-flex; width: 29px; height: 29px; align-items: center; justify-content: center; border-radius: 8px; margin-bottom: 15px; }
   .suggestion-icon .icon { height: 17px; width: 17px; }
-  .amber { background: #FDF3DB; color: var(--gold-amber); }
+  .amber { background: #FDF3DB; color: #875500; }
   .blue { background: #E5ECF2; color: var(--slate-navy); }
   .purple { background: #F4ECE7; color: var(--terracotta); }
-  .green { background: var(--soft-beige); color: var(--slate-gray); }
+  .green { background: #E6F4EA; color: #1E6B37; }
   .suggestion-title { font-size: 13.5px; font-weight: 550; letter-spacing: -.05px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; color: var(--near-black); }
   .suggestion-detail { font-size: 11.5px; color: var(--medium-gray); margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   .suggestion-arrow { position: absolute; right: 12px; top: 20px; height: 13px; width: 13px; color: var(--terracotta); opacity: 0; transform: translateX(-4px); transition: opacity .15s, transform .15s; }
@@ -161,7 +161,7 @@
     gap: 5px;
     padding: 2px 9px;
     background: rgba(212, 161, 45, 0.12);
-    color: var(--gold-amber);
+    color: #875500;
     border-radius: 9999px;
     font-size: 11px;
     font-weight: 600;
@@ -176,7 +176,7 @@
     gap: 7px;
     margin-top: 4px;
     padding: 8px 16px;
-    background: var(--gold-amber);
+    background: #945E00;
     color: #ffffff;
     border: 0;
     border-radius: 9px;
@@ -186,11 +186,11 @@
     align-self: flex-start;
     transition: background 0.15s, transform 0.15s;
   }
-  .chat-material-read-btn:hover { background: #b88b24; transform: translateY(-1px); }
+  .chat-material-read-btn:hover { background: #7D4F00; transform: translateY(-1px); }
   .chat-material-read-btn .icon { width: 14px; height: 14px; fill: currentColor; }
   .message-error .message-text { color: var(--terracotta); background: rgba(159, 81, 58, 0.08); padding: 12px 16px; border-radius: 12px; border: 0; }
   .assistant-label { display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 12px; margin-bottom: 13px; color: var(--near-black); }
-  .assistant-mark { display: inline-flex; align-items: center; justify-content: center; width: 29px; height: 29px; border-radius: 9px; background: var(--gold-amber); color: var(--off-white); }
+  .assistant-mark { display: inline-flex; align-items: center; justify-content: center; width: 29px; height: 29px; border-radius: 9px; background: #945E00; color: var(--off-white); }
   .assistant-mark .icon { width: 21px; height: 21px; }
   .demo-label { font-size: 9px; font-weight: 400; color: var(--medium-gray); padding: 1px 6px; border: 0; border-radius: 4px; }
   .error-label { color: var(--terracotta); background: rgba(159, 81, 58, 0.08); }
@@ -215,12 +215,13 @@
   .has-messages .composer-wrap { margin-top: 10px; width: calc(100% - 48px); max-width: 800px; }
   .has-messages .workspace-footer { padding-top: 14px; padding-bottom: 17px; }
   [data-theme="dark"] .composer { border-color: var(--line); background: var(--surface); }
-  [data-theme="dark"] .welcome-symbol { background: var(--surface); }
+  [data-theme="dark"] .welcome-symbol { background: var(--surface); color: var(--gold-amber); }
   [data-theme="dark"] .welcome h1 { color: var(--text); }
   [data-theme="dark"] .welcome-description { color: var(--muted); }
   [data-theme="dark"] .composer textarea { color: var(--text); }
   [data-theme="dark"] .message-user .message-text { background: var(--surface); color: var(--text); }
   [data-theme="dark"] .assistant-label, [data-theme="dark"] .message-text { color: var(--text); }
+  [data-theme="dark"] .assistant-mark { background: #F5C860; color: #151D26; }
   [data-theme="dark"] .typing-dot { background: var(--accent); }
   [data-theme="dark"] .send-button:disabled { background: var(--slate-navy); color: var(--muted); }
   [data-theme="dark"] .suggestions-label { color: var(--text); }
@@ -228,14 +229,34 @@
   [data-theme="dark"] .suggestion-card:hover { background: var(--surface); }
   [data-theme="dark"] .suggestion-title { color: var(--text); }
   [data-theme="dark"] .suggestion-detail { color: var(--muted); }
+  [data-theme="dark"] .suggestion-arrow { color: var(--accent); }
+  [data-theme="dark"] .amber { background: rgba(212, 161, 45, 0.2); color: #F5C860; }
+  [data-theme="dark"] .blue { background: rgba(79, 142, 224, 0.2); color: #82B4F5; }
+  [data-theme="dark"] .purple { background: rgba(216, 123, 100, 0.2); color: #E89E8A; }
+  [data-theme="dark"] .green { background: rgba(52, 211, 153, 0.2); color: #6EE7B7; }
+  [data-theme="dark"] .add-button { color: var(--muted); }
+  [data-theme="dark"] .add-button:hover { color: var(--text); background: var(--hover); }
+  [data-theme="dark"] .search-toggle-button { color: var(--muted); }
+  [data-theme="dark"] .search-toggle-button:hover:not(:disabled) { color: var(--text); background: var(--hover); }
+  [data-theme="dark"] .search-toggle-button.is-active { color: var(--accent); background: var(--accent-soft); }
+  [data-theme="dark"] .copy-button { color: var(--muted); }
+  [data-theme="dark"] .copy-button:hover { color: var(--text); background: var(--hover); }
   [data-theme="dark"] .inline-code { background: rgba(255, 255, 255, 0.09); color: var(--text); }
   [data-theme="dark"] .markdown-blockquote { background: rgba(255, 255, 255, 0.03); color: var(--muted); }
   [data-theme="dark"] .markdown-table th { background: rgba(255, 255, 255, 0.05); }
   [data-theme="dark"] .markdown-link { color: var(--accent); }
   [data-theme="dark"] .chat-quiz-card { background: var(--surface); border-color: var(--line); }
+  [data-theme="dark"] .chat-quiz-badge { background: rgba(216, 123, 100, 0.18); color: #E89E8A; }
   [data-theme="dark"] .chat-quiz-title { color: var(--text); }
   [data-theme="dark"] .chat-material-card { background: var(--surface); border-color: var(--line); }
+  [data-theme="dark"] .chat-material-badge { background: rgba(212, 161, 45, 0.18); color: #F5C860; }
+  [data-theme="dark"] .chat-material-read-btn { background: #D4A12D; color: #151D26; }
+  [data-theme="dark"] .chat-material-read-btn:hover { background: #E5B440; }
   [data-theme="dark"] .chat-material-title { color: var(--text); }
+  [data-theme="dark"] .searching-web-indicator { background: rgba(216, 123, 100, 0.15); border-color: rgba(216, 123, 100, 0.3); color: var(--muted); }
+  [data-theme="dark"] .searching-web-indicator .icon { color: var(--accent); }
+  [data-theme="dark"] .building-quiz-indicator { background: rgba(79, 142, 224, 0.15); border-color: rgba(79, 142, 224, 0.3); }
+  [data-theme="dark"] .building-quiz-indicator .icon { color: #82B4F5; }
 }
 
 @layer responsive {

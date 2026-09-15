@@ -59,11 +59,11 @@ export function abortActiveGeneration() {
     } catch {}
     activeChatAbortController = null;
   }
-  if (activeGeneratingChatId) {
-    const genChatId = activeGeneratingChatId;
+  const targetChatId = activeGeneratingChatId || activeId.val;
+  if (targetChatId) {
     activeGeneratingChatId = null;
     chats.val = chats.val.map(c => {
-      if (c.id === genChatId) {
+      if (c.id === targetChatId) {
         return {
           ...c,
           messages: c.messages.filter(m => m.role !== 'assistant' || (m.text && m.text.trim().length > 0)),

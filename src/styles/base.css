@@ -65,6 +65,10 @@
     --hover: #2D394580;
     --danger: #D87B64;
     --shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+    --slate-gray: #CFC7BC;
+    --soft-beige: #2D3945;
+    --gold-amber: #F5C860;
+    --medium-gray: #CFC7BC;
     color-scheme: dark;
   }
 
@@ -124,13 +128,21 @@
   .storage-warning button { text-decoration: underline; margin-left: auto; }
   .dev-notice-wrapper { position: sticky; top: 0; z-index: 45; display: flex; justify-content: center; padding: 8px 16px 0; pointer-events: none; background: transparent; }
   .dev-notice-popup { pointer-events: auto; display: flex; align-items: center; gap: 8px; padding: 5px 12px 5px 10px; border-radius: 9999px; background: var(--surface); border: 1px solid rgba(212, 161, 45, 0.45); box-shadow: 0 4px 18px rgba(34, 46, 60, 0.08); font-size: 11px; line-height: 1.4; color: var(--text); max-width: min(720px, calc(100vw - 32px)); backdrop-filter: blur(8px); }
-  .dev-notice-icon-box { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: rgba(212, 161, 45, 0.18); color: var(--gold-amber); flex-shrink: 0; }
+  .dev-notice-icon-box { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: rgba(212, 161, 45, 0.18); color: #875500; flex-shrink: 0; }
   .dev-notice-icon-box .icon { width: 12px; height: 12px; }
   .dev-notice-badge { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 2px 6px; border-radius: 4px; background: var(--gold-amber); color: #1D1C1D; flex-shrink: 0; }
   .dev-notice-text { flex: 1; min-width: 0; font-weight: 500; color: var(--text); }
   .dev-notice-close { width: 22px; height: 22px; border-radius: 50%; color: var(--muted); flex-shrink: 0; padding: 0; display: inline-flex; align-items: center; justify-content: center; transition: background .15s, color .15s; }
   .dev-notice-close:hover { background: var(--hover); color: var(--text); }
   .dev-notice-close .icon { width: 12px; height: 12px; }
+  [data-theme="dark"] .icon-button { color: var(--slate-gray); }
+  [data-theme="dark"] .icon-button:hover { color: var(--text); background: var(--hover); }
+  [data-theme="dark"] .dev-notice-icon-box { background: rgba(212, 161, 45, 0.25); color: #F5C860; }
+  [data-theme="dark"] .dev-notice-badge { background: #F5C860; color: #151D26; }
+  [data-theme="dark"] .connection-badge { background: var(--hover); color: var(--muted); }
+  [data-theme="dark"] .connection-badge .icon { color: var(--accent); }
+  [data-theme="dark"] .offline-badge { background: var(--danger); color: #151D26; }
+  [data-theme="dark"] .offline-badge .icon { color: #151D26; }
 }
 
 @layer responsive {

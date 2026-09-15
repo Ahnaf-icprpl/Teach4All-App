@@ -34,7 +34,7 @@ export async function handleMaterialsRequest(req, res, env = {}) {
 
   const url = new URL(req.url, 'http://localhost');
   const dbUrl = env.DATABASE_URL || process.env.DATABASE_URL;
-  const userId = req.userId;
+  const userId = req.userId || req.headers?.['x-user-id'] || req.headers?.['x-guest-id'] || url.searchParams.get('userId');
 
   if (!userId) {
     res.writeHead(400, { 'Content-Type': 'application/json' });

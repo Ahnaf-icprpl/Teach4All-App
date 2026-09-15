@@ -31,7 +31,7 @@ export async function handleConversationsRequest(req, res, serverEnv = {}) {
   const clientIp = getClientIp(req);
   const parsedUrl = new URL(req.url || '/', 'http://localhost');
   const databaseUrl = serverEnv.DATABASE_URL || process.env.DATABASE_URL;
-  const effectiveUserId = req.userId;
+  const effectiveUserId = req.userId || req.headers?.['x-user-id'] || req.headers?.['x-guest-id'] || parsedUrl.searchParams.get('userId');
 
   if (!effectiveUserId) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -130,7 +130,7 @@ export async function handleMessagesRequest(req, res, serverEnv = {}) {
 
   const parsedUrl = new URL(req.url || '/', 'http://localhost');
   const databaseUrl = serverEnv.DATABASE_URL || process.env.DATABASE_URL;
-  const effectiveUserId = req.userId;
+  const effectiveUserId = req.userId || req.headers?.['x-user-id'] || req.headers?.['x-guest-id'] || parsedUrl.searchParams.get('userId');
 
   if (!effectiveUserId) {
     res.writeHead(400, { 'Content-Type': 'application/json' });

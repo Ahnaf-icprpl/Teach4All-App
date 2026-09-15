@@ -83,7 +83,7 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
   }
 
   const { messages, conversationId } = parsed;
-  const effectiveUserId = req.userId;
+  const effectiveUserId = req.userId || req.headers?.['x-user-id'] || req.headers?.['x-guest-id'] || parsed?.userId;
 
   if (!effectiveUserId) {
     res.writeHead(400, { 'Content-Type': 'application/json' });

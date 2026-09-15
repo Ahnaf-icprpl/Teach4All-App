@@ -84,7 +84,36 @@ export async function createQuiz(quiz, questions = [], { databaseUrl } = {}) {
     ? questions
     : (Array.isArray(quiz?.questions) ? quiz.questions : []);
   const pool = getPool(databaseUrl || quiz?.databaseUrl);
-  if (!pool) return null;
+  if (!pool) {
+    const fallbackId = quiz.id || crypto.randomUUID();
+    return {
+      id: fallbackId,
+      user_id: quiz.userId || null,
+      conversation_id: quiz.conversationId || null,
+      title: quiz.title,
+      slug: quiz.slug || null,
+      category: quiz.category || 'Umum',
+      summary: quiz.summary || '',
+      difficulty: quiz.difficulty || 'medium',
+      icon: quiz.icon || 'bulb',
+      color: quiz.color || 'blue',
+      prompt: quiz.prompt || '',
+      is_published: quiz.isPublished ?? true,
+      is_solved: Boolean(quiz.isSolved ?? quiz.is_solved ?? false),
+      questions: qList.map((q, idx) => ({
+        id: crypto.randomUUID(),
+        quiz_id: fallbackId,
+        question_number: q.questionNumber || q.question_number || idx + 1,
+        question_text: q.questionText || q.question_text,
+        question_type: q.questionType || q.question_type || 'multiple_choice',
+        options: q.options || [],
+        correct_answer: q.correctAnswer ?? q.correct_answer ?? 0,
+        explanation: q.explanation || '',
+        points: q.points ?? 10,
+        is_solved: Boolean(q.isSolved ?? q.is_solved ?? false),
+      })),
+    };
+  }
   const client = await pool.connect();
   try {
     const dbUrl = databaseUrl || quiz?.databaseUrl;
@@ -246,7 +275,36 @@ export async function createMaterial(material, sections = [], { databaseUrl } = 
     ? sections
     : (Array.isArray(material?.sections) ? material.sections : []);
   const pool = getPool(databaseUrl || material?.databaseUrl);
-  if (!pool) return null;
+  if (!pool) {
+    const fallbackId = material.id || crypto.randomUUID();
+    const isSolvedVal = Boolean(material.isSolved ?? material.is_solved ?? material.isCompleted ?? material.is_completed ?? false);
+    return {
+      id: fallbackId,
+      user_id: material.userId || null,
+      conversation_id: material.conversationId || null,
+      title: material.title,
+      slug: material.slug || null,
+      category: material.category || 'Umum',
+      summary: material.summary || '',
+      estimated_read_time: material.estimatedReadTime || material.estimated_read_time || 5,
+      difficulty: material.difficulty || 'beginner',
+      icon: material.icon || 'book',
+      color: material.color || 'green',
+      prompt: material.prompt || '',
+      is_published: material.isPublished ?? true,
+      is_solved: isSolvedVal,
+      is_completed: isSolvedVal,
+      sections: sList.map((s, idx) => ({
+        id: crypto.randomUUID(),
+        material_id: fallbackId,
+        section_number: s.sectionNumber || s.section_number || idx + 1,
+        title: s.title,
+        content: s.content,
+        read_time_minutes: s.readTimeMinutes || s.read_time_minutes || 2,
+        is_completed: Boolean(s.isCompleted ?? s.is_completed ?? false),
+      })),
+    };
+  }
   const client = await pool.connect();
   try {
     const dbUrl = databaseUrl || material?.databaseUrl;

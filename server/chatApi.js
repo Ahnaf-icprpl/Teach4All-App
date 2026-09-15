@@ -115,7 +115,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
     webSearch,
   } = parsed;
 
-  const effectiveUserId = req.userId;
+  const effectiveUserId = req.userId || req.headers?.['x-user-id'] || req.headers?.['x-guest-id'] || parsed?.userId;
 
   if (!effectiveUserId) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -294,7 +294,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
             const delta = json.choices?.[0]?.delta?.content || '';
             if (delta) {
               accumulatedText += delta;
-              if (!res.writableEnded && res.writable) {
+              if (!res.writableEnded && res.writable !== false) {
                 res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: delta } }] })}\n\n`);
               }
               appendTaskText(conversationId, delta, res);
@@ -325,7 +325,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
             if (delta) {
               accumulatedText += delta;
               if (!isQuizRequest && !isMaterialRequest) {
-                if (!res.writableEnded && res.writable) {
+                if (!res.writableEnded && res.writable !== false) {
                   res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: delta } }] })}\n\n`);
                 }
                 appendTaskText(conversationId, delta, res);
@@ -353,7 +353,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
 
       if (hasMaterialToolCall || isMaterialRequest) {
         updateChatTask(conversationId, { status: 'building' });
-        if (!res.writableEnded && res.writable) {
+        if (!res.writableEnded && res.writable !== false) {
           res.write('data: {"type":"quiz_status","status":"building"}\n\n');
         }
         const toolMap = hasMaterialToolCall ? accumulatedToolCalls : {
@@ -381,7 +381,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
         });
       } else if (hasQuizToolCall || isQuizRequest || Object.keys(accumulatedToolCalls).length > 0) {
         updateChatTask(conversationId, { status: 'building' });
-        if (!res.writableEnded && res.writable) {
+        if (!res.writableEnded && res.writable !== false) {
           res.write('data: {"type":"quiz_status","status":"building"}\n\n');
         }
         const toolMap = (hasQuizToolCall || Object.keys(accumulatedToolCalls).length > 0) ? accumulatedToolCalls : {
@@ -412,7 +412,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
       if (citations.length > 0 && !accumulatedText.includes('http')) {
         const sourcesBlock = '\n\n**Sumber:**\n' + citations.map(c => `- [${c.title || c.url}](${c.url})`).join('\n');
         accumulatedText += sourcesBlock;
-        if (!res.writableEnded && res.writable) {
+        if (!res.writableEnded && res.writable !== false) {
           res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: sourcesBlock } }] })}\n\n`);
         }
         appendTaskText(conversationId, sourcesBlock, res);
@@ -420,7 +420,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
       }
 
       completeChatTask(conversationId, accumulatedText);
-      if (!res.writableEnded && res.writable) {
+      if (!res.writableEnded && res.writable !== false) {
         res.write('data: [DONE]\n\n');
       }
 
@@ -428,7 +428,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
     } finally {
       clearTimeout(serverTimeoutId);
       completeChatTask(conversationId, accumulatedText);
-      if (!res.writableEnded && res.writable) {
+      if (!res.writableEnded && res.writable !== false) {
         try { res.end(); } catch {}
       }
     }
