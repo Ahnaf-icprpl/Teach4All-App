@@ -100,8 +100,7 @@ function listenWithPortFallback(expressApp, startPort, maxTries = 10) {
       server.on('listening', () => {
         console.log(`\n  🚀 Teach4All Full-Stack Dev Server ready:`);
         console.log(`  ➜  Local:   http://localhost:${port}/`);
-        console.log(`  ➜  Network: http://${host}:${port}/`);
-        console.log(`  ➜  Metrics: http://localhost:${port}/metrics\n`);
+        console.log(`  ➜  Network: http://${host}:${port}/\n`);
         resolvePromise({ server, port });
       });
       server.on('error', (err) => {
