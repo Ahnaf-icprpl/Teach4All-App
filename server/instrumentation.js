@@ -2,7 +2,9 @@ import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
+import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
 import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
+import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 
 // Safely load environment file if running standalone
@@ -129,6 +131,16 @@ export function initOpenTelemetry(env = process.env) {
       exportIntervalMillis: 15000,
     });
 
+    const logExporter = new OTLPLogExporter({
+      url: `${config.endpoint}/v1/logs`,
+      headers: config.headers,
+    });
+
+    const logRecordProcessor = new BatchLogRecordProcessor(logExporter, {
+      scheduledDelayMillis: 2000,
+      maxExportBatchSize: 512,
+    });
+
     const resource = resourceFromAttributes({
       'service.name': config.serviceName,
       'deployment.environment': config.environment,
@@ -142,6 +154,7 @@ export function initOpenTelemetry(env = process.env) {
       serviceName: config.serviceName,
       traceExporter,
       metricReader,
+      logRecordProcessors: [logRecordProcessor],
       instrumentations: [
         getNodeAutoInstrumentations({
           '@opentelemetry/instrumentation-fs': { enabled: false },

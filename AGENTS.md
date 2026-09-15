@@ -27,8 +27,7 @@ These rules apply to all application code files (`.js`, `.mjs`, `.cjs`, `.css`) 
   - `vanjs-core` (frontend)
   - `pg` (PostgreSQL driver)
   - `express` (server-side HTTP framework)
-  - `prom-client` (Prometheus metrics client)
-  - `@opentelemetry/api`, `@opentelemetry/sdk-node`, `@opentelemetry/auto-instrumentations-node`, `@opentelemetry/exporter-trace-otlp-http`, `@opentelemetry/exporter-metrics-otlp-http` (OpenTelemetry instrumentation)
+  - `@opentelemetry/api`, `@opentelemetry/api-logs`, `@opentelemetry/sdk-node`, `@opentelemetry/sdk-logs`, `@opentelemetry/auto-instrumentations-node`, `@opentelemetry/exporter-trace-otlp-http`, `@opentelemetry/exporter-metrics-otlp-http`, `@opentelemetry/exporter-logs-otlp-http` (OpenTelemetry instrumentation)
 - Development tools (Vite, Playwright) are devDependencies only.
 
 ## Offline-First Design

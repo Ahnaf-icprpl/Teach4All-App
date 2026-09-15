@@ -7,7 +7,8 @@ import { uiRouter } from './routes/uiRoutes.js';
 import { clerkHandshakeMiddleware, authContextMiddleware } from './authApi.js';
 import { enforceRateLimit } from './rateLimiter.js';
 import { load404HtmlTemplate } from './ssr.js';
-import { metricsMiddleware, handleMetricsRequest } from './metrics.js';
+import { metricsMiddleware } from './metrics.js';
+import { logger, requestLoggerMiddleware } from './logger.js';
 
 export function createApp(serverEnv = {}) {
   const app = express();
@@ -16,9 +17,9 @@ export function createApp(serverEnv = {}) {
   app.disable('x-powered-by');
   app.set('query parser', 'simple');
 
-  // 1.5 Prometheus Metrics Collection & Scrape Endpoint
+  // 1.5 OTLP Telemetry (Metrics & Request Logging with Trace Correlation)
   app.use(metricsMiddleware);
-  app.get('/metrics', (req, res) => handleMetricsRequest(req, res, serverEnv));
+  app.use(requestLoggerMiddleware);
 
   // 2. Request Body Parsing & Auth Handshake Interception
   app.use(clerkHandshakeMiddleware);
@@ -56,7 +57,6 @@ export function createApp(serverEnv = {}) {
       cleanUrl !== '/' &&
       cleanUrl !== '/index.html' &&
       cleanUrl !== '/404.html' &&
-      cleanUrl !== '/metrics' &&
       !cleanUrl.startsWith('/@') &&
       !cleanUrl.startsWith('/src/') &&
       !cleanUrl.startsWith('/node_modules/') &&
@@ -76,6 +76,11 @@ export function createApp(serverEnv = {}) {
 
   // 6. Global Centralized Error Boundary
   app.use((err, req, res, next) => {
+    logger.error(`Unhandled server error on ${req.method} ${req.originalUrl || req.url}`, err, {
+      'http.route': req.originalUrl || req.url,
+      'http.method': req.method,
+      'error.status': err.status || 500,
+    });
     if (!res.headersSent) {
       if (typeof res.status === 'function') {
         res.status(err.status || 500).json({ error: { message: err.message || 'Internal server error.' } });

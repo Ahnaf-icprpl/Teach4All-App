@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import pg from 'pg';
+import { logger } from './logger.js';
 
 const { Pool } = pg;
 
@@ -174,7 +175,7 @@ export async function syncUserToDb(user = {}, databaseUrl = process.env.DATABASE
     ]);
     return res.rows[0] || null;
   } catch (err) {
-    console.error('Failed to sync user to database:', err.message);
+    logger.error('Failed to sync user to database', err, { userId });
     return null;
   }
 }

@@ -116,10 +116,10 @@ CLERK_SECRET_KEY=sk_test_your_secret_key
 CLERK_FRONTEND_API=https://your-app.clerk.accounts.dev
 CLERK_ACCOUNTS_URL=https://your-app.accounts.dev
 
-# Prometheus Metrics Scrape Authentication (Optional)
-PROMETHEUS_METRICS_TOKEN=your_secure_metrics_bearer_token
-METRICS_USER=prometheus
-METRICS_PASSWORD=your_secure_metrics_password
+# OpenTelemetry Observability (Grafana Cloud: Traces, OTLP Metrics & Loki Logs) (Optional)
+GRAFANA_OTEL_API_KEY=glc_your_grafana_cloud_otel_token_here
+OTEL_SERVICE_NAME=teach4all
+LOG_LEVEL=info
 ```
 
 ### Configuration Parameters
@@ -135,11 +135,9 @@ METRICS_PASSWORD=your_secure_metrics_password
 | `CLERK_SECRET_KEY` | Yes | Clerk secret key (`sk_test_...` or `sk_live_...`) |
 | `CLERK_FRONTEND_API` | No | Custom domain or frontend API host (auto-derived if omitted) |
 | `CLERK_ACCOUNTS_URL` | No | Clerk hosted accounts URL for `/sign-in` and `/user` profiles |
-| `PROMETHEUS_METRICS_TOKEN` | No | Secret Bearer token for authenticating Prometheus `/metrics` scrapes |
-| `METRICS_USER` | No | HTTP Basic Auth username for `/metrics` scraping |
-| `METRICS_PASSWORD` | No | HTTP Basic Auth password for `/metrics` scraping |
-| `GRAFANA_OTEL_API_KEY` | No | Grafana Cloud OpenTelemetry Access Policy Token (`glc_...`) for automatic OTLP export |
+| `GRAFANA_OTEL_API_KEY` | No | Grafana Cloud OpenTelemetry Access Policy Token (`glc_...`) for automatic OTLP export (Traces, Metrics, and Loki Logs) |
 | `OTEL_SERVICE_NAME` | No | OpenTelemetry service name (defaults to `teach4all`) |
+| `LOG_LEVEL` | No | Logging level: `debug`, `info`, `warn`, `error` (defaults to `info` in prod, `debug` in dev) |
 
 ---
 
@@ -240,7 +238,7 @@ docker compose up -d
 Every application code file (`.js`, `.mjs`, `.cjs`, `.css`) across `src/`, `server/`, `prompts/`, and `scripts/` must strictly remain under **500 lines of code**. This is continuously enforced by `npm run check`. When files expand, logic is modularized into dedicated single-responsibility utilities.
 
 ### 3. Zero External Runtime CDNs
-All assets are bundled locally into `dist/`. No external fonts (uses system font stack), stylesheets, or analytics trackers are fetched at runtime. The only production runtime dependencies are `vanjs-core`, `express`, and `pg`.
+All assets are bundled locally into `dist/`. No external fonts (uses system font stack), stylesheets, or analytics trackers are fetched at runtime. The only production runtime dependencies are `vanjs-core`, `express`, `pg`, and OpenTelemetry instrumentation SDKs.
 
 ### 4. Resilient Auth & State Machine
 - **Clerk Verifier**: Verifies tokens using standard RSA-SHA256 cryptography over JWKS without external heavyweight SDKs.
