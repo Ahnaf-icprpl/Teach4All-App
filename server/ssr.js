@@ -1,6 +1,6 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { getUiTextsFromDb, getChatPromptsFromDb, getGoogleTagIdFromDb } from './uiTextsApi.js';
+import { getUiDataFromDb, getUiTextsFromDb, getChatPromptsFromDb, getGoogleTagIdFromDb } from './uiTextsApi.js';
 import { getClerkConfig, authenticateClerkRequest } from './clerkVerifier.js';
 
 let cachedGoogleTagId = null;
@@ -416,8 +416,7 @@ export async function handleSsrRequest(req, res, env = {}) {
   }
 
   try {
-    const texts = await getUiTextsFromDb(dbUrl);
-    const prompts = await getChatPromptsFromDb(dbUrl);
+    const { texts, prompts } = await getUiDataFromDb(dbUrl);
     if (texts?.google_tag_id) {
       cachedGoogleTagId = texts.google_tag_id;
     }

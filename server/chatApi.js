@@ -19,6 +19,16 @@ import { buildWebSearchPlugin, buildWebSearchTool, isWebSearchRequested } from '
 import { buildQuizTool, accumulateToolCalls, handleCompletedToolCalls } from './quizTool.js';
 import { buildMaterialTool, handleCompletedMaterialToolCalls, MATERIAL_TOOL_NAME } from './materialTool.js';
 import { createChatMiddleware, dispatchApi } from './chatMiddleware.js';
+import {
+  createChatTask,
+  getChatTask,
+  updateChatTask,
+  addTaskListener,
+  removeTaskListener,
+  appendTaskText,
+  completeChatTask,
+  failChatTask,
+} from './chatTasks.js';
 
 export const DEFAULT_MODEL = 'google/gemini-2.5-flash-lite';
 export const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
@@ -154,9 +164,19 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
 
   const formattedMessages = formatMessages(messages);
   const controller = new AbortController();
+  const serverTimeoutId = setTimeout(() => controller.abort(), 15 * 60 * 1000);
+
+  createChatTask({
+    conversationId,
+    userId: effectiveUserId,
+    assistantMessageId,
+    promptText,
+    type: isQuizRequest ? 'quiz' : (isMaterialRequest ? 'material' : 'chat'),
+  });
+
+  // Client disconnect MUST NOT abort background execution
   req.on('close', () => {
-    controller.abort();
-    streamWriter.abort().catch(() => {});
+    removeTaskListener(conversationId, res);
   });
 
   try {
@@ -235,6 +255,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
     if (typeof res.flushHeaders === 'function') {
       res.flushHeaders();
     }
+    addTaskListener(conversationId, res);
 
     const reader = upstream.body.getReader();
     const decoder = new TextDecoder();
@@ -273,7 +294,10 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
             const delta = json.choices?.[0]?.delta?.content || '';
             if (delta) {
               accumulatedText += delta;
-              res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: delta } }] })}\n\n`);
+              if (!res.writableEnded && res.writable) {
+                res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: delta } }] })}\n\n`);
+              }
+              appendTaskText(conversationId, delta, res);
               streamWriter.writeChunk(delta);
             }
             const toolCallsDelta = json.choices?.[0]?.delta?.tool_calls;
@@ -301,7 +325,10 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
             if (delta) {
               accumulatedText += delta;
               if (!isQuizRequest && !isMaterialRequest) {
-                res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: delta } }] })}\n\n`);
+                if (!res.writableEnded && res.writable) {
+                  res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: delta } }] })}\n\n`);
+                }
+                appendTaskText(conversationId, delta, res);
                 streamWriter.writeChunk(delta);
               }
             }
@@ -324,93 +351,57 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
       const hasMaterialToolCall = Object.values(accumulatedToolCalls).some(c => c.function?.name === MATERIAL_TOOL_NAME);
       const hasQuizToolCall = Object.values(accumulatedToolCalls).some(c => c.function?.name === 'create_quiz');
 
-      if (hasMaterialToolCall) {
-        if (!res.writableEnded) {
+      if (hasMaterialToolCall || isMaterialRequest) {
+        updateChatTask(conversationId, { status: 'building' });
+        if (!res.writableEnded && res.writable) {
           res.write('data: {"type":"quiz_status","status":"building"}\n\n');
         }
+        const toolMap = hasMaterialToolCall ? accumulatedToolCalls : {
+          0: { id: `call_mat_${Date.now()}`, type: 'function', function: { name: MATERIAL_TOOL_NAME, arguments: '{}' } },
+        };
+        const msgs = hasMaterialToolCall ? formattedMessages : [
+          ...formattedMessages,
+          { role: 'assistant', content: accumulatedText || 'Attempted to respond in text.' },
+          { role: 'user', content: 'CRITICAL INSTRUCTION: You must NOT answer in plain conversational text or apologies. You MUST call the create_material function immediately with arguments: title, category, summary, difficulty, icon, color, and sections array (with section_number, title, content).' },
+        ];
         await handleCompletedMaterialToolCalls({
-          toolCallsMap: accumulatedToolCalls,
+          toolCallsMap: toolMap,
           serverEnv,
           userId: effectiveUserId,
           clientIp,
           conversationId,
-          formattedMessages,
+          formattedMessages: msgs,
           streamWriter,
           res,
+          broadcast: (chunk) => appendTaskText(conversationId, chunk, res),
           controller,
           apiKey,
           model,
           providerRouting,
         });
-      } else if (hasQuizToolCall || Object.keys(accumulatedToolCalls).length > 0) {
-        if (!res.writableEnded) {
+      } else if (hasQuizToolCall || isQuizRequest || Object.keys(accumulatedToolCalls).length > 0) {
+        updateChatTask(conversationId, { status: 'building' });
+        if (!res.writableEnded && res.writable) {
           res.write('data: {"type":"quiz_status","status":"building"}\n\n');
         }
+        const toolMap = (hasQuizToolCall || Object.keys(accumulatedToolCalls).length > 0) ? accumulatedToolCalls : {
+          0: { id: `call_quiz_${Date.now()}`, type: 'function', function: { name: 'create_quiz', arguments: '{}' } },
+        };
+        const msgs = (hasQuizToolCall || Object.keys(accumulatedToolCalls).length > 0) ? formattedMessages : [
+          ...formattedMessages,
+          { role: 'assistant', content: accumulatedText || 'Attempted to respond in text.' },
+          { role: 'user', content: 'CRITICAL INSTRUCTION: You must NOT answer in plain conversational text or apologies. You MUST call the create_quiz function immediately with arguments: title, category, summary, difficulty, icon, color, and questions.' },
+        ];
         await handleCompletedToolCalls({
-          toolCallsMap: accumulatedToolCalls,
+          toolCallsMap: toolMap,
           serverEnv,
           userId: effectiveUserId,
           clientIp,
           conversationId,
-          formattedMessages,
+          formattedMessages: msgs,
           streamWriter,
           res,
-          controller,
-          apiKey,
-          model,
-          providerRouting,
-        });
-      } else if (isMaterialRequest && apiKey && !controller.signal.aborted) {
-        if (!res.writableEnded) {
-          res.write('data: {"type":"quiz_status","status":"building"}\n\n');
-        }
-        await handleCompletedMaterialToolCalls({
-          toolCallsMap: {
-            0: {
-              id: `call_mat_${Date.now()}_init`,
-              type: 'function',
-              function: { name: MATERIAL_TOOL_NAME, arguments: '{}' },
-            },
-          },
-          serverEnv,
-          userId: effectiveUserId,
-          clientIp,
-          conversationId,
-          formattedMessages: [
-            ...formattedMessages,
-            { role: 'assistant', content: accumulatedText || 'Attempted to respond in text.' },
-            { role: 'user', content: 'CRITICAL INSTRUCTION: You must NOT answer in plain conversational text or apologies. You MUST call the create_material function immediately with arguments: title, category, summary, difficulty, icon, color, and sections array (with section_number, title, content).' },
-          ],
-          streamWriter,
-          res,
-          controller,
-          apiKey,
-          model,
-          providerRouting,
-        });
-      } else if (isQuizRequest && apiKey && !controller.signal.aborted) {
-        if (!res.writableEnded) {
-          res.write('data: {"type":"quiz_status","status":"building"}\n\n');
-        }
-        await handleCompletedToolCalls({
-          toolCallsMap: {
-            0: {
-              id: `call_quiz_${Date.now()}_init`,
-              type: 'function',
-              function: { name: 'create_quiz', arguments: '{}' },
-            },
-          },
-          serverEnv,
-          userId: effectiveUserId,
-          clientIp,
-          conversationId,
-          formattedMessages: [
-            ...formattedMessages,
-            { role: 'assistant', content: accumulatedText || 'Attempted to respond in text.' },
-            { role: 'user', content: 'CRITICAL INSTRUCTION: You must NOT answer in plain conversational text or apologies. You MUST call the create_quiz function immediately with arguments: title, category, summary, difficulty, icon, color, and questions.' },
-          ],
-          streamWriter,
-          res,
+          broadcast: (chunk) => appendTaskText(conversationId, chunk, res),
           controller,
           apiKey,
           model,
@@ -421,19 +412,28 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
       if (citations.length > 0 && !accumulatedText.includes('http')) {
         const sourcesBlock = '\n\n**Sumber:**\n' + citations.map(c => `- [${c.title || c.url}](${c.url})`).join('\n');
         accumulatedText += sourcesBlock;
-        res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: sourcesBlock } }] })}\n\n`);
+        if (!res.writableEnded && res.writable) {
+          res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: sourcesBlock } }] })}\n\n`);
+        }
+        appendTaskText(conversationId, sourcesBlock, res);
         streamWriter.writeChunk(sourcesBlock);
       }
 
-      if (!res.writableEnded) {
+      completeChatTask(conversationId, accumulatedText);
+      if (!res.writableEnded && res.writable) {
         res.write('data: [DONE]\n\n');
       }
 
       await streamWriter.finish();
     } finally {
-      res.end();
+      clearTimeout(serverTimeoutId);
+      completeChatTask(conversationId, accumulatedText);
+      if (!res.writableEnded && res.writable) {
+        try { res.end(); } catch {}
+      }
     }
   } catch (err) {
+    failChatTask(conversationId, err);
     if (controller.signal.aborted) {
       return;
     }

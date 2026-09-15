@@ -72,10 +72,9 @@ export default defineConfig(({ mode }) => {
 
           try {
             if (dbUrl) {
-              const { getUiTextsFromDb, getChatPromptsFromDb } = await import('./server/uiTextsApi.js');
+              const { getUiDataFromDb } = await import('./server/uiTextsApi.js');
               const { renderSsrHtml } = await import('./server/ssr.js');
-              const texts = await getUiTextsFromDb(dbUrl);
-              const prompts = await getChatPromptsFromDb(dbUrl);
+              const { texts, prompts } = await getUiDataFromDb(dbUrl);
               if (texts && Object.keys(texts).length && prompts && prompts.length) {
                 let user = null;
                 if (ctx?.req) {

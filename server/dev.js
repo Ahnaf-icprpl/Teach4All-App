@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { readFileSync, existsSync } from 'node:fs';
 import { createServer as createViteServer } from 'vite';
 import { createApp } from './app.js';
-import { getUiTextsFromDb, getChatPromptsFromDb } from './uiTextsApi.js';
+import { getUiDataFromDb, getUiTextsFromDb, getChatPromptsFromDb } from './uiTextsApi.js';
 import { authenticateClerkRequest } from './clerkVerifier.js';
 import { renderSsrHtml, load404HtmlTemplate } from './ssr.js';
 
@@ -48,8 +48,9 @@ app.get(['/', '/index.html'], async (req, res, next) => {
 
     if (dbUrl) {
       try {
-        texts = await getUiTextsFromDb(dbUrl);
-        prompts = await getChatPromptsFromDb(dbUrl);
+        const uiData = await getUiDataFromDb(dbUrl);
+        texts = uiData.texts;
+        prompts = uiData.prompts;
       } catch (err) {
         console.warn('[Dev Server] Failed loading UI texts/prompts from DB:', err.message);
       }

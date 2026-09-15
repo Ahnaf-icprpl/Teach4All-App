@@ -11,6 +11,7 @@ import {
   chats, activeId, historyLoading, historyLoadingMore, hasMoreChats,
   messagesLoading, search, searchResults, searchLoading,
   onSearchInput, loadMessagesForChat, loadChatHistory, loadMoreChats,
+  abortActiveTaskSubscription, checkAndAttachActiveTask,
 } from './chatStore.js';
 import { createReply } from './replies.js';
 import { isDevEnv } from './env.js';
@@ -21,6 +22,7 @@ export {
   chats, activeId, historyLoading, historyLoadingMore, hasMoreChats,
   messagesLoading, search, searchResults, searchLoading,
   onSearchInput, loadMessagesForChat, loadChatHistory, loadMoreChats,
+  abortActiveTaskSubscription, checkAndAttachActiveTask,
 };
 
 let storage;
@@ -50,6 +52,7 @@ let activeChatAbortController = null;
 let activeGeneratingChatId = null;
 
 export function abortActiveGeneration() {
+  abortActiveTaskSubscription();
   if (activeChatAbortController) {
     try {
       activeChatAbortController.abort();
@@ -178,6 +181,13 @@ export async function selectChat(id) {
   if (chat && !chat.messagesLoaded) {
     await loadMessagesForChat(id);
   }
+
+  checkAndAttachActiveTask(id, {
+    setLoading: v => { loading.val = v; },
+    setBuildingQuiz: v => { buildingQuiz.val = v; },
+    setSearchingWeb: v => { searchingWeb.val = v; },
+    isSending: activeGeneratingChatId === id,
+  }).catch(() => {});
 }
 
 export function sendMessage() {
@@ -432,5 +442,14 @@ if (typeof window !== 'undefined') {
       saveTheme(storage, dbTheme);
     }
   }).catch(() => {});
-  loadChatHistory().catch(() => {});
+  loadChatHistory().then(() => {
+    if (activeId.val) {
+      checkAndAttachActiveTask(activeId.val, {
+        setLoading: v => { loading.val = v; },
+        setBuildingQuiz: v => { buildingQuiz.val = v; },
+        setSearchingWeb: v => { searchingWeb.val = v; },
+        isSending: activeGeneratingChatId === activeId.val,
+      }).catch(() => {});
+    }
+  }).catch(() => {});
 }

@@ -91,7 +91,10 @@ export async function saveMessage({
       INSERT INTO messages (id, conversation_id, user_id, role, content, created_at)
       VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
       ON CONFLICT (id) DO UPDATE
-      SET content = EXCLUDED.content;
+      SET conversation_id = EXCLUDED.conversation_id,
+          user_id = EXCLUDED.user_id,
+          role = EXCLUDED.role,
+          content = EXCLUDED.content;
     `;
     try {
       const pool = getPool(databaseUrl);

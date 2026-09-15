@@ -1,6 +1,7 @@
 import van from 'vanjs-core';
 import {
   fetchConversations, fetchMessages, getEffectiveUserId,
+  fetchChatStatus, subscribeToChatStream,
 } from './router.js';
 import { t } from './uiTexts.js';
 
@@ -161,9 +162,109 @@ export function resetChatStore() {
   hasMoreChats.val = true;
 }
 
+let activeTaskAbortController = null;
+let activeTaskChatId = null;
+
+export function abortActiveTaskSubscription() {
+  if (activeTaskAbortController) {
+    try { activeTaskAbortController.abort(); } catch {}
+    activeTaskAbortController = null;
+  }
+  activeTaskChatId = null;
+}
+
+export async function checkAndAttachActiveTask(chatId, {
+  setLoading,
+  setBuildingQuiz,
+  setSearchingWeb,
+  isSending = false,
+} = {}) {
+  if (!chatId || isSending) return;
+  try {
+    const status = await fetchChatStatus(chatId);
+    if (!status || !status.active || activeId.val !== chatId) return;
+
+    if (typeof setLoading === 'function') setLoading(true);
+    if (typeof setBuildingQuiz === 'function') {
+      setBuildingQuiz(status.status === 'building' || status.type === 'quiz' || status.type === 'material');
+    }
+    if (typeof setSearchingWeb === 'function') {
+      setSearchingWeb(status.status === 'processing' && status.type === 'chat');
+    }
+
+    abortActiveTaskSubscription();
+    const abortController = new AbortController();
+    activeTaskAbortController = abortController;
+    activeTaskChatId = chatId;
+
+    // Ensure an assistant message placeholder exists to receive streamed text
+    chats.val = chats.val.map(c => {
+      if (c.id === chatId) {
+        const msgs = [...(c.messages || [])];
+        const last = msgs[msgs.length - 1];
+        if (!last || last.role !== 'assistant') {
+          msgs.push({
+            id: status.assistantMessageId || `ast_${Date.now()}`,
+            role: 'assistant',
+            text: status.contentPreview || '',
+          });
+        }
+        return { ...c, messages: msgs };
+      }
+      return c;
+    });
+
+    await subscribeToChatStream(chatId, (fullText) => {
+      if (activeTaskChatId !== chatId) return;
+      if (typeof setBuildingQuiz === 'function') setBuildingQuiz(false);
+      if (typeof setSearchingWeb === 'function') setSearchingWeb(false);
+      chats.val = chats.val.map(c => {
+        if (c.id === chatId) {
+          const msgs = (c.messages || []).map((m, idx) =>
+            idx === c.messages.length - 1 && m.role === 'assistant' ? { ...m, text: fullText } : m
+          );
+          return { ...c, messages: msgs };
+        }
+        return c;
+      });
+      requestAnimationFrame(() => {
+        const pane = document.getElementById('messages');
+        if (pane && activeId.val === chatId) pane.scrollTop = pane.scrollHeight;
+      });
+    }, {
+      signal: abortController.signal,
+      onStatus: (st) => {
+        if (activeTaskChatId !== chatId) return;
+        if (st === 'building_quiz' && typeof setBuildingQuiz === 'function') {
+          setBuildingQuiz(true);
+          if (typeof setSearchingWeb === 'function') setSearchingWeb(false);
+        }
+      },
+    });
+
+    if (activeTaskChatId === chatId) {
+      activeTaskAbortController = null;
+      activeTaskChatId = null;
+      if (typeof setLoading === 'function') setLoading(false);
+      if (typeof setBuildingQuiz === 'function') setBuildingQuiz(false);
+      if (typeof setSearchingWeb === 'function') setSearchingWeb(false);
+      await loadMessagesForChat(chatId);
+    }
+  } catch (err) {
+    if (activeTaskChatId === chatId) {
+      activeTaskAbortController = null;
+      activeTaskChatId = null;
+      if (typeof setLoading === 'function') setLoading(false);
+      if (typeof setBuildingQuiz === 'function') setBuildingQuiz(false);
+      if (typeof setSearchingWeb === 'function') setSearchingWeb(false);
+    }
+  }
+}
+
 if (typeof window !== 'undefined') {
   window.addEventListener('teach4all:auth-changed', () => {
     resetChatStore();
     loadChatHistory().catch(() => {});
   });
 }
+

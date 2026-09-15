@@ -1,9 +1,11 @@
 export const DEFAULT_MODEL = 'google/gemini-2.5-flash-lite';
 export const CHAT_API_URL = './api/chat';
+export const CHAT_STATUS_API_URL = './api/chat/status';
+export const CHAT_STREAM_API_URL = './api/chat/stream';
 export const TITLE_API_URL = './api/title';
 export const CONVERSATIONS_API_URL = './api/conversations';
 export const MESSAGES_API_URL = './api/messages';
-export const TIMEOUT_MS = 35000;
+export const TIMEOUT_MS = 15 * 60 * 1000;
 import { cleanTitle, generateOfflineTitle, formatTitleMessages, TITLE_SYSTEM_PROMPT } from './prompts/titlePrompt.js';
 import { getEffectiveUserId, getAuthHeaders } from './auth.js';
 export { cleanTitle, generateOfflineTitle, formatTitleMessages, TITLE_SYSTEM_PROMPT, getEffectiveUserId, getAuthHeaders };
@@ -16,6 +18,98 @@ export function isPlaceholderKey(key) {
   if (!key || typeof key !== 'string') return true;
   const trimmed = key.trim();
   return !trimmed || trimmed.toLowerCase().includes('placeholder');
+}
+
+export async function readSseStream(responseBody, onChunk, options = {}, initialText = '') {
+  const reader = responseBody.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let fullText = initialText;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || !trimmed.startsWith('data: ')) continue;
+      const data = trimmed.slice(6);
+      if (data === '[DONE]') break;
+
+      try {
+        const json = JSON.parse(data);
+        if (json.type === 'quiz_status' && json.status === 'building') {
+          if (typeof options.onStatus === 'function') {
+            options.onStatus('building_quiz');
+          }
+          continue;
+        }
+        const delta = json.choices?.[0]?.delta?.content || '';
+        if (delta) {
+          fullText += delta;
+          if (typeof onChunk === 'function') {
+            onChunk(fullText);
+          }
+        }
+      } catch {}
+    }
+  }
+
+  if (buffer.trim().startsWith('data: ')) {
+    const data = buffer.trim().slice(6);
+    if (data !== '[DONE]') {
+      try {
+        const json = JSON.parse(data);
+        const delta = json.choices?.[0]?.delta?.content || '';
+        if (delta) {
+          fullText += delta;
+          if (typeof onChunk === 'function') {
+            onChunk(fullText);
+          }
+        }
+      } catch {}
+    }
+  }
+
+  return fullText;
+}
+
+export async function fetchChatStatus(conversationId) {
+  if (!conversationId) return { active: false, status: 'none' };
+  try {
+    const res = await fetch(`${CHAT_STATUS_API_URL}?conversationId=${encodeURIComponent(conversationId)}`, {
+      headers: { ...getAuthHeaders() },
+    });
+    if (!res.ok) return { active: false, status: 'none' };
+    return await res.json();
+  } catch {
+    return { active: false, status: 'none' };
+  }
+}
+
+export async function subscribeToChatStream(conversationId, onChunk, options = {}) {
+  if (!conversationId) return '';
+  const controller = new AbortController();
+  if (options.signal) {
+    if (options.signal.aborted) controller.abort();
+    else options.signal.addEventListener('abort', () => controller.abort(), { once: true });
+  }
+
+  try {
+    const res = await fetch(`${CHAT_STREAM_API_URL}?conversationId=${encodeURIComponent(conversationId)}`, {
+      headers: { ...getAuthHeaders() },
+      signal: controller.signal,
+    });
+    if (!res.ok || !res.body) return '';
+    return await readSseStream(res.body, onChunk, options, options.initialText || '');
+  } catch (err) {
+    if (err.name === 'AbortError') return '';
+    throw err;
+  }
 }
 
 export async function sendMessage(messages, onChunk, options = {}) {
@@ -76,63 +170,7 @@ export async function sendMessage(messages, onChunk, options = {}) {
       throw new Error('No response received from server.');
     }
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let fullText = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || !trimmed.startsWith('data: ')) continue;
-        const data = trimmed.slice(6);
-        if (data === '[DONE]') continue;
-
-        try {
-          const json = JSON.parse(data);
-          if (json.type === 'quiz_status' && json.status === 'building') {
-            if (typeof options.onStatus === 'function') {
-              options.onStatus('building_quiz');
-            }
-            continue;
-          }
-          const delta = json.choices?.[0]?.delta?.content || '';
-          if (delta) {
-            fullText += delta;
-            if (typeof onChunk === 'function') {
-              onChunk(fullText);
-            }
-          }
-        } catch {
-          // Ignore partial or unparseable JSON
-        }
-      }
-    }
-
-    if (buffer.trim().startsWith('data: ')) {
-      const data = buffer.trim().slice(6);
-      if (data !== '[DONE]') {
-        try {
-          const json = JSON.parse(data);
-          const delta = json.choices?.[0]?.delta?.content || '';
-          if (delta) {
-            fullText += delta;
-            if (typeof onChunk === 'function') {
-              onChunk(fullText);
-            }
-          }
-        } catch {}
-      }
-    }
-
-    return fullText;
+    return await readSseStream(response.body, onChunk, options);
   } catch (error) {
     clearTimeout(timeoutId);
     if (error.name === 'AbortError') {

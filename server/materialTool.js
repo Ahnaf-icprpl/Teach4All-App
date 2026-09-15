@@ -162,6 +162,7 @@ export async function handleCompletedMaterialToolCalls({
   formattedMessages = [],
   streamWriter,
   res,
+  broadcast,
   controller,
   apiKey,
   model,
@@ -185,9 +186,10 @@ export async function handleCompletedMaterialToolCalls({
 
     if (execResult.success && execResult.material) {
       const cardMarker = formatMaterialCardMarker(execResult.material);
-      if (!res.writableEnded) {
+      if (!res.writableEnded && res.writable) {
         res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: cardMarker } }] })}\n\n`);
       }
+      if (typeof broadcast === 'function') broadcast(cardMarker);
       if (streamWriter) streamWriter.writeChunk(cardMarker);
 
       const count = execResult.material.sections?.length || execResult.sectionCount || 1;
@@ -197,9 +199,10 @@ export async function handleCompletedMaterialToolCalls({
         ? `Learning material **${execResult.material.title}** (${count} sections, ~${readTime} min read) is ready! Click **Open Material** above to start learning.`
         : `Materi pembelajaran **${execResult.material.title}** (${count} bagian, ~${readTime} mnt baca) berhasil dibuat dan siap dipelajari! Klik tombol **Buka Materi** di atas untuk mulai membaca modul ini.`;
 
-      if (!res.writableEnded) {
+      if (!res.writableEnded && res.writable) {
         res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: messageText } }] })}\n\n`);
       }
+      if (typeof broadcast === 'function') broadcast(messageText);
       if (streamWriter) streamWriter.writeChunk(messageText);
       return;
     }

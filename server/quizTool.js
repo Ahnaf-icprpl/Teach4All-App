@@ -184,6 +184,7 @@ export async function handleCompletedToolCalls({
   formattedMessages = [],
   streamWriter,
   res,
+  broadcast,
   controller,
   apiKey,
   model,
@@ -207,9 +208,10 @@ export async function handleCompletedToolCalls({
 
     if (execResult.success && execResult.quiz) {
       const cardMarker = formatQuizCardMarker(execResult.quiz);
-      if (!res.writableEnded) {
+      if (!res.writableEnded && res.writable) {
         res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: cardMarker } }] })}\n\n`);
       }
+      if (typeof broadcast === 'function') broadcast(cardMarker);
       if (streamWriter) streamWriter.writeChunk(cardMarker);
 
       const count = execResult.quiz.questions?.length || execResult.questionCount || 20;
@@ -218,9 +220,10 @@ export async function handleCompletedToolCalls({
         ? `Interactive quiz **${execResult.quiz.title}** (${count} questions) is ready! Click **Start Quiz** above to begin practicing.`
         : `Kuis interaktif **${execResult.quiz.title}** (${count} pertanyaan) berhasil dibuat dan siap dikerjakan! Klik tombol **Mulai Kuis** di atas untuk mulai berlatih.`;
 
-      if (!res.writableEnded) {
+      if (!res.writableEnded && res.writable) {
         res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: messageText } }] })}\n\n`);
       }
+      if (typeof broadcast === 'function') broadcast(messageText);
       if (streamWriter) streamWriter.writeChunk(messageText);
       return;
     }
