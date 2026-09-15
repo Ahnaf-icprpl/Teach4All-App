@@ -331,10 +331,16 @@ export function renderSsrHtml({ htmlTemplate, texts, prompts = [], serverEnv = {
   `;
 
   let rendered = htmlTemplate;
-  rendered = rendered.replace('</head>', `  ${initialDataScript}
-  </head>`);
-  rendered = rendered.replace('<body>', `<body>
-${ssrBody}`);
+  rendered = rendered.replace(/<script id="initial-ui-data">[\s\S]*?<\/script>\s*/gi, '');
+  rendered = rendered.replace(/<script[^>]*>\s*window\.__INITIAL_UI_DATA__[\s\S]*?<\/script>\s*/gi, '');
+  rendered = rendered.replace('</head>', `  ${initialDataScript}\n  </head>`);
+
+  const existingAppMatch = /<div id="app" class="app"[\s\S]*?<\/main>\s*<\/div>/i;
+  if (existingAppMatch.test(rendered)) {
+    rendered = rendered.replace(existingAppMatch, ssrBody.trim());
+  } else {
+    rendered = rendered.replace('<body>', `<body>\n${ssrBody}`);
+  }
 
   const activeTagId = isProd ? (texts.google_tag_id || googleTagId || cachedGoogleTagId) : null;
   if (activeTagId) {

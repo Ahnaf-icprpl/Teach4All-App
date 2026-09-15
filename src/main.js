@@ -72,6 +72,7 @@ function Toast() {
 
 function App() {
   return div({
+    id: 'app',
     class: () => [
       'app',
       sidebarOpen.val ? 'sidebar-is-open' : '',
@@ -109,11 +110,15 @@ async function initApp() {
   initStudyModules();
 
   const mount = () => {
-    const existingApp = document.getElementById('app');
-    if (existingApp) {
-      existingApp.replaceWith(App());
+    const existingApps = document.querySelectorAll('#app');
+    const newApp = App();
+    if (existingApps.length > 0) {
+      existingApps[0].replaceWith(newApp);
+      for (let i = 1; i < existingApps.length; i++) {
+        existingApps[i].remove();
+      }
     } else {
-      van.add(document.body, App());
+      van.add(document.body, newApp);
     }
     registerOffline();
     focusComposer();

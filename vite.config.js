@@ -70,6 +70,10 @@ export default defineConfig(({ mode }) => {
             return html;
           }
 
+          if (!isProdBuild && !ctx?.req) {
+            return html;
+          }
+
           try {
             if (dbUrl) {
               const { getUiDataFromDb } = await import('./server/uiTextsApi.js');
