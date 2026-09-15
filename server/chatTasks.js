@@ -228,7 +228,7 @@ export async function handleChatStatusRequest(req, res, serverEnv = {}) {
   }
 
   // Verify ownership
-  if (req.userId && task.userId && req.userId !== task.userId) {
+  if (task.userId && (!req.userId || req.userId !== task.userId)) {
     if (typeof res.status === 'function') {
       res.status(403).json({ error: { message: 'Unauthorized task access' } });
     } else {
@@ -289,7 +289,7 @@ export async function handleChatStreamRequest(req, res, serverEnv = {}) {
     return;
   }
 
-  if (req.userId && task.userId && req.userId !== task.userId) {
+  if (task.userId && (!req.userId || req.userId !== task.userId)) {
     res.status(403).json({ error: { message: 'Unauthorized task stream access' } });
     return;
   }

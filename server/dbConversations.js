@@ -23,9 +23,13 @@ export async function saveConversation({
 
   // Sync to in-memory store
   const existing = inMemoryConversations.get(convId);
+  const effectiveUserId = (existing?.user_id?.startsWith('guest_') && !uId?.startsWith('guest_'))
+    ? uId
+    : (existing?.user_id || uId);
+
   inMemoryConversations.set(convId, {
     id: convId,
-    user_id: uId,
+    user_id: effectiveUserId,
     title: cleanTitle,
     created_at: existing?.created_at || new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -37,20 +41,31 @@ export async function saveConversation({
       INSERT INTO conversations (id, user_id, title, updated_at)
       VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
       ON CONFLICT (id) DO UPDATE
-      SET title = EXCLUDED.title, updated_at = CURRENT_TIMESTAMP;
+      SET title = EXCLUDED.title,
+          updated_at = CURRENT_TIMESTAMP,
+          user_id = CASE
+            WHEN conversations.user_id LIKE 'guest_%' AND EXCLUDED.user_id NOT LIKE 'guest_%' THEN EXCLUDED.user_id
+            ELSE conversations.user_id
+          END;
     `;
     try {
       const pool = getPool(databaseUrl);
       if (pool) {
         await pool.query(sql, [convId, uId, cleanTitle]);
+        if (uId && !uId.startsWith('guest_')) {
+          await pool.query(
+            "UPDATE messages SET user_id = $1 WHERE conversation_id = $2 AND user_id LIKE 'guest_%';",
+            [uId, convId]
+          );
+        }
       }
-      return { id: convId, userId: uId };
+      return { id: convId, userId: effectiveUserId };
     } catch (err) {
-      return { id: convId, userId: uId, error: err.message };
+      return { id: convId, userId: effectiveUserId, error: err.message };
     }
   }
 
-  return { id: convId, userId: uId };
+  return { id: convId, userId: effectiveUserId };
 }
 
 /**
@@ -318,23 +333,30 @@ export async function updateConversationTitle({
 /**
  * Delete a specific message by ID from database and memory.
  */
-export async function deleteMessage(id, { databaseUrl = process.env.DATABASE_URL } = {}) {
+export async function deleteMessage(id, { userId, databaseUrl = process.env.DATABASE_URL } = {}) {
   const msgId = toUuid(id);
+  const uId = toUserId(userId);
   if (!msgId) return { success: false };
 
   for (const convMap of inMemoryMessages.values()) {
     if (convMap.has(msgId)) {
-      convMap.delete(msgId);
+      const msg = convMap.get(msgId);
+      if (!uId || msg.user_id === uId) {
+        convMap.delete(msgId);
+      }
       break;
     }
   }
 
   if (databaseUrl) {
     try {
-      const sql = `DELETE FROM messages WHERE id = $1;`;
+      const sql = uId
+        ? `DELETE FROM messages WHERE id = $1 AND user_id = $2;`
+        : `DELETE FROM messages WHERE id = $1;`;
+      const params = uId ? [msgId, uId] : [msgId];
       const pool = getPool(databaseUrl);
       if (pool) {
-        await pool.query(sql, [msgId]);
+        await pool.query(sql, params);
       }
     } catch {
       // ignore

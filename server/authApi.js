@@ -287,6 +287,7 @@ export function authContextMiddleware(serverEnv = {}) {
         req.user = auth.user;
         req.userId = auth.user.id;
         req.isGuest = false;
+        req.auth = { authenticated: true, user: auth.user, userId: auth.user.id, isGuest: false };
       } else {
         const cookies = parseCookies(req.headers?.cookie || '');
         let guestId = cookies.teach4all_guest_id || req.headers?.['x-guest-id'] || req.headers?.['x-guest-session'];
@@ -303,6 +304,7 @@ export function authContextMiddleware(serverEnv = {}) {
         req.user = null;
         req.userId = guestId;
         req.isGuest = true;
+        req.auth = { authenticated: false, user: null, userId: guestId, isGuest: true };
 
         if (dbUrl) {
           await ensureUserExists(guestId, dbUrl);
@@ -313,6 +315,7 @@ export function authContextMiddleware(serverEnv = {}) {
       req.user = null;
       req.userId = fallbackGuestId;
       req.isGuest = true;
+      req.auth = { authenticated: false, user: null, userId: fallbackGuestId, isGuest: true };
       if (dbUrl) {
         try {
           await ensureUserExists(fallbackGuestId, dbUrl);

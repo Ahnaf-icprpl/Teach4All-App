@@ -399,7 +399,7 @@ export async function authenticateClerkRequest(req, serverEnv = {}) {
             }
           }
 
-          if (payload.sub && dbUrl) {
+          if (jwtErr?.signatureVerified && payload.sub && dbUrl) {
             const dbUser = await getUserFromDb(payload.sub, dbUrl);
             if (dbUser) {
               return { authenticated: true, user: dbUser, sessionId: payload.sid || null };

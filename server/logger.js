@@ -165,7 +165,7 @@ export function requestLoggerMiddleware(req, res, next) {
     }
 
     const clientIp = req.headers?.['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1';
-    const userId = req.auth?.userId || req.headers?.['x-user-id'] || 'anonymous';
+    const userId = req.userId || req.user?.id || req.auth?.userId || req.headers?.['x-user-id'] || 'anonymous';
 
     const meta = {
       'http.method': req.method,
