@@ -26,8 +26,9 @@ export {
 /**
  * Handles GET /api/whoami and GET /api/auth/whoami.
  */
-export async function handleWhoamiRequest(req, res, serverEnv = {}) {
-  if (!(await enforceRateLimit(req, res, '/api/whoami', serverEnv))) {
+export async function handleWhoamiRequest(req, res, serverEnv = {}, endpoint = null) {
+  const targetEndpoint = endpoint || (req?.baseUrl ? `${req.baseUrl}${req.path}` : (req?.originalUrl || req?.url || '/api/whoami').split('?')[0]);
+  if (!(await enforceRateLimit(req, res, targetEndpoint, serverEnv))) {
     return;
   }
 
@@ -55,11 +56,12 @@ export async function handleWhoamiRequest(req, res, serverEnv = {}) {
 }
 
 /**
- * Handles POST /api/auth/login.
+ * Handles POST /api/auth/login, /api/auth/signup, /api/auth/sync.
  * Accepts { token, sessionId } and sets secure cookie.
  */
-export async function handleLoginRequest(req, res, serverEnv = {}) {
-  if (!(await enforceRateLimit(req, res, '/api/auth/login', serverEnv))) {
+export async function handleLoginRequest(req, res, serverEnv = {}, endpoint = null) {
+  const targetEndpoint = endpoint || (req?.baseUrl ? `${req.baseUrl}${req.path}` : (req?.originalUrl || req?.url || '/api/auth/login').split('?')[0]);
+  if (!(await enforceRateLimit(req, res, targetEndpoint, serverEnv))) {
     return;
   }
 
@@ -186,7 +188,11 @@ export async function handleLogoutRequest(req, res, serverEnv = {}) {
  * Handles GET /api/auth/config.
  * Returns public Clerk configuration for the client.
  */
-export function handleAuthConfigRequest(req, res, serverEnv = {}) {
+export async function handleAuthConfigRequest(req, res, serverEnv = {}) {
+  if (!(await enforceRateLimit(req, res, '/api/auth/config', serverEnv))) {
+    return;
+  }
+
   const config = getClerkConfig(serverEnv);
   const frontend = (config.frontendApi || '').replace(/\/$/, '');
   const accounts = (config.accountsUrl || '').replace(/\/$/, '');

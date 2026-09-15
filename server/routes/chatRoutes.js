@@ -6,8 +6,8 @@ import { handleChatStatusRequest, handleChatStreamRequest } from '../chatTasks.j
 export function chatRouter(serverEnv) {
   const router = Router();
   router.post('/chat', (req, res) => handleChatRequest(req, res, serverEnv));
-  router.get('/chat/status', (req, res) => handleChatStatusRequest(req, res));
-  router.get('/chat/stream', (req, res) => handleChatStreamRequest(req, res));
+  router.get('/chat/status', (req, res) => handleChatStatusRequest(req, res, serverEnv));
+  router.get('/chat/stream', (req, res) => handleChatStreamRequest(req, res, serverEnv));
   router.post('/title', (req, res) => handleTitleRequest(req, res, serverEnv));
   return router;
 }

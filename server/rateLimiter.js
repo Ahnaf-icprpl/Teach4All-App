@@ -288,11 +288,13 @@ export async function getEndpointConfig(endpoint = '/api/chat', {
  * Returns true if allowed, false if blocked (and responds with 429).
  */
 export async function enforceRateLimit(req, res, endpoint, serverEnv = {}, options = {}) {
+  const resolvedEndpoint = endpoint || (req?.baseUrl ? `${req.baseUrl}${req.path}` : (req?.originalUrl || req?.url || '/').split('?')[0]);
+
   const clientIp = getClientIp(req);
   const userId = options.userId || getClientUserId(req, options.body);
   const databaseUrl = serverEnv.DATABASE_URL || process.env.DATABASE_URL;
 
-  const config = await getEndpointConfig(endpoint, { databaseUrl });
+  const config = await getEndpointConfig(resolvedEndpoint, { databaseUrl });
 
   const limit = serverEnv.RATE_LIMIT !== undefined
     ? serverEnv.RATE_LIMIT
@@ -307,7 +309,7 @@ export async function enforceRateLimit(req, res, endpoint, serverEnv = {}, optio
     : config.windowSeconds;
 
   const rateInfo = await checkRateLimit({
-    endpoint,
+    endpoint: resolvedEndpoint,
     clientIp,
     userId,
     limit,
@@ -345,4 +347,17 @@ export async function enforceRateLimit(req, res, endpoint, serverEnv = {}, optio
   }
 
   return true;
+}
+
+/**
+ * Express middleware for declarative route-level rate limiting.
+ */
+export function rateLimitMiddleware(serverEnv = {}, endpointOverride = null) {
+  return async function rateLimiter(req, res, next) {
+    const targetEndpoint = endpointOverride || (req?.baseUrl ? `${req.baseUrl}${req.path}` : (req?.originalUrl || req?.url || '/').split('?')[0]);
+    const allowed = await enforceRateLimit(req, res, targetEndpoint, serverEnv);
+    if (allowed && typeof next === 'function') {
+      next();
+    }
+  };
 }
