@@ -333,7 +333,13 @@ export function sendMessage() {
 
     const errorMessage = error.message || t('state_send_failed');
 
-    if (errorMessage.toLowerCase().includes('rate limit')) {
+    const isBlocked = errorMessage.toLowerCase().includes('rate limit') ||
+      errorMessage.toLowerCase().includes('tamu') ||
+      errorMessage.toLowerCase().includes('guest') ||
+      errorMessage.toLowerCase().includes('masuk') ||
+      errorMessage.toLowerCase().includes('login');
+
+    if (isBlocked) {
       const updatedChats = chats.val.map(c => {
         if (c.id === chat.id) {
           return {

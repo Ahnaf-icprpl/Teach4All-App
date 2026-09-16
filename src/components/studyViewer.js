@@ -3,17 +3,18 @@ import { icon } from '../icons.js';
 import { startTopicChat, toast } from '../state.js';
 import {
   fetchQuizDetails,
-  fetchMaterialDetails,
   markQuizSolved,
-  markMaterialSolved,
   normalizeQuizQuestion,
-  normalizeMaterialSection,
   shuffleArray,
+  loadLocalQuizProgress,
+  saveLocalQuizProgress,
+  clearLocalQuizProgress,
+  syncQuizProgressToServer,
 } from '../studyModules.js';
 import { t } from '../uiTexts.js';
-import { renderMarkdown } from '../markdown.js';
 import { getAuthHeaders } from '../auth.js';
 import { QuizClueStick, generateLocalClue } from './quizStick.js';
+export { MaterialReader } from './materialReader.js';
 
 const { div, h2, h3, p, span, button } = van.tags;
 
@@ -28,6 +29,11 @@ export function QuizSolver(quizId, { initialClue = false } = {}) {
   const clueText = van.state('');
   const cluesCache = {};
   const currentQNum = van.state(1);
+
+  const localProg = loadLocalQuizProgress(quizId);
+  if (localProg?.userAnswers && typeof localProg.userAnswers === 'object') {
+    userAnswers.val = { ...localProg.userAnswers };
+  }
 
   const fetchClueForQuestion = async (idx = currentIndex.val) => {
     currentQNum.val = idx + 1;
@@ -90,8 +96,34 @@ export function QuizSolver(quizId, { initialClue = false } = {}) {
   fetchQuizDetails(quizId, { shuffle: true }).then(data => {
     quiz.val = data;
     loading.val = false;
-    if (showClueStick.val) {
-      fetchClueForQuestion(0);
+    if (!data) return;
+
+    const questions = Array.isArray(data.questions) ? data.questions : [];
+    const totalQ = questions.length;
+    const serverAnswers = (data.user_answers && typeof data.user_answers === 'object') ? data.user_answers : {};
+    const mergedAnswers = { ...serverAnswers, ...userAnswers.val };
+    userAnswers.val = mergedAnswers;
+
+    let firstUnfinishedIdx = -1;
+    for (let i = 0; i < totalQ; i++) {
+      if (mergedAnswers[i] === undefined || mergedAnswers[i] === null) {
+        firstUnfinishedIdx = i;
+        break;
+      }
+    }
+
+    if (totalQ > 0 && firstUnfinishedIdx === -1) {
+      isCompleted.val = true;
+      currentIndex.val = 0;
+      currentQNum.val = 1;
+    } else {
+      isCompleted.val = false;
+      const targetIdx = firstUnfinishedIdx !== -1 ? firstUnfinishedIdx : 0;
+      currentIndex.val = targetIdx;
+      currentQNum.val = targetIdx + 1;
+      if (showClueStick.val) {
+        fetchClueForQuestion(targetIdx);
+      }
     }
   }).catch(() => {
     loading.val = false;
@@ -127,7 +159,18 @@ export function QuizSolver(quizId, { initialClue = false } = {}) {
     const maxScore = questions.reduce((sum, q) => sum + (q.points || 10), 0);
 
     const finishQuiz = () => {
+      showClueStick.val = false;
       isCompleted.val = true;
+      saveLocalQuizProgress(quizId, {
+        lastQuestionIndex: currentIndex.val,
+        userAnswers: userAnswers.val,
+        isSolved: true,
+      });
+      syncQuizProgressToServer(quizId, {
+        lastQuestionIndex: currentIndex.val,
+        userAnswers: userAnswers.val,
+        isSolved: true,
+      });
       markQuizSolved(quizId, true).then(() => {
         toast(t('dialogs_toast_quiz_solved'));
       });
@@ -151,7 +194,15 @@ export function QuizSolver(quizId, { initialClue = false } = {}) {
               onclick: () => {
                 userAnswers.val = {};
                 currentIndex.val = 0;
+                currentQNum.val = 1;
+                showClueStick.val = false;
                 isCompleted.val = false;
+                clearLocalQuizProgress(quizId);
+                syncQuizProgressToServer(quizId, {
+                  lastQuestionIndex: 0,
+                  userAnswers: {},
+                  isSolved: false,
+                });
                 if (quiz.val && Array.isArray(quiz.val.questions)) {
                   quiz.val = {
                     ...quiz.val,
@@ -209,7 +260,19 @@ export function QuizSolver(quizId, { initialClue = false } = {}) {
               disabled: hasAnswered,
               onclick: () => {
                 if (hasAnswered) return;
-                userAnswers.val = { ...userAnswers.val, [currentIndex.val]: opt.id };
+                const newAnswers = { ...userAnswers.val, [currentIndex.val]: opt.id };
+                // 1st priority: instant client side validation
+                userAnswers.val = newAnswers;
+
+                saveLocalQuizProgress(quizId, {
+                  lastQuestionIndex: currentIndex.val,
+                  userAnswers: newAnswers,
+                });
+
+                syncQuizProgressToServer(quizId, {
+                  lastQuestionIndex: currentIndex.val,
+                  userAnswers: newAnswers,
+                });
               },
             },
             span({ class: 'study-option-key' }, String(optIndex + 1)),
@@ -238,7 +301,15 @@ export function QuizSolver(quizId, { initialClue = false } = {}) {
             const nextIdx = Math.max(0, currentIndex.val - 1);
             currentIndex.val = nextIdx;
             currentQNum.val = nextIdx + 1;
-            if (showClueStick.val) fetchClueForQuestion(nextIdx);
+            showClueStick.val = false;
+            saveLocalQuizProgress(quizId, {
+              lastQuestionIndex: nextIdx,
+              userAnswers: userAnswers.val,
+            });
+            syncQuizProgressToServer(quizId, {
+              lastQuestionIndex: nextIdx,
+              userAnswers: userAnswers.val,
+            });
           },
         }, span(() => t('dialogs_quiz_prev_btn'))),
         currentIndex.val < totalQuestions - 1
@@ -248,89 +319,21 @@ export function QuizSolver(quizId, { initialClue = false } = {}) {
               const nextIdx = Math.min(totalQuestions - 1, currentIndex.val + 1);
               currentIndex.val = nextIdx;
               currentQNum.val = nextIdx + 1;
-              if (showClueStick.val) fetchClueForQuestion(nextIdx);
+              showClueStick.val = false;
+              saveLocalQuizProgress(quizId, {
+                lastQuestionIndex: nextIdx,
+                userAnswers: userAnswers.val,
+              });
+              syncQuizProgressToServer(quizId, {
+                lastQuestionIndex: nextIdx,
+                userAnswers: userAnswers.val,
+              });
             },
           }, span(() => t('dialogs_quiz_next_btn')))
           : button({
             class: 'primary-button',
             onclick: finishQuiz,
           }, icon('check'), span(() => t('dialogs_quiz_finish_btn'))),
-      ),
-    );
-  };
-}
-
-export function MaterialReader(materialId) {
-  const loading = van.state(true);
-  const material = van.state(null);
-  const currentSectionIndex = van.state(0);
-
-  fetchMaterialDetails(materialId).then(data => {
-    material.val = data;
-    loading.val = false;
-  }).catch(() => {
-    loading.val = false;
-  });
-
-  return () => {
-    if (loading.val) {
-      return div({ class: 'study-viewer-loading' }, p(() => t('dialogs_material_loading')));
-    }
-    const mData = material.val;
-    if (!mData) {
-      return div({ class: 'study-viewer-empty' },
-        p(() => t('dialogs_material_not_found')),
-      );
-    }
-
-    const sections = (mData.sections || []).map(normalizeMaterialSection).filter(Boolean);
-    const totalSections = sections.length;
-    const currentSec = sections[currentSectionIndex.val] || {};
-
-    const markFinished = () => {
-      markMaterialSolved(materialId, true).then(() => {
-        toast(t('dialogs_toast_material_solved'));
-      });
-    };
-
-    return div({ class: 'study-viewer-container' },
-      div({ class: 'study-header-nav' },
-        div({ class: 'study-progress-badge' },
-          () => `${t('dialogs_material_section_label')} ${currentSectionIndex.val + 1} ${t('dialogs_quiz_of_label')} ${totalSections}`,
-        ),
-      ),
-      div({ class: 'study-material-card' },
-        div({ class: 'study-material-header' },
-          h2({ class: 'study-material-title' }, currentSec.title || mData.title),
-          span({ class: 'study-material-read-time' },
-            `${currentSec.readTimeMinutes || currentSec.read_time_minutes || 2} ${t('dialogs_meta_read_time_suffix')}`,
-          ),
-        ),
-        div({ class: 'study-material-body' },
-          renderMarkdown(currentSec.content || ''),
-        ),
-      ),
-      div({ class: 'study-footer-nav' },
-        button({
-          class: 'secondary-button',
-          disabled: currentSectionIndex.val === 0,
-          onclick: () => { currentSectionIndex.val = Math.max(0, currentSectionIndex.val - 1); },
-        }, span(() => t('dialogs_material_prev_btn'))),
-        div({ class: 'study-footer-actions' },
-          button({
-            class: 'secondary-button',
-            onclick: markFinished,
-          }, icon('check'), span(() => t('dialogs_material_finish_btn'))),
-          currentSectionIndex.val < totalSections - 1
-            ? button({
-              class: 'primary-button',
-              onclick: () => { currentSectionIndex.val = Math.min(totalSections - 1, currentSectionIndex.val + 1); },
-            }, span(() => t('dialogs_material_next_btn')))
-            : button({
-              class: 'secondary-button',
-              onclick: () => startTopicChat('material', mData.prompt),
-            }, icon('chat'), span(() => t('dialogs_btn_chat'))),
-        ),
       ),
     );
   };

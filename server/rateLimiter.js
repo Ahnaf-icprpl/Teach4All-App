@@ -101,8 +101,11 @@ export function getClientUserId(req, body = null) {
   if (req.user && typeof req.user.id === 'string' && req.user.id.trim()) {
     return req.user.id.trim();
   }
+  if (typeof req.userId === 'string' && req.userId.trim()) {
+    return req.userId.trim();
+  }
   const headers = req.headers || {};
-  const headerUser = headers['x-user-id'] || headers['x-consumer-id'];
+  const headerUser = headers['x-user-id'] || headers['x-consumer-id'] || headers['x-guest-id'];
   if (typeof headerUser === 'string' && headerUser.trim()) {
     return headerUser.trim();
   }
@@ -217,8 +220,9 @@ export async function checkRateLimit({
 }
 
 export function applyRateLimitHeaders(res, rateInfo) {
-  if (!res || !rateInfo) return;
+  if (!res || !rateInfo || res.headersSent) return;
   const set = (key, val) => {
+    if (res.headersSent) return;
     if (typeof res.setHeader === 'function') {
       res.setHeader(key, String(val));
     } else if (res.headers) {
@@ -239,6 +243,29 @@ export function applyRateLimitHeaders(res, rateInfo) {
   }
 }
 
+function sendRateLimitResponse(res, statusCode, headers, payload) {
+  if (res.headersSent) {
+    try { res.end(payload); } catch {}
+    return;
+  }
+  if (typeof res.writeHead === 'function') {
+    res.writeHead(statusCode, headers);
+    res.end(payload);
+    return;
+  }
+  if (typeof res.status === 'function') res.status(statusCode);
+  if (typeof res.setHeader === 'function') {
+    for (const [k, v] of Object.entries(headers)) {
+      res.setHeader(k, String(v));
+    }
+  }
+  if (typeof res.send === 'function') {
+    res.send(payload);
+  } else if (typeof res.end === 'function') {
+    res.end(payload);
+  }
+}
+
 /**
  * Retrieves endpoint configuration policy from PostgreSQL with in-memory caching.
  * Authoritative source: endpoint_rate_limits table.
@@ -253,11 +280,11 @@ export async function getEndpointConfig(endpoint = '/api/chat', {
     return cached.config;
   }
 
-  let config = { rateLimitPerIp: 120, rateLimitPerUser: 60, burstLimit: 25, windowSeconds: 60 };
+  let config = { rateLimitPerIp: 120, rateLimitPerUser: 60, rateLimitPerGuest: 2, burstLimit: 25, windowSeconds: 60 };
   if (databaseUrl) {
     try {
       const rows = await query(
-        `SELECT rate_limit_per_ip, rate_limit_per_user, burst_limit, window_seconds FROM endpoint_rate_limits WHERE endpoint = $1 OR endpoint = '*' ORDER BY (endpoint = '*') ASC LIMIT 1;`,
+        `SELECT rate_limit_per_ip, rate_limit_per_user, rate_limit_per_guest, burst_limit, window_seconds FROM endpoint_rate_limits WHERE endpoint = $1 OR endpoint = '*' ORDER BY (endpoint = '*') ASC LIMIT 1;`,
         [endpoint],
         databaseUrl
       );
@@ -265,6 +292,9 @@ export async function getEndpointConfig(endpoint = '/api/chat', {
         config = {
           rateLimitPerIp: Number(rows[0].rate_limit_per_ip) || 120,
           rateLimitPerUser: Number(rows[0].rate_limit_per_user) || 60,
+          rateLimitPerGuest: rows[0].rate_limit_per_guest !== undefined && rows[0].rate_limit_per_guest !== null
+            ? Number(rows[0].rate_limit_per_guest)
+            : 2,
           burstLimit: Number(rows[0].burst_limit) || 25,
           windowSeconds: Number(rows[0].window_seconds) || 60,
         };
@@ -296,6 +326,56 @@ export async function enforceRateLimit(req, res, endpoint, serverEnv = {}, optio
 
   const config = await getEndpointConfig(resolvedEndpoint, { databaseUrl });
 
+  // 1. Check guest account message limit before requiring login
+  const isGuest = Boolean(req?.isGuest || (typeof userId === 'string' && userId.startsWith('guest_')));
+  if (isGuest && resolvedEndpoint === '/api/chat') {
+    const guestLimit = serverEnv.RATE_LIMIT_PER_GUEST !== undefined
+      ? Number(serverEnv.RATE_LIMIT_PER_GUEST)
+      : (config.rateLimitPerGuest !== undefined ? Number(config.rateLimitPerGuest) : 2);
+
+    if (guestLimit > 0) {
+      let guestMsgCount = 0;
+      if (databaseUrl && userId) {
+        try {
+          const countRows = await query(
+            `SELECT COUNT(*)::int AS count FROM messages WHERE user_id = $1 AND role = 'user';`,
+            [userId],
+            databaseUrl
+          );
+          if (countRows && countRows[0] && countRows[0].count !== undefined) {
+            guestMsgCount = Number(countRows[0].count);
+          }
+        } catch {}
+      }
+      const memKey = `ratelimit:guest:lifetime:${userId}`;
+      const memRec = inMemoryStore.get(memKey);
+      const effectiveGuestCount = Math.max(guestMsgCount, memRec?.count || 0);
+
+      if (effectiveGuestCount >= guestLimit) {
+        const guestMsg = `Batas akun tamu tercapai (maksimal ${guestLimit} pesan). Silakan masuk ke akun Anda untuk melanjutkan percakapan — setelah masuk tetap gratis!`;
+        const payload = JSON.stringify({
+          error: {
+            message: guestMsg,
+            code: 'GUEST_LIMIT_REACHED',
+            requireLogin: true,
+            limit: guestLimit,
+          },
+        });
+        sendRateLimitResponse(res, 429, {
+          'Content-Type': 'application/json',
+          'X-RateLimit-Limit-Guest': String(guestLimit),
+          'X-RateLimit-Remaining-Guest': '0',
+        }, payload);
+        return false;
+      }
+      inMemoryStore.set(memKey, { count: effectiveGuestCount + 1, resetAt: Date.now() + 86400000 });
+      if (typeof res.setHeader === 'function' && !res.headersSent) {
+        res.setHeader('X-RateLimit-Limit-Guest', String(guestLimit));
+        res.setHeader('X-RateLimit-Remaining-Guest', String(Math.max(0, guestLimit - (effectiveGuestCount + 1))));
+      }
+    }
+  }
+
   const limit = serverEnv.RATE_LIMIT !== undefined
     ? serverEnv.RATE_LIMIT
     : (serverEnv.RATE_LIMIT_PER_IP !== undefined ? serverEnv.RATE_LIMIT_PER_IP : config.rateLimitPerIp);
@@ -320,29 +400,15 @@ export async function enforceRateLimit(req, res, endpoint, serverEnv = {}, optio
   applyRateLimitHeaders(res, rateInfo);
 
   if (!rateInfo.allowed) {
-    if (typeof res.status === 'function') {
-      res.status(429);
-    }
-    if (typeof res.setHeader === 'function') {
-      res.setHeader('Retry-After', String(rateInfo.resetSeconds));
-      res.setHeader('Content-Type', 'application/json');
-    }
-    if (typeof res.writeHead === 'function') {
-      res.writeHead(429, {
-        'Content-Type': 'application/json',
-        'Retry-After': String(rateInfo.resetSeconds),
-      });
-    }
     const payload = JSON.stringify({
       error: {
         message: rateInfo.message || `Rate limit exceeded. Retry in ${rateInfo.resetSeconds}s.`,
       },
     });
-    if (typeof res.send === 'function') {
-      res.send(payload);
-    } else if (typeof res.end === 'function') {
-      res.end(payload);
-    }
+    sendRateLimitResponse(res, 429, {
+      'Content-Type': 'application/json',
+      'Retry-After': String(rateInfo.resetSeconds),
+    }, payload);
     return false;
   }
 

@@ -65,15 +65,37 @@ export async function getQuizById(id, { userId, databaseUrl } = {}) {
   return { ...quiz, questions };
 }
 
-export async function setQuizSolvedStatus(id, isSolved = true, { userId, databaseUrl } = {}) {
+export async function updateQuizProgress(id, { isSolved, lastQuestionIndex, userAnswers, userId, databaseUrl } = {}) {
   if (!id) return null;
   const uId = toUserId(userId);
-  const rows = await query(
-    'UPDATE quizzes SET is_solved = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND user_id = $3 RETURNING *;',
-    [Boolean(isSolved), id, uId],
-    databaseUrl
-  );
+  const sets = ['updated_at = CURRENT_TIMESTAMP'];
+  const params = [];
+
+  if (isSolved !== undefined && isSolved !== null) {
+    params.push(Boolean(isSolved));
+    sets.push(`is_solved = $${params.length}`);
+  }
+  if (lastQuestionIndex !== undefined && lastQuestionIndex !== null && !Number.isNaN(Number(lastQuestionIndex))) {
+    params.push(Math.max(0, Number(lastQuestionIndex)));
+    sets.push(`last_question_index = $${params.length}`);
+  }
+  if (userAnswers !== undefined && userAnswers !== null) {
+    params.push(typeof userAnswers === 'string' ? userAnswers : JSON.stringify(userAnswers));
+    sets.push(`user_answers = $${params.length}::jsonb`);
+  }
+
+  params.push(id);
+  const idParam = params.length;
+  params.push(uId);
+  const userParam = params.length;
+
+  const sql = `UPDATE quizzes SET ${sets.join(', ')} WHERE id = $${idParam} AND user_id = $${userParam} RETURNING *;`;
+  const rows = await query(sql, params, databaseUrl);
   return rows[0] || null;
+}
+
+export async function setQuizSolvedStatus(id, isSolved = true, { userId, databaseUrl } = {}) {
+  return updateQuizProgress(id, { isSolved, userId, databaseUrl });
 }
 
 export async function getQuestionClue(questionId, { databaseUrl } = {}) {

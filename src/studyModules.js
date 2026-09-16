@@ -117,6 +117,56 @@ export async function fetchMaterials({ search, category } = {}) {
   return materials.val;
 }
 
+export function getQuizProgressStorageKey(quizId) {
+  return `teach4all.quiz_progress.v1.${getEffectiveUserId()}.${quizId}`;
+}
+
+export function loadLocalQuizProgress(quizId) {
+  if (typeof localStorage === 'undefined' || !quizId) return null;
+  try {
+    const raw = localStorage.getItem(getQuizProgressStorageKey(quizId));
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
+}
+
+export function saveLocalQuizProgress(quizId, { lastQuestionIndex = 0, userAnswers = {}, isSolved = undefined } = {}) {
+  if (typeof localStorage === 'undefined' || !quizId) return;
+  try {
+    const data = {
+      lastQuestionIndex: Number(lastQuestionIndex) || 0,
+      userAnswers: userAnswers || {},
+      isSolved,
+      updatedAt: Date.now(),
+    };
+    localStorage.setItem(getQuizProgressStorageKey(quizId), JSON.stringify(data));
+  } catch {}
+}
+
+export function clearLocalQuizProgress(quizId) {
+  if (typeof localStorage === 'undefined' || !quizId) return;
+  try {
+    localStorage.removeItem(getQuizProgressStorageKey(quizId));
+  } catch {}
+}
+
+/**
+ * Non-blocking server sync for quiz progress (fire-and-forget).
+ */
+export function syncQuizProgressToServer(quizId, { lastQuestionIndex, userAnswers, isSolved } = {}) {
+  if (!quizId) return;
+  fetch('/api/quizzes', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    body: JSON.stringify({
+      id: quizId,
+      ...(lastQuestionIndex !== undefined ? { lastQuestionIndex: Number(lastQuestionIndex) || 0 } : {}),
+      ...(userAnswers !== undefined ? { userAnswers } : {}),
+      ...(isSolved !== undefined ? { isSolved: Boolean(isSolved) } : {}),
+    }),
+  }).catch(() => {});
+}
+
 export async function markQuizSolved(id, isSolved = true) {
   const val = Boolean(isSolved);
   const updated = quizzes.val.map(q => (q.id === id ? { ...q, is_solved: val, isSolved: val } : q));

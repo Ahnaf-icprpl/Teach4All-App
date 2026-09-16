@@ -238,7 +238,6 @@ export function renderSsrHtml({ htmlTemplate, texts, prompts = [], serverEnv = {
           <section class="welcome" aria-labelledby="welcome-title">
             <div class="welcome-symbol">
               <img src="./logo.png" alt="" class="welcome-symbol-logo" aria-hidden="true" width="59" height="59" />
-              <span class="symbol-dot"></span>
             </div>
             <h1 id="welcome-title">${escapeHtml(texts.chat_welcome_title_p1 || '')}<br/>${escapeHtml(texts.chat_welcome_title_p2 || '')}<span class="accent-word">${escapeHtml(texts.chat_welcome_title_p3 || '')}</span></h1>
             <p class="welcome-description">${escapeHtml(texts.chat_welcome_desc_p1 || '')}<br/>${escapeHtml(texts.chat_welcome_desc_p2 || '')}</p>

@@ -36,6 +36,7 @@ export {
   getQuizzes,
   getQuizById,
   setQuizSolvedStatus,
+  updateQuizProgress,
   createQuiz,
   getQuestionClue,
   saveQuestionClue,

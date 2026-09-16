@@ -9,12 +9,13 @@ import {
 import { getModel } from '../router.js';
 import { renderMarkdown } from '../markdown.js';
 import { t, activePrompts, rotatePrompts } from '../uiTexts.js';
+import { login } from '../auth.js';
 
 const { div, section, h1, h2, p, span, button, textarea, form, article, img } = van.tags;
 
 function Welcome() {
   return section({ class: 'welcome', 'aria-labelledby': 'welcome-title' },
-    div({ class: 'welcome-symbol' }, img({ src: './logo.png', alt: '', class: 'welcome-symbol-logo', 'aria-hidden': 'true' }), span({ class: 'symbol-dot' })),
+    div({ class: 'welcome-symbol' }, img({ src: './logo.png', alt: '', class: 'welcome-symbol-logo', 'aria-hidden': 'true' })),
     h1({ id: 'welcome-title' }, () => t('chat_welcome_title_p1'), van.tags.br(), () => t('chat_welcome_title_p2'), span({ class: 'accent-word' }, () => t('chat_welcome_title_p3'))),
     p({ class: 'welcome-description' },
       () => t('chat_welcome_desc_p1'),
@@ -106,6 +107,13 @@ function Messages() {
               title: () => t('chat_copy_button_aria'),
               onclick: () => copyText(message.text),
             }, icon('copy'))
+          : null,
+        isError && (message.text?.includes('tamu') || message.text?.includes('masuk') || message.text?.includes('login'))
+          ? button({
+              type: 'button',
+              class: 'error-login-action-btn',
+              onclick: () => login(),
+            }, icon('login'), span(() => t('auth_login_button') || 'Masuk'))
           : null,
       );
     }),

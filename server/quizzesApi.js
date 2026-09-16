@@ -1,4 +1,4 @@
-import { getQuizzes, getQuizById, createQuiz, setQuizSolvedStatus, getQuestionClue, saveQuestionClue } from './db.js';
+import { getQuizzes, getQuizById, createQuiz, setQuizSolvedStatus, updateQuizProgress, getQuestionClue, saveQuestionClue } from './db.js';
 import { enforceRateLimit } from './rateLimiter.js';
 
 function readJsonBody(req) {
@@ -122,8 +122,10 @@ export async function handleQuizzesRequest(req, res, env = {}) {
         res.end(JSON.stringify({ error: { message: 'ID is required.' } }));
         return;
       }
-      const isSolved = payload.isSolved !== undefined ? payload.isSolved : payload.is_solved !== undefined ? payload.is_solved : true;
-      const updated = await setQuizSolvedStatus(id, isSolved, { userId, databaseUrl: dbUrl });
+      const isSolved = payload.isSolved !== undefined ? payload.isSolved : payload.is_solved;
+      const lastQuestionIndex = payload.lastQuestionIndex !== undefined ? payload.lastQuestionIndex : payload.last_question_index;
+      const userAnswers = payload.userAnswers !== undefined ? payload.userAnswers : payload.user_answers;
+      const updated = await updateQuizProgress(id, { isSolved, lastQuestionIndex, userAnswers, userId, databaseUrl: dbUrl });
       if (!updated) {
         res.writeHead(404, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: { message: 'Quiz not found.' } }));
