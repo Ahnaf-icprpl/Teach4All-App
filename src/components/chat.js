@@ -10,11 +10,11 @@ import { getModel } from '../router.js';
 import { renderMarkdown } from '../markdown.js';
 import { t, activePrompts, rotatePrompts } from '../uiTexts.js';
 
-const { div, section, h1, h2, p, span, button, textarea, form, article } = van.tags;
+const { div, section, h1, h2, p, span, button, textarea, form, article, img } = van.tags;
 
 function Welcome() {
   return section({ class: 'welcome', 'aria-labelledby': 'welcome-title' },
-    div({ class: 'welcome-symbol' }, icon('mountain'), span({ class: 'symbol-dot' })),
+    div({ class: 'welcome-symbol' }, img({ src: './logo.png', alt: '', class: 'welcome-symbol-logo', 'aria-hidden': 'true' }), span({ class: 'symbol-dot' })),
     h1({ id: 'welcome-title' }, () => t('chat_welcome_title_p1'), van.tags.br(), () => t('chat_welcome_title_p2'), span({ class: 'accent-word' }, () => t('chat_welcome_title_p3'))),
     p({ class: 'welcome-description' },
       () => t('chat_welcome_desc_p1'),
@@ -59,7 +59,7 @@ function Messages() {
       return article({ class: `message message-${message.role} ${isError ? 'message-error' : ''}` },
         message.role === 'assistant'
           ? div({ class: 'assistant-label' },
-              span({ class: 'assistant-mark' }, icon('mountain')),
+              span({ class: 'assistant-mark' }, img({ src: './logo.png', alt: '', class: 'assistant-mark-logo', 'aria-hidden': 'true', width: 28, height: 28 })),
               () => t('chat_assistant_name'),
               isError ? span({ class: 'demo-label error-label' }, () => t('chat_notice_label')) : null,
             )

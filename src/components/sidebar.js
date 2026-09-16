@@ -259,7 +259,7 @@ export function Sidebar() {
   },
     div({ class: 'sidebar-brand' },
       button({ class: 'brand', onclick: newChat, 'aria-label': () => t('sidebar_brand_aria') },
-        icon('mountain'), span(() => t('sidebar_brand_prefix')), span({ class: 'brand-number' }, () => t('sidebar_brand_number')), span(() => t('sidebar_brand_suffix'))),
+        img({ src: './logo.png', alt: '', class: 'brand-logo', 'aria-hidden': 'true', width: 26, height: 26 }), span(() => t('sidebar_brand_prefix')), span({ class: 'brand-number' }, () => t('sidebar_brand_number')), span(() => t('sidebar_brand_suffix'))),
       button({
         class: 'icon-button close-sidebar',
         'aria-label': () => t('sidebar_close_button_aria'),

@@ -143,9 +143,7 @@ export function renderSsrHtml({ htmlTemplate, texts, prompts = [], serverEnv = {
     <aside id="sidebar" class="sidebar" aria-label="${escapeHtml(texts.sidebar_aria_label || '')}">
       <div class="sidebar-brand">
         <button type="button" class="brand" aria-label="${escapeHtml(texts.sidebar_brand_aria || '')}">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon">
-            ${SVG_ICONS.mountain}
-          </svg>
+          <img src="./logo.png" alt="" class="brand-logo" aria-hidden="true" width="26" height="26" />
           <span>${escapeHtml(texts.sidebar_brand_prefix || '')}</span><span class="brand-number">${escapeHtml(texts.sidebar_brand_number || '')}</span><span>${escapeHtml(texts.sidebar_brand_suffix || '')}</span>
         </button>
         <button type="button" class="icon-button close-sidebar" aria-label="${escapeHtml(texts.sidebar_close_button_aria || '')}">
@@ -239,9 +237,7 @@ export function renderSsrHtml({ htmlTemplate, texts, prompts = [], serverEnv = {
         <div class="chat-stage">
           <section class="welcome" aria-labelledby="welcome-title">
             <div class="welcome-symbol">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon">
-                <path d="M3 17 10 5l11 16H3l4-7 5 7"/><path d="m8 9 3 3 3-2"/><path d="M19 3v5m-2.5-2.5h5"/>
-              </svg>
+              <img src="./logo.png" alt="" class="welcome-symbol-logo" aria-hidden="true" width="59" height="59" />
               <span class="symbol-dot"></span>
             </div>
             <h1 id="welcome-title">${escapeHtml(texts.chat_welcome_title_p1 || '')}<br/>${escapeHtml(texts.chat_welcome_title_p2 || '')}<span class="accent-word">${escapeHtml(texts.chat_welcome_title_p3 || '')}</span></h1>

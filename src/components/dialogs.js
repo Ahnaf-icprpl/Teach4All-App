@@ -5,8 +5,7 @@ import {
   clearWorkspace, renameChat, deleteChat, startTopicChat, toast,
 } from '../state.js';
 import {
-  quizzes, materials, markQuizSolved, markMaterialSolved,
-  fetchQuizzes, fetchMaterials,
+  quizzes, materials, fetchQuizzes, fetchMaterials,
 } from '../studyModules.js';
 import { QuizSolver, MaterialReader } from './studyViewer.js';
 import { t } from '../uiTexts.js';
@@ -42,24 +41,6 @@ function TopicList(type) {
   const searchQuery = van.state('');
   const searchResults = van.state(null);
   let debounceTimer = null;
-
-  const toggleSolved = async (item) => {
-    const isCurrentlySolved = Boolean(item.is_solved || item.isSolved);
-    const nextSolved = !isCurrentlySolved;
-    if (isQuiz) {
-      await markQuizSolved(item.id, nextSolved);
-      if (searchResults.val) {
-        searchResults.val = searchResults.val.map(q => (q.id === item.id ? { ...q, is_solved: nextSolved, isSolved: nextSolved } : q));
-      }
-      toast(nextSolved ? t('dialogs_toast_quiz_solved') : t('dialogs_toast_quiz_unsolved'));
-    } else {
-      await markMaterialSolved(item.id, nextSolved);
-      if (searchResults.val) {
-        searchResults.val = searchResults.val.map(m => (m.id === item.id ? { ...m, is_solved: nextSolved, isSolved: nextSolved, is_completed: nextSolved, isCompleted: nextSolved } : m));
-      }
-      toast(nextSolved ? t('dialogs_toast_material_solved') : t('dialogs_toast_material_unsolved'));
-    }
-  };
 
   const getBaseList = () => {
     const base = isQuiz ? quizzes.val : materials.val;
@@ -186,16 +167,7 @@ function TopicList(type) {
                 div({ class: 'topic-card-headline' },
                   div({ class: 'topic-card-badges' },
                     span({ class: `topic-category-pill ${item.color || 'blue'}` }, item.category || ''),
-                    button({
-                      type: 'button',
-                      class: `topic-solved-toggle ${solved ? 'is-solved' : ''}`,
-                      'aria-label': () => solved ? t('dialogs_btn_mark_unsolved') : t('dialogs_btn_mark_solved'),
-                      title: () => solved ? t('dialogs_btn_mark_unsolved') : t('dialogs_btn_mark_solved'),
-                      onclick: (e) => { e.stopPropagation(); toggleSolved(item); },
-                    },
-                    solved ? icon('check', 'topic-solved-icon') : null,
-                    span(() => solved ? t('dialogs_status_solved') : t('dialogs_btn_mark_solved')),
-                    ),
+                    solved ? span({ class: 'topic-solved-pill' }, icon('check', 'topic-solved-icon'), span(() => t('dialogs_status_solved'))) : null,
                     span({ class: 'topic-card-time' }, () => formatTime(item)),
                   ),
                   h3({ class: 'topic-card-title' }, item.title || ''),
@@ -206,13 +178,13 @@ function TopicList(type) {
             div({ class: 'topic-card-footer' },
               span({ class: 'topic-card-meta' }, () => formatMeta(isQuiz, item)),
               div({ class: 'topic-card-actions' },
-                button({
+                !isQuiz ? button({
                   type: 'button',
                   class: 'secondary-button topic-chat-btn',
                   'aria-label': () => t('dialogs_btn_chat'),
                   title: () => t('dialogs_btn_chat'),
                   onclick: () => startTopicChat(type, item.prompt || ''),
-                }, icon('chat'), span(() => t('dialogs_btn_chat'))),
+                }, icon('chat'), span(() => t('dialogs_btn_chat'))) : null,
                 button({
                   type: 'button',
                   class: 'primary-button topic-open-btn',
@@ -285,13 +257,15 @@ export function Dialogs() {
     const content = current.type === 'tools' ? Tools()
       : current.type === 'conversation' ? Conversation(current.id)
       : (current.type === 'quiz' || current.type === 'material') ? TopicList(current.type)
-      : current.type === 'quiz-solver' ? QuizSolver(current.id)
+      : current.type === 'quiz-solver' ? QuizSolver(current.id, { initialClue: current.initialClue })
       : current.type === 'material-reader' ? MaterialReader(current.id)
       : Confirm(current.type, current.id);
-    const isTopicDialog = current.type === 'quiz' || current.type === 'material' || current.type === 'quiz-solver' || current.type === 'material-reader';
+    const isQuizSolver = current.type === 'quiz-solver';
+    const isTopicDialog = current.type === 'quiz' || current.type === 'material' || isQuizSolver || current.type === 'material-reader';
     const isTopicList = current.type === 'quiz' || current.type === 'material';
+    const dialogClass = `app-dialog ${isQuizSolver ? 'dialog-fullscreen' : (isTopicDialog ? 'dialog-wide' : '')}`;
     const element = dialog({
-      class: `app-dialog ${isTopicDialog ? 'dialog-wide' : ''}`, 'aria-labelledby': 'dialog-title',
+      class: dialogClass, 'aria-labelledby': 'dialog-title',
       oncancel: event => { event.preventDefault(); modal.val = null; },
       onclick: event => {
         if (event.target !== element) return;

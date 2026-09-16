@@ -37,8 +37,11 @@ export {
   getQuizById,
   setQuizSolvedStatus,
   createQuiz,
+  getQuestionClue,
+  saveQuestionClue,
   getMaterials,
   getMaterialById,
   setMaterialSolvedStatus,
   createMaterial,
 } from './dbQuizzesMaterials.js';
+

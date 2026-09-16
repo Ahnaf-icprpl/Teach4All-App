@@ -12,19 +12,87 @@ import {
 } from '../studyModules.js';
 import { t } from '../uiTexts.js';
 import { renderMarkdown } from '../markdown.js';
+import { getAuthHeaders } from '../auth.js';
+import { QuizClueStick, generateLocalClue } from './quizStick.js';
 
 const { div, h2, h3, p, span, button } = van.tags;
 
-export function QuizSolver(quizId) {
+export function QuizSolver(quizId, { initialClue = false } = {}) {
   const loading = van.state(true);
   const quiz = van.state(null);
   const currentIndex = van.state(0);
   const userAnswers = van.state({});
   const isCompleted = van.state(false);
+  const showClueStick = van.state(Boolean(initialClue));
+  const clueLoading = van.state(false);
+  const clueText = van.state('');
+  const cluesCache = {};
+  const currentQNum = van.state(1);
+
+  const fetchClueForQuestion = async (idx = currentIndex.val) => {
+    currentQNum.val = idx + 1;
+    const qList = Array.isArray(quiz.val?.questions) ? quiz.val.questions : [];
+    const q = qList[idx];
+    if (!q) return;
+
+    if (q.clue && q.clue.trim()) {
+      cluesCache[idx] = q.clue.trim();
+      clueText.val = q.clue.trim();
+      clueLoading.val = false;
+      return;
+    }
+    if (cluesCache[idx]) {
+      clueText.val = cluesCache[idx];
+      clueLoading.val = false;
+      return;
+    }
+
+    clueLoading.val = true;
+    try {
+      const res = await fetch('/api/quizzes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({
+          action: 'clue',
+          questionId: q.id,
+          questionText: q.questionText || q.question_text || '',
+          options: (q.options || []).map(o => o.text || o),
+          explanation: q.explanation || '',
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.clue) {
+          const c = data.clue.trim();
+          q.clue = c;
+          cluesCache[idx] = c;
+          clueText.val = c;
+          clueLoading.val = false;
+          return;
+        }
+      }
+    } catch {}
+
+    const local = generateLocalClue(q);
+    q.clue = local;
+    cluesCache[idx] = local;
+    clueText.val = local;
+    clueLoading.val = false;
+  };
+
+  const toggleClueStick = () => {
+    showClueStick.val = !showClueStick.val;
+    if (showClueStick.val) {
+      fetchClueForQuestion(currentIndex.val);
+    }
+  };
 
   fetchQuizDetails(quizId, { shuffle: true }).then(data => {
     quiz.val = data;
     loading.val = false;
+    if (showClueStick.val) {
+      fetchClueForQuestion(0);
+    }
   }).catch(() => {
     loading.val = false;
   });
@@ -106,10 +174,24 @@ export function QuizSolver(quizId) {
 
     return div({ class: 'study-viewer-container' },
       div({ class: 'study-header-nav' },
+        button({
+          type: 'button',
+          class: () => `study-tanya-ai-btn secondary-button ${showClueStick.val ? 'active' : ''}`,
+          'aria-label': () => t('dialogs_btn_chat'),
+          title: () => t('dialogs_btn_chat'),
+          onclick: toggleClueStick,
+        }, icon('spark', 'tanya-ai-spark-icon'), span(() => t('dialogs_btn_chat'))),
         div({ class: 'study-progress-badge' },
           () => `${t('dialogs_quiz_question_label')} ${currentIndex.val + 1} ${t('dialogs_quiz_of_label')} ${totalQuestions}`,
         ),
       ),
+      QuizClueStick({
+        isOpen: showClueStick,
+        loading: clueLoading,
+        clueText,
+        questionNumber: currentQNum,
+        onClose: () => { showClueStick.val = false; },
+      }),
       div({ class: 'study-question-card' },
         h3({ class: 'study-question-title' }, currentQ.questionText || currentQ.question_text || ''),
         div({ class: 'study-options-list' },
@@ -152,12 +234,22 @@ export function QuizSolver(quizId) {
         button({
           class: 'secondary-button',
           disabled: currentIndex.val === 0,
-          onclick: () => { currentIndex.val = Math.max(0, currentIndex.val - 1); },
+          onclick: () => {
+            const nextIdx = Math.max(0, currentIndex.val - 1);
+            currentIndex.val = nextIdx;
+            currentQNum.val = nextIdx + 1;
+            if (showClueStick.val) fetchClueForQuestion(nextIdx);
+          },
         }, span(() => t('dialogs_quiz_prev_btn'))),
         currentIndex.val < totalQuestions - 1
           ? button({
             class: 'primary-button',
-            onclick: () => { currentIndex.val = Math.min(totalQuestions - 1, currentIndex.val + 1); },
+            onclick: () => {
+              const nextIdx = Math.min(totalQuestions - 1, currentIndex.val + 1);
+              currentIndex.val = nextIdx;
+              currentQNum.val = nextIdx + 1;
+              if (showClueStick.val) fetchClueForQuestion(nextIdx);
+            },
           }, span(() => t('dialogs_quiz_next_btn')))
           : button({
             class: 'primary-button',

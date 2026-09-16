@@ -20,9 +20,17 @@ COPY public ./public
 COPY src ./src
 COPY server ./server
 COPY prompts ./prompts
+COPY migrations ./migrations
+
+# Optional DATABASE_URL build argument for running migrations during image build
+ARG DATABASE_URL
+ENV DATABASE_URL=$DATABASE_URL
 
 # Build production assets (verifies line constraints, compiles via Vite, builds service worker)
 RUN npm run build
+
+# Run database migrations during build (gracefully skips if DATABASE_URL is not configured)
+RUN npm run migrate
 
 # ------------------------------------------------------------------------------
 # Stage 2: Production Dependencies
@@ -80,5 +88,6 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 3000)).then((res) => process.exit(res.status ? 0 : 1)).catch(() => process.exit(1))"
 
-# Start standalone Express server
-CMD ["node", "server/index.js"]
+# Start production Express server (migrations run during build, not on container restart)
+CMD ["npm", "start"]
+

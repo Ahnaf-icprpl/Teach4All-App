@@ -4,6 +4,7 @@
   .brand { display: inline-flex; align-items: center; gap: 7px; font-weight: 500; font-size: 20px; letter-spacing: -.5px; color: var(--sidebar-text); }
   .brand:hover { opacity: .92; }
   .brand .icon { width: 24px; height: 24px; color: var(--gold-amber); }
+  .brand .brand-logo { width: 26px; height: 26px; border-radius: 6px; object-fit: cover; flex-shrink: 0; }
   .brand-number { color: var(--dusty-terracotta); font-style: italic; font-weight: 400; margin: 0 -1px; }
   .close-sidebar { display: none; color: var(--sidebar-muted); }
   .sidebar-actions { display: flex; flex-direction: column; gap: 9px; padding-bottom: 12px; }

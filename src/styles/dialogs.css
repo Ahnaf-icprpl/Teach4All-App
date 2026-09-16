@@ -1,6 +1,10 @@
 @layer components {
   .app-dialog { color: var(--text); background: var(--surface); border: 0; border-radius: 19px; width: min(490px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); padding: 26px; box-shadow: 0 24px 90px rgba(34, 46, 60, 0.28); }
   .dialog-wide { width: min(680px, calc(100vw - 32px)); height: min(86dvh, 780px); max-height: min(92dvh, 840px); padding: 26px 28px; display: flex; flex-direction: column; }
+  .dialog-fullscreen { position: fixed; inset: 0; width: 100vw; max-width: 100vw; min-width: 100vw; height: 100dvh; max-height: 100dvh; min-height: 100dvh; margin: 0; padding: 0; border: 0; border-radius: 0; box-shadow: none; display: flex; flex-direction: column; box-sizing: border-box; background: var(--bg); overflow: hidden; z-index: 100; }
+  .dialog-fullscreen::backdrop { background: var(--bg); backdrop-filter: none; }
+  .dialog-fullscreen .dialog-heading { max-width: 860px; width: 100%; margin: 0 auto; padding: calc(16px + env(safe-area-inset-top, 0px)) 24px 14px; box-sizing: border-box; border-bottom: 1px solid var(--line); flex-shrink: 0; }
+  .dialog-fullscreen .study-viewer-container { max-width: 860px; width: 100%; margin: 0 auto; padding: 20px 24px calc(24px + env(safe-area-inset-bottom, 0px)); box-sizing: border-box; flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
   .app-dialog::backdrop { background: rgba(34, 46, 60, 0.45); backdrop-filter: blur(3px); }
   .dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin-bottom: 20px; flex-shrink: 0; }
   .dialog-heading h2 { font-size: 18px; font-weight: 550; letter-spacing: -.5px; color: var(--text); }
@@ -37,10 +41,6 @@
   .topic-category-pill { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; padding: 2px 7px; border-radius: 4px; }
   .topic-solved-pill { display: inline-flex; align-items: center; gap: 3px; font-size: 9.5px; font-weight: 600; padding: 2px 7px; border-radius: 4px; background: rgba(16, 185, 129, 0.12); color: #047857; border: 1px solid rgba(16, 185, 129, 0.25); }
   .topic-solved-icon { width: 11px; height: 11px; }
-  .topic-solved-toggle { display: inline-flex; align-items: center; gap: 4px; font-size: 9.5px; font-weight: 600; padding: 2px 7px; border-radius: 4px; border: 1px dashed rgba(34, 46, 60, 0.25); background: transparent; color: var(--muted); cursor: pointer; transition: all .15s; }
-  .topic-solved-toggle:hover { border-color: var(--terracotta); color: var(--terracotta); background: var(--hover); }
-  .topic-solved-toggle.is-solved { background: rgba(16, 185, 129, 0.12); color: #047857; border: 1px solid rgba(16, 185, 129, 0.3); }
-  .topic-solved-toggle.is-solved:hover { background: rgba(16, 185, 129, 0.2); }
   .topic-card.is-solved { border-left: 3px solid #10b981; }
   .topic-card-time { font-size: 11px; color: var(--muted); }
   .topic-card-title { font-size: 13.5px; font-weight: 600; color: var(--text); line-height: 1.35; margin: 0; }
@@ -116,11 +116,31 @@
   .study-material-body .markdown-list li { font-size: 13px; line-height: 1.7; color: var(--text); margin-bottom: 4px; }
   .study-material-body .markdown-blockquote { background: var(--surface); border-left: 3px solid var(--gold-amber); border-radius: 6px; padding: 10px 14px; font-style: normal; color: var(--text); }
   .study-material-para { font-size: 12.5px; line-height: 1.7; color: var(--text); margin: 0; }
+  .quiz-clue-stick { position: relative; background: #FFFBEB; border: 1px solid #FDE68A; border-left: 4px solid var(--terracotta); border-radius: 12px; padding: 13px 15px; box-shadow: none; margin-bottom: 2px; animation: slideInClueStick .2s ease-out; flex-shrink: 0; }
+  .quiz-clue-stick-hidden { display: none; }
+  @keyframes slideInClueStick { from { opacity: 0; transform: translateY(-6px) scale(0.99); } to { opacity: 1; transform: translateY(0) scale(1); } }
+  .quiz-stick-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 7px; }
+  .quiz-stick-badge { display: flex; align-items: center; gap: 6px; }
+  .quiz-stick-spark-icon { width: 14px; height: 14px; color: var(--terracotta); }
+  .quiz-stick-title { font-size: 12px; font-weight: 650; color: #92400E; letter-spacing: -0.2px; }
+  .quiz-stick-qnum { font-size: 10px; font-weight: 600; background: rgba(217, 119, 6, 0.15); color: #B45309; padding: 1px 6px; border-radius: 8px; }
+  .quiz-stick-close-btn { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; border: 0; background: transparent; color: #B45309; cursor: pointer; padding: 0; transition: all .15s; }
+  .quiz-stick-close-btn:hover { background: rgba(217, 119, 6, 0.15); color: #78350F; }
+  .quiz-stick-close-btn .icon { width: 12px; height: 12px; }
+  .quiz-stick-body { font-size: 12px; line-height: 1.55; color: #78350F; }
+  .quiz-stick-loading { display: flex; align-items: center; gap: 10px; padding: 6px 0; color: #B45309; font-size: 11.5px; }
+  .quiz-stick-spinner { display: inline-flex; animation: pulseSpark 1.2s infinite ease-in-out; color: var(--terracotta); }
+  .quiz-stick-spinner .icon { width: 14px; height: 14px; }
+  @keyframes pulseSpark { 0%, 100% { transform: scale(0.9); opacity: 0.6; } 50% { transform: scale(1.15); opacity: 1; } }
+  .quiz-stick-text { margin: 0; font-size: 12px; line-height: 1.55; color: #78350F; }
+  .study-tanya-ai-btn { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; font-size: 11px; min-height: 28px; border-radius: 8px; background: var(--hover); color: var(--terracotta); border: 1px solid rgba(199, 92, 58, 0.2); transition: all .15s; cursor: pointer; }
+  .study-tanya-ai-btn:hover { background: rgba(199, 92, 58, 0.15); border-color: var(--terracotta); }
+  .study-tanya-ai-btn.active { background: var(--terracotta); color: var(--off-white); border-color: var(--terracotta); }
+  .tanya-ai-spark-icon { width: 12px; height: 12px; }
   [data-theme="dark"] .tool-row > .icon { color: var(--accent); }
   [data-theme="dark"] .secondary-button:hover { background: #354350; }
   [data-theme="dark"] .topic-card { border-color: var(--line); }
-  [data-theme="dark"] .topic-solved-pill,
-  [data-theme="dark"] .topic-solved-toggle.is-solved { background: rgba(16, 185, 129, 0.2); color: #34d399; border-color: rgba(52, 211, 153, 0.35); }
+  [data-theme="dark"] .topic-solved-pill { background: rgba(16, 185, 129, 0.2); color: #34d399; border-color: rgba(52, 211, 153, 0.35); }
   [data-theme="dark"] .study-progress-badge { color: var(--accent); }
   [data-theme="dark"] .study-filter-tab.active { color: var(--accent); border-color: rgba(183, 127, 99, 0.4); }
   [data-theme="dark"] .study-filter-tab.active .study-filter-badge { color: var(--accent); background: rgba(183, 127, 99, 0.2); }
@@ -129,6 +149,15 @@
   [data-theme="dark"] .study-option-button.option-correct { color: #6EE7B7 !important; }
   [data-theme="dark"] .study-option-button.option-incorrect { color: #FCA5A5 !important; }
   [data-theme="dark"] .study-completed-icon-wrapper { background: rgba(16, 185, 129, 0.25); color: #34d399; }
+  [data-theme="dark"] .quiz-clue-stick { background: #25241C; border-color: rgba(245, 158, 11, 0.3); border-left-color: var(--accent); box-shadow: none; }
+  [data-theme="dark"] .quiz-stick-title { color: #FDE68A; }
+  [data-theme="dark"] .quiz-stick-qnum { background: rgba(245, 158, 11, 0.2); color: #FCD34D; }
+  [data-theme="dark"] .quiz-stick-close-btn { color: #FCD34D; }
+  [data-theme="dark"] .quiz-stick-close-btn:hover { background: rgba(245, 158, 11, 0.2); }
+  [data-theme="dark"] .quiz-stick-body, [data-theme="dark"] .quiz-stick-text { color: #FEF3C7; }
+  [data-theme="dark"] .quiz-stick-loading { color: #FCD34D; }
+  [data-theme="dark"] .study-tanya-ai-btn { background: rgba(183, 127, 99, 0.15); color: var(--accent); border-color: rgba(183, 127, 99, 0.3); }
+  [data-theme="dark"] .study-tanya-ai-btn.active { background: var(--accent); color: #1a2228; }
 }
 
 @layer responsive {
@@ -221,13 +250,14 @@
       font-size: 11px;
     }
     .dialog-wide .topic-card-actions {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
+      display: flex;
+      align-items: center;
       gap: 8px;
       width: 100%;
     }
     .dialog-wide .topic-card-actions .topic-chat-btn,
     .dialog-wide .topic-card-actions .topic-open-btn {
+      flex: 1;
       width: 100%;
       justify-content: center;
       min-height: 36px;

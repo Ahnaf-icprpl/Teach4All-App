@@ -216,6 +216,7 @@ export function normalizeQuizQuestion(q, idx = 0, { shuffle = false } = {}) {
   const finalOptions = shuffle ? shuffleArray(options) : options;
 
   return {
+    id: q.id,
     questionNumber,
     questionText,
     question_number: questionNumber,
@@ -224,6 +225,7 @@ export function normalizeQuizQuestion(q, idx = 0, { shuffle = false } = {}) {
     correctAnswer,
     correct_answer: correctAnswer,
     explanation: q.explanation || '',
+    clue: q.clue || '',
     points: Number(q.points) || 10,
     is_solved: Boolean(q.is_solved ?? q.isSolved ?? false),
   };

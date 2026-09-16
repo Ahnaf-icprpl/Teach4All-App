@@ -76,6 +76,22 @@ export async function setQuizSolvedStatus(id, isSolved = true, { userId, databas
   return rows[0] || null;
 }
 
+export async function getQuestionClue(questionId, { databaseUrl } = {}) {
+  if (!questionId) return null;
+  const rows = await query('SELECT clue, question_text, options, explanation FROM quiz_questions WHERE id = $1', [questionId], databaseUrl);
+  return rows[0] || null;
+}
+
+export async function saveQuestionClue(questionId, clue, { databaseUrl } = {}) {
+  if (!questionId || !clue) return null;
+  const rows = await query(
+    'UPDATE quiz_questions SET clue = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND (clue IS NULL OR clue = \'\') RETURNING clue;',
+    [clue, questionId],
+    databaseUrl
+  );
+  return rows[0]?.clue || clue;
+}
+
 /**
  * Insert a new quiz with its nested questions atomically.
  */

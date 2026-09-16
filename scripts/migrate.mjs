@@ -198,6 +198,15 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   loadLocalEnv();
   const dbUrl = process.env.DATABASE_URL;
 
+  if (!dbUrl) {
+    if (process.env.STRICT_MIGRATION === 'true') {
+      console.error('Migration error: DATABASE_URL environment variable is required.');
+      process.exit(1);
+    }
+    console.log('[!] DATABASE_URL not set. Skipping database migrations during build.');
+    process.exit(0);
+  }
+
   runMigrations({ databaseUrl: dbUrl })
     .then(() => process.exit(0))
     .catch((error) => {
