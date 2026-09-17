@@ -125,9 +125,13 @@ export default defineConfig(({ mode }) => {
         },
       },
     ],
+    esbuild: {
+      legalComments: 'none',
+    },
     build: {
       target: 'es2022',
-      cssCodeSplit: false,
+      minify: true,
+      cssMinify: 'lightningcss',
       sourcemap: false,
       assetsInlineLimit: 0,
       rollupOptions: {

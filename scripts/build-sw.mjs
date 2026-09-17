@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { createHash } from 'node:crypto';
+import { minify } from 'vite';
 
 const dist = 'dist';
 const p404 = join(dist, '404.html');
@@ -36,5 +37,6 @@ const output = swCode
   .replace('__CACHE_NAME__', `t4a-${version}`)
   .replace('__PRECACHE_ASSETS__', JSON.stringify(assets, null, 2));
 
-writeFileSync(swDest, output);
-console.log(`Service worker built: ${version}, ${assets.length} assets`);
+const minified = await minify('sw.js', output, { mangle: true, compress: true });
+writeFileSync(swDest, minified?.code || output);
+console.log(`Service worker built: ${version}, ${assets.length} assets (obfuscated)`);
