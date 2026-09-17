@@ -1,5 +1,6 @@
 import { trace } from '@opentelemetry/api';
 import { logs, SeverityNumber } from '@opentelemetry/api-logs';
+import { getClientIp } from './rateLimiter.js';
 
 try {
   if (typeof process.loadEnvFile === 'function') {
@@ -164,15 +165,25 @@ export function requestLoggerMiddleware(req, res, next) {
       return;
     }
 
-    const clientIp = req.headers?.['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1';
+    const clientIp = getClientIp(req);
     const userId = req.userId || req.user?.id || req.auth?.userId || req.headers?.['x-user-id'] || 'anonymous';
+
+    // Skip internal localhost health check polls from cluttering production logs
+    const isInternalHealthCheck = clientIp === '127.0.0.1' &&
+      (route === '/' || route === '/index.html') &&
+      !req.headers?.['x-forwarded-for'] &&
+      !req.headers?.['cf-connecting-ip'] &&
+      !req.headers?.['x-real-ip'];
+    if (isProd && isInternalHealthCheck) {
+      return;
+    }
 
     const meta = {
       'http.method': req.method,
       'http.route': route,
       'http.status_code': statusCode,
       'http.duration_ms': Math.round(durationMs * 100) / 100,
-      'client.ip': typeof clientIp === 'string' ? clientIp.split(',')[0].trim() : clientIp,
+      'client.ip': clientIp,
       'user.id': userId,
     };
 

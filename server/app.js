@@ -15,6 +15,7 @@ export function createApp(serverEnv = {}) {
 
   // 1. Security & Header Defaults
   app.disable('x-powered-by');
+  app.set('trust proxy', true);
   app.set('query parser', 'simple');
 
   // 1.5 OTLP Telemetry (Metrics & Request Logging with Trace Correlation)

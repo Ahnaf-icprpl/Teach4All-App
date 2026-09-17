@@ -1,5 +1,5 @@
 import { getQuizzes, getQuizById, createQuiz, setQuizSolvedStatus, updateQuizProgress, getQuestionClue, saveQuestionClue } from './db.js';
-import { enforceRateLimit } from './rateLimiter.js';
+import { enforceRateLimit, getClientIp } from './rateLimiter.js';
 
 function readJsonBody(req) {
   if (req.body !== undefined && req.body !== null) {
@@ -216,7 +216,7 @@ export async function generateQuizClue(payload, env = {}, req = null) {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 9000);
 
-      const clientIp = req ? (req.headers?.['x-forwarded-for'] || req.socket?.remoteAddress || '') : '';
+      const clientIp = req ? getClientIp(req) : '';
       const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {

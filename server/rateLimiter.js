@@ -39,7 +39,15 @@ export function getClientIp(req) {
   if (!req) return '127.0.0.1';
   const headers = req.headers || {};
 
-  // 1. Vercel trusted edge client IP header
+  // 1. Cloudflare connecting IP / True-Client-IP (highest precedence for CF-proxied traffic)
+  const cfIp = headers['cf-connecting-ip'] || headers['true-client-ip'];
+  if (cfIp) {
+    const raw = Array.isArray(cfIp) ? cfIp[0] : cfIp;
+    const ip = typeof raw === 'string' ? raw.split(',')[0].trim() : '';
+    if (ip) return ip.replace(/^::ffff:/, '');
+  }
+
+  // 2. Vercel trusted edge client IP header
   const vercelForwarded = headers['x-vercel-forwarded-for'];
   if (vercelForwarded) {
     const raw = Array.isArray(vercelForwarded) ? vercelForwarded[0] : vercelForwarded;
@@ -47,34 +55,36 @@ export function getClientIp(req) {
     if (ip) return ip.replace(/^::ffff:/, '');
   }
 
-  // 2. Cloudflare connecting IP
-  const cfIp = headers['cf-connecting-ip'];
-  if (cfIp) {
-    const raw = Array.isArray(cfIp) ? cfIp[0] : cfIp;
-    const ip = typeof raw === 'string' ? raw.split(',')[0].trim() : '';
-    if (ip) return ip.replace(/^::ffff:/, '');
-  }
-
-  // 3. Standard reverse proxy real IP
-  const realIp = headers['x-real-ip'];
+  // 3. Standard reverse proxy real IP (Traefik, Nginx, Caddy)
+  const realIp = headers['x-real-ip'] || headers['x-client-ip'];
   if (realIp) {
     const raw = Array.isArray(realIp) ? realIp[0] : realIp;
     const ip = typeof raw === 'string' ? raw.split(',')[0].trim() : '';
     if (ip) return ip.replace(/^::ffff:/, '');
   }
 
-  // 4. Standard X-Forwarded-For (first entry in comma-separated chain)
+  // 4. Standard X-Forwarded-For (filter out loopback if a public/external IP exists in the chain)
   const forwarded = headers['x-forwarded-for'];
   if (forwarded) {
-    const raw = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-    const ip = typeof raw === 'string' ? raw.split(',')[0].trim() : '';
-    if (ip) return ip.replace(/^::ffff:/, '');
+    const raw = Array.isArray(forwarded) ? forwarded.join(',') : forwarded;
+    if (typeof raw === 'string') {
+      const parts = raw.split(',').map(s => s.trim().replace(/^::ffff:/, '')).filter(Boolean);
+      const publicIp = parts.find(p => p !== '127.0.0.1' && p !== '::1' && p !== 'localhost' && !p.startsWith('127.'));
+      if (publicIp) return publicIp;
+      if (parts[0]) return parts[0];
+    }
   }
 
-  // 5. Socket/connection remote address fallback
+  // 5. Express trusted proxy IP (when app.set('trust proxy', true) is active)
+  if (req.ip) {
+    const clean = String(req.ip).replace(/^::ffff:/, '').trim();
+    if (clean && clean !== '127.0.0.1' && clean !== '::1') return clean;
+  }
+
+  // 6. Socket/connection remote address fallback
   const remote = req.socket?.remoteAddress || req.connection?.remoteAddress;
   if (remote) {
-    return remote.replace(/^::ffff:/, '');
+    return String(remote).replace(/^::ffff:/, '').trim();
   }
 
   return '127.0.0.1';
