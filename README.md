@@ -1,250 +1,200 @@
-# Teach4All — Lightweight, Offline-First AI Learning Platform
+# Teach4All
 
-[![Node.js](https://img.shields.io/badge/node->=22.12.0-brightgreen.svg)](https://nodejs.org/)
-[![VanJS](https://img.shields.io/badge/frontend-VanJS_1.6-F38B00.svg)](https://vanjs.org/)
-[![Express](https://img.shields.io/badge/backend-Express_5-000000.svg)](https://expressjs.com/)
-[![PostgreSQL](https://img.shields.io/badge/database-PostgreSQL-336791.svg)](https://www.postgresql.org/)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![CI Checks](https://github.com/Ahnaf-icprpl/Teach4All-App/actions/workflows/checks.yml/badge.svg)](https://github.com/Ahnaf-icprpl/Teach4All-App/actions/workflows/checks.yml)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.12.0-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![VanJS](https://img.shields.io/badge/VanJS-1.6.1-F38B00?logo=javascript&logoColor=white)](https://vanjs.org/)
+[![Express](https://img.shields.io/badge/Express-5.2-000000?logo=express&logoColor=white)](https://expressjs.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14%2B-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-Tracing%20%26%20Metrics-7F52FF?logo=opentelemetry&logoColor=white)](https://opentelemetry.io/)
+[![Code Limit](https://img.shields.io/badge/Code%20Limit-%3C500%20lines%2Ffile-informational)](#architecture-and-rules)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Teach4All is a lightweight, offline-first educational platform designed to empower learners even under the most challenging network conditions—from remote rural classrooms to mobile connections with intermittent coverage.
+Teach4All is an online educational application that combines AI tutoring, interactive quizzes, and structured study modules. The client runs on VanJS without virtual DOM or component frameworks. The backend uses Node.js, Express, PostgreSQL, and Clerk authentication.
 
-Built strictly from first principles with **VanJS**, hand-crafted CSS, an **Express** backend, **PostgreSQL** persistence, and **OpenRouter** AI streaming, the application delivers a resilient, responsive learning experience without heavy UI libraries, external runtime dependencies, or remote fonts.
+## Features
 
----
+- Streaming AI tutor powered by OpenRouter models with optional web search.
+- Interactive multiple-choice quizzes with instant evaluation, explanations, score calculations, and clue assistance.
+- Multi-section study materials with progress tracking.
+- Full UI localization stored in PostgreSQL (`ui_texts` table) and hydrated on load.
+- UI state persistence across page reloads (active chat, draft message, sidebar state, open quiz/material modal, question index, section index).
+- Server-side rendering (SSR) for initial HTML paint and state hydration.
+- Sliding-window rate limiting per IP address and per user account in PostgreSQL.
+- Clerk authentication with native Node.js crypto JWKS token verification and automatic guest session isolation.
+- OpenTelemetry instrumentation for traces, metrics, and logs with optional Grafana Cloud export.
 
-## Key Features
+## Tech Stack
 
-- **Streaming AI Learning Companion**: Real-time streaming conversational assistant powered by OpenRouter (e.g. Gemini 2.5 Flash Lite) with automated chat naming, markdown formatting, and code copying.
-- **Interactive Quizzes**: Auto-evaluating multiple-choice quizzes with instant feedback, detailed answer rationales, score tracking, and status persistence.
-- **Structured Study Materials**: Multi-part structured summaries and reading modules with interactive navigation and completion tracking.
-- **User Data Isolation**: Strict user-level segregation for chats, quizzes, and materials. Authenticated users access their personal cloud workspace; guests work in isolated local sessions with zero cross-session leakage.
-- **Clerk Authentication**: Dynamic single sign-on supporting Google OAuth and email. Features zero-downtime JWKS public key verification, sub-domain support, clock skew tolerance, and robust PostgreSQL profile synchronization.
-- **Server-Side Rendering (SSR)**: Instant initial paint with pre-rendered shell, localized Indonesian UI text, prompt suggestions, and server-hydrated user state.
-- **Offline-First PWA**: Service Worker caching for instant offline boots, LocalStorage fallback persistence, and background sync resilience.
-- **Dynamic Sliding-Window Rate Limiting**: PostgreSQL-backed IP and user sliding-window rate limiters across all API routes (`/api/chat`, `/api/auth/*`, `/api/conversations`, etc.) to protect against abuse.
-- **Lightweight & Self-Hosted**: Zero runtime UI frameworks, no tracking scripts, system fonts only, optimized for persistent VPS deployment with Docker.
+| Layer | Technology | Version | Purpose |
+|---|---|---|---|
+| Frontend | VanJS | 1.6.1 | Reactive DOM rendering without a virtual DOM |
+| Styling | Custom CSS | - | CSS custom properties, responsive layout, light and dark themes |
+| Backend | Node.js / Express | 22 / 5.2 | HTTP routing, SSR rendering, and REST endpoints |
+| Database | PostgreSQL (`pg`) | 14+ / 8.23 | Relational storage for users, chats, quizzes, materials, UI texts, and rate limits |
+| Auth | Clerk | - | OAuth and session verification via native crypto JWKS |
+| AI | OpenRouter | - | Server-Sent Events (SSE) streaming chat completions |
+| Observability | OpenTelemetry | 1.9+ / 0.222 | Distributed traces, Prometheus metrics, and Loki log exports |
+| Bundler | Vite | 8.3 | Client asset bundling and development middleware |
+| Testing | Playwright & Node Test Runner | 1.63 / Node 22 | Browser end-to-end tests and API integration tests |
 
----
+## Architecture and Rules
 
-## Technology Stack
+Teach4All follows explicit engineering constraints defined in `AGENTS.md`:
 
-| Layer | Technology | Purpose |
-|---|---|---|
-| **Frontend UI** | [VanJS](https://vanjs.org/) (1.6) | 1.0 KB reactive UI framework with zero virtual DOM overhead |
-| **Styling** | Hand-crafted CSS | Custom variables, fluid responsive layouts, dark/light themes |
-| **Backend** | [Express](https://expressjs.com/) (5.2) | Standalone HTTP server, SSR engine, and RESTful API endpoints |
-| **Database** | [PostgreSQL](https://www.postgresql.org/) (`pg` driver) | Relational storage for users, chats, quizzes, materials, and rate limits |
-| **Authentication** | [Clerk](https://clerk.com/) | Custom domain OAuth & JWT auth with node:crypto JWKS verifier |
-| **AI Streaming** | [OpenRouter](https://openrouter.ai/) | Server-Sent Events (SSE) streaming completion engine |
-| **Build & Tooling** | [Vite](https://vitejs.dev/) | Client bundling and asset hashing |
-| **Containerization**| [Docker](https://www.docker.com/) | Multi-stage production container build with health checks |
+- **Code line limits**: Every application code file (`.js`, `.mjs`, `.cjs`, `.css`) in `src/`, `server/`, `prompts/`, and `scripts/` must stay below 500 lines. The `npm run check` script verifies this rule.
+- **First principles UI**: Build elements with native HTML tags via `van.tags`. No React, Vue, Svelte, or UI component libraries.
+- **Custom styling**: Write plain CSS. Do not use Tailwind, Bootstrap, or utility frameworks. CSS nesting is limited to two levels.
+- **Runtime dependencies**: Production dependencies are strictly limited to `vanjs-core`, `express`, `pg`, and `@opentelemetry` SDK packages. No external CDN scripts, stylesheets, or remote fonts run in production.
+- **Online-first**: All completions, quizzes, materials, and search queries resolve directly through backend APIs without service worker interception.
 
----
-
-## Repository Architecture
+## Repository Structure
 
 ```
-Teach4All-App/
-├── index.html                  # Root SSR entry template
-├── 404.html                    # Root SSR 404 template
-├── Dockerfile                  # Multi-stage production container build
-├── docker-compose.yml          # Standalone Docker Compose deployment
-├── package.json                # Project dependencies and npm scripts
-├── vite.config.js              # Vite bundler and development SSR middleware
-├── migrations/                 # PostgreSQL migration scripts (001 - 035+)
-│   ├── 001_initial_rate_limits.sql
-│   ├── 005_create_conversations_and_messages.sql
-│   ├── 011_create_quizzes_and_materials_tables.sql
-│   └── 035_alter_users_username_nullable.sql
-├── prompts/                    # AI System prompts and guidelines
-│   └── chat.txt                # Teach4All pedagogical system prompt
-├── scripts/                    # Build, migration, and verification tools
-│   ├── check.mjs               # 500-line file size enforcement script
-│   └── migrate.mjs             # Database schema migration runner
-├── server/                     # Backend Express server and API layer
-│   ├── index.js                # Server entry point (starts Express listener)
-│   ├── app.js                  # App factory, middleware, and route mounting
-│   ├── ssr.js                  # SSR HTML renderer and initial state hydrator
-│   ├── clerkVerifier.js        # Native node:crypto JWKS JWT & session verifier
-│   ├── authApi.js              # Auth endpoints (/api/whoami, /api/auth/*)
-│   ├── chatApi.js              # OpenRouter SSE streaming handler
-│   ├── db.js / dbCore.js       # PostgreSQL client pool and repository queries
-│   ├── rateLimiter.js          # Sliding-window IP & user rate limiter
-│   └── routes/                 # Domain routers (auth, chat, history, study, ui)
-└── src/                        # Client-side VanJS application
-    ├── main.js                 # Client bootstrap and reactive DOM mounting
-    ├── auth.js                 # Client auth state machine and handshake parser
-    ├── state.js                # Global reactive state (chats, theme, toast)
-    ├── api.js                  # Fetch wrapper with guest/auth token headers
-    ├── uiTexts.js              # Reactive UI localization lookup
-    ├── icons.js                # Raw inline SVG icon components
-    ├── components/             # VanJS interactive components
-    │   ├── chat.js             # Chat history stage and message composer
-    │   ├── sidebar.js          # Navigation, search, and user profile menu
-    │   └── dialogs.js          # Quizzes, study materials, and export modals
-    └── styles/                 # Pure CSS modular stylesheets
-        ├── base.css            # Custom properties, reset, typography
-        ├── chat.css            # Conversation layout, bubbles, composer
-        ├── sidebar.css         # Sidebar drawer and profile styling
-        └── dialogs.css         # Modal overlays and card layouts
+.
+├── migrations/          # Numbered SQL migration files (001 - 045)
+├── prompts/             # System and title generation prompts
+├── public/              # Static assets (logo, icons, manifest)
+├── scripts/             # Build and maintenance scripts
+│   ├── check.mjs        # Enforces 500-line code limit
+│   └── migrate.mjs      # Runs database migrations in sequence
+├── server/              # Express backend
+│   ├── routes/          # API sub-routers (auth, chat, history, study, ui)
+│   ├── app.js           # Express app setup and middleware
+│   ├── clerkVerifier.js # Native Node.js crypto JWKS token verification
+│   ├── db.js            # PostgreSQL pool and repository queries
+│   ├── dev.js           # Development server with Vite middleware
+│   ├── index.js         # Production server entry point
+│   ├── rateLimiter.js   # Sliding-window rate limiter
+│   └── ssr.js           # Server-side HTML template renderer
+├── src/                 # VanJS client application
+│   ├── components/      # UI components (chat, sidebar, dialogs, quiz, material)
+│   ├── styles/          # Modular CSS files
+│   ├── auth.js          # Client auth state machine
+│   ├── chatStore.js     # Chat state, search, and message loaders
+│   ├── main.js          # App mount point and skip-link setup
+│   ├── state.js         # Reactive state and UI persistence
+│   ├── storage.js       # LocalStorage and IndexedDB helpers
+│   ├── studyModules.js  # Quiz and material progress management
+│   └── uiTexts.js       # Dynamic UI text store
+├── tests/               # Playwright E2E and Node test runner suites
+├── AGENTS.md            # Project rules and engineering constraints
+├── Dockerfile           # Multi-stage production container build
+├── docker-compose.yml   # Container orchestration configuration
+└── package.json         # Dependencies and scripts
 ```
 
----
+## Getting Started
 
-## Environment Configuration
+### Prerequisites
 
-Create a `.env` file in the root directory:
+- Node.js 22.12.0 or higher
+- PostgreSQL 14 or higher
+- OpenRouter API key
+- Clerk account (publishable key and secret key)
 
-```env
-# Application Environment ('production' | 'development')
-ENV=development
+### Installation
 
-# Server Port (default: 3000)
-PORT=3000
+1. Clone the repository:
 
-# OpenRouter AI Configuration
-OPENROUTER_API_KEY=your_openrouter_api_key_here
-OPENROUTER_MODEL=google/gemini-2.5-flash-lite
+   ```bash
+   git clone https://github.com/Ahnaf-icprpl/Teach4All-App.git
+   cd Teach4All-App
+   ```
 
-# PostgreSQL Database Connection
-DATABASE_URL=postgresql://username:password@localhost:5432/teach4all
+2. Install dependencies:
 
-# Clerk Authentication Configuration
-CLERK_PUBLISHABLE_KEY=pk_test_your_publishable_key
-CLERK_SECRET_KEY=sk_test_your_secret_key
-CLERK_FRONTEND_API=https://your-app.clerk.accounts.dev
-CLERK_ACCOUNTS_URL=https://your-app.accounts.dev
+   ```bash
+   npm install
+   ```
 
-# OpenTelemetry Observability (Grafana Cloud: Traces, OTLP Metrics & Loki Logs) (Optional)
-GRAFANA_OTEL_API_KEY=glc_your_grafana_cloud_otel_token_here
-OTEL_SERVICE_NAME=teach4all
-LOG_LEVEL=info
-```
+3. Configure environment variables:
 
-### Configuration Parameters
+   ```bash
+   cp .env.example .env
+   ```
 
-| Variable | Required | Description |
-|---|---|---|
-| `ENV` | Yes | Controls SSR caching and error detail (`production` or `development`) |
-| `PORT` | No | Port for Express server (default: `3000`) |
-| `OPENROUTER_API_KEY` | Yes | API key from [OpenRouter](https://openrouter.ai/keys) for streaming completions |
-| `OPENROUTER_MODEL` | No | Model identifier (defaults to `google/gemini-2.5-flash-lite`) |
-| `DATABASE_URL` | Yes | PostgreSQL connection string (supports SSL/connection poolers) |
-| `CLERK_PUBLISHABLE_KEY` | Yes | Clerk publishable key (`pk_test_...` or `pk_live_...`) |
-| `CLERK_SECRET_KEY` | Yes | Clerk secret key (`sk_test_...` or `sk_live_...`) |
-| `CLERK_FRONTEND_API` | No | Custom domain or frontend API host (auto-derived if omitted) |
-| `CLERK_ACCOUNTS_URL` | No | Clerk hosted accounts URL for `/sign-in` and `/user` profiles |
-| `GRAFANA_OTEL_API_KEY` | No | Grafana Cloud OpenTelemetry Access Policy Token (`glc_...`) for automatic OTLP export (Traces, Metrics, and Loki Logs) |
-| `OTEL_SERVICE_NAME` | No | OpenTelemetry service name (defaults to `teach4all`) |
-| `LOG_LEVEL` | No | Logging level: `debug`, `info`, `warn`, `error` (defaults to `info` in prod, `debug` in dev) |
+   Fill in your PostgreSQL connection string, Clerk keys, and OpenRouter API key in `.env`.
 
----
+4. Run database migrations:
 
-## Quick Start (Local Development)
+   ```bash
+   npm run migrate
+   ```
 
-### 1. Prerequisites
-- **Node.js**: `v22.12.0` or higher
-- **PostgreSQL**: `v14` or higher (or cloud provider like Supabase/Neon)
+5. Start the development server:
 
-### 2. Installation & Setup
-```bash
-# Clone the repository
-git clone https://github.com/Ahnaf-icprpl/Teach4All-App.git
-cd Teach4All-App
+   ```bash
+   npm run dev
+   ```
 
-# Install dependencies
-npm install
+   Open `http://localhost:3000` in your browser.
 
-# Copy environment template and configure values
-cp .env.example .env
-```
+## Environment Variables
 
-### 3. Run Database Migrations
-```bash
-npm run migrate
-```
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `ENV` | Yes | `development` | Application mode (`production`, `staging`, `development`) |
+| `PORT` | No | `3000` | HTTP port for the Express server |
+| `DATABASE_URL` | Yes | - | PostgreSQL connection URL |
+| `OPENROUTER_API_KEY` | Yes | - | API key for OpenRouter completion requests |
+| `OPENROUTER_MODEL` | No | `google/gemini-2.5-flash-lite` | LLM model identifier |
+| `CLERK_PUBLISHABLE_KEY` | Yes | - | Clerk publishable key (`pk_test_...` or `pk_live_...`) |
+| `CLERK_SECRET_KEY` | Yes | - | Clerk secret key (`sk_test_...` or `sk_live_...`) |
+| `CLERK_FRONTEND_API` | No | Derived | Clerk frontend API URL |
+| `CLERK_ACCOUNTS_URL` | No | - | Clerk accounts portal URL |
+| `GRAFANA_OTEL_API_KEY` | No | - | Grafana Cloud OTLP token for traces, metrics, and logs |
+| `OTEL_SERVICE_NAME` | No | `teach4all` | OpenTelemetry service identification name |
+| `LOG_LEVEL` | No | `info` | Logging verbosity (`debug`, `info`, `warn`, `error`) |
 
-### 4. Start Development Server
-```bash
-# Starts full-stack Express dev server with Vite middleware mode, auto-reload, and OpenTelemetry
-npm run dev
-```
+## Available Scripts
 
----
+| Command | Description |
+|---|---|
+| `npm run dev` | Starts dev server with Vite middleware, file watching, and OpenTelemetry |
+| `npm run build` | Validates file size limits and compiles client assets with Vite |
+| `npm start` | Launches the production Express server on port 3000 |
+| `npm run check` | Checks that all application code files stay under 500 lines |
+| `npm run migrate` | Executes pending SQL migrations in `migrations/` |
+| `npm run preview` | Serves the production build locally with Vite |
+| `npm test` | Runs Node.js native unit and integration tests |
+| `npm run test:api` | Runs API endpoint and rate limiter tests |
+| `npm run test:e2e` | Runs Playwright browser end-to-end tests |
 
 ## Production Deployment
 
-### Option A: Standalone Node.js Process on VPS
+### Native Node.js
 
 ```bash
-# 1. Enforce file limits and compile production assets
+# 1. Run check and compile client assets
 npm run build
 
-# 2. Run schema migrations
+# 2. Apply pending database migrations
 npm run migrate
 
-# 3. Start production server
-npm start
+# 3. Start the production server
+NODE_ENV=production npm start
 ```
-The server listens on `http://0.0.0.0:${PORT:-3000}`. Configure Nginx or Caddy as a reverse proxy with TLS.
 
-### Option B: Docker Deployment
+### Docker
 
 ```bash
-# Build multi-stage Docker image
+# Build the container image
 docker build -t teach4all .
 
-# Run standalone container with environment file
+# Run the container
 docker run -d \
-  --name teach4all-app \
+  --name teach4all \
   -p 3000:3000 \
   --env-file .env \
   --restart unless-stopped \
   teach4all
 ```
 
-### Option C: Docker Compose
+### Docker Compose
 
 ```bash
 docker compose up -d
 ```
-
----
-
-## NPM Scripts
-
-| Command | Action |
-|---|---|
-| `npm run dev` | Starts Vite development server on `http://0.0.0.0:5173` with HMR |
-| `npm run build` | Runs check, compiles Vite assets, and builds Service Worker |
-| `npm start` | Launches production Express server on `http://0.0.0.0:3000` |
-| `npm run preview` | Previews the compiled `dist/` directory locally |
-| `npm run check` | Validates that **all** application code files remain below 500 lines |
-| `npm run migrate` | Executes pending PostgreSQL migrations in order |
-| `npm test` | Runs Node.js native unit/integration tests |
-| `npm run test:e2e` | Runs Playwright browser end-to-end tests |
-
----
-
-## Architectural Principles
-
-### 1. Build From First Principles
-- **No UI Libraries**: All components are constructed using native DOM tags via VanJS (`div`, `button`, `svg`, `article`, etc.).
-- **Hand-Crafted CSS**: Modular CSS with variables in `:root`. No utility frameworks (Tailwind, Bootstrap). Nesting depth is kept to 2 levels maximum.
-- **Inline SVGs**: Zero third-party icon fonts or icon libraries. All icons reside as compact, accessible inline SVGs in `src/icons.js`.
-
-### 2. 500-Line Code Constraint
-Every application code file (`.js`, `.mjs`, `.cjs`, `.css`) across `src/`, `server/`, `prompts/`, and `scripts/` must strictly remain under **500 lines of code**. This is continuously enforced by `npm run check`. When files expand, logic is modularized into dedicated single-responsibility utilities.
-
-### 3. Zero External Runtime CDNs
-All assets are bundled locally into `dist/`. No external fonts (uses system font stack), stylesheets, or analytics trackers are fetched at runtime. The only production runtime dependencies are `vanjs-core`, `express`, `pg`, and OpenTelemetry instrumentation SDKs.
-
-### 4. Resilient Auth & State Machine
-- **Clerk Verifier**: Verifies tokens using standard RSA-SHA256 cryptography over JWKS without external heavyweight SDKs.
-- **Clock Drift Tolerance**: Incorporates a 60-second skew tolerance to prevent edge expiration failures.
-- **PostgreSQL Fallback**: User profiles are persistently cached and mirrored in the local database to survive Clerk API rate limits or network hiccups.
-
----
 
 ## License
 
