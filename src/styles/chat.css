@@ -9,9 +9,11 @@
   .accent-word { color: var(--terracotta); }
   .welcome-description { margin-top: 20px; color: var(--medium-gray); font-size: 13px; line-height: 1.9; letter-spacing: .03px; }
   .composer-wrap { width: 100%; max-width: 780px; flex-shrink: 0; margin-top: 35px; }
-  .composer { background: var(--off-white); border: 1px solid var(--muted-gray); border-radius: 17px; padding: 20px 17px 12px; box-shadow: var(--shadow); transition: border-color .15s, box-shadow .15s; }
+  .composer { background: var(--off-white); border: 1px solid var(--muted-gray); border-radius: 17px; padding: 20px 17px 12px; box-shadow: var(--shadow); transition: border-color .15s, box-shadow .15s, opacity .15s; }
   .composer:focus-within { border-color: var(--terracotta); box-shadow: 0 0 0 3px rgba(159, 81, 58, 0.12), var(--shadow); }
+  .composer.is-disabled { opacity: 0.65; cursor: not-allowed; background: var(--soft-beige); }
   .composer textarea { display: block; width: 100%; padding: 0 3px; border: 0; outline: none; background: transparent; resize: none; min-height: 29px; max-height: 180px; font-size: 14px; line-height: 1.65; scrollbar-width: thin; color: var(--near-black); }
+  .composer textarea:disabled { cursor: not-allowed; color: var(--medium-gray); }
   .composer textarea::placeholder { color: var(--medium-gray); }
   .composer-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 17px; }
   .composer-tools, .send-tools { display: flex; align-items: center; gap: 10px; }
@@ -29,6 +31,7 @@
   .suggestion-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
   .suggestion-card { position: relative; display: flex; flex-direction: column; align-items: flex-start; text-align: left; padding: 15px 13px 17px; border: 0; border-radius: 10px; background: var(--off-white); transition: transform .18s, background .18s; box-shadow: 0 1px 3px rgba(34, 46, 60, 0.03); }
   .suggestion-card:hover { transform: translateY(-3px); background: var(--off-white); }
+  .suggestion-card:disabled { opacity: 0.55; cursor: not-allowed; pointer-events: none; transform: none !important; }
   .suggestion-icon { display: inline-flex; width: 29px; height: 29px; align-items: center; justify-content: center; border-radius: 8px; margin-bottom: 15px; }
   .suggestion-icon .icon { height: 17px; width: 17px; }
   .amber { background: #FDF3DB; color: #875500; }
@@ -214,6 +217,8 @@
   .has-messages .composer-wrap { margin-top: 10px; width: calc(100% - 48px); max-width: 800px; }
   .has-messages .workspace-footer { padding-top: 14px; padding-bottom: 17px; }
   [data-theme="dark"] .composer { border-color: var(--line); background: var(--surface); }
+  [data-theme="dark"] .composer.is-disabled { background: rgba(255, 255, 255, 0.04); }
+  [data-theme="dark"] .composer textarea:disabled { color: var(--muted); }
   [data-theme="dark"] .welcome-symbol { background: #182A3D; color: var(--gold-amber); }
   [data-theme="dark"] .welcome h1 { color: var(--text); }
   [data-theme="dark"] .welcome-description { color: var(--muted); }

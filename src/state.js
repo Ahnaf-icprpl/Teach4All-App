@@ -103,9 +103,10 @@ export function toast(message) {
 }
 
 export function focusComposer() {
+  if (!online.val) return;
   requestAnimationFrame(() => {
     const el = document.getElementById('message-input');
-    if (el) {
+    if (el && !el.disabled) {
       el.focus();
       if (typeof el.selectionStart === 'number') {
         el.selectionStart = el.selectionEnd = el.value.length;
@@ -210,6 +211,10 @@ export function scrollMessagesToBottom(retry = false) {
 }
 
 export function sendMessage(customText) {
+  if (!online.val) {
+    toast(t('state_offline_notice'));
+    return;
+  }
   const text = (typeof customText === 'string' ? customText : draft.val).trim();
   if (!text || loading.val) return;
   const existing = currentChat();

@@ -183,11 +183,12 @@ function Composer() {
 
   const inputEl = textarea({
     id: 'message-input',
-    autofocus: true,
-    placeholder: () => t('chat_composer_placeholder'),
+    autofocus: () => online.val,
+    placeholder: () => !online.val ? t('state_offline_notice') : t('chat_composer_placeholder'),
     rows: 1,
     maxlength: MAX_INPUT,
     'aria-label': () => t('chat_composer_aria'),
+    disabled: () => !online.val,
     value: () => draft.val,
     oninput: event => {
       setDraft(event.target.value);
@@ -209,6 +210,7 @@ function Composer() {
         }
         if (!event.isComposing) {
           event.preventDefault();
+          if (!online.val) return;
           sendMessage();
         }
       }
@@ -219,9 +221,10 @@ function Composer() {
 
   return div({ class: 'composer-wrap' },
     form({
-      class: 'composer',
+      class: () => `composer ${!online.val ? 'is-disabled' : ''}`,
       onsubmit: event => {
         event.preventDefault();
+        if (!online.val) return;
         sendMessage();
       },
     },
@@ -230,13 +233,14 @@ function Composer() {
         div({ class: 'composer-tools' },
           button({
             type: 'button', class: 'icon-button add-button',
+            disabled: () => !online.val,
             'aria-label': () => t('chat_composer_tools_aria'), title: () => t('chat_composer_tools_aria'),
-            onclick: () => { modal.val = { type: 'tools' }; },
+            onclick: () => { if (!online.val) return; modal.val = { type: 'tools' }; },
           }, icon('plus')),
         ),
         div({ class: 'send-tools' },
           () => span({ class: `input-count ${draft.val.length > MAX_INPUT - 300 ? '' : 'is-hidden'}` }, `${draft.val.length}/${MAX_INPUT}`),
-          button({ type: 'submit', class: 'send-button', 'aria-label': () => t('chat_send_button_aria'), title: () => t('chat_send_button_aria'), disabled: () => !draft.val.trim() || loading.val }, 
+          button({ type: 'submit', class: 'send-button', 'aria-label': () => t('chat_send_button_aria'), title: () => t('chat_send_button_aria'), disabled: () => !draft.val.trim() || loading.val || !online.val }, 
             loading.val ? icon('settings', 'is-loading') : icon('arrow')),
         ),
       ),
@@ -252,18 +256,19 @@ function Suggestions() {
       button({
         type: 'button',
         class: 'icon-button rotate-prompts-btn',
+        disabled: () => !online.val,
         'aria-label': () => t('chat_suggestions_aria'),
         title: () => t('chat_suggestions_aria'),
-        onclick: rotatePrompts,
+        onclick: () => { if (!online.val) return; rotatePrompts(); },
       }, icon('spark')),
     ),
     () => div({ class: 'suggestion-grid' }, activePrompts.val.map(prompt =>
       button({
         type: 'button',
         class: 'suggestion-card',
-        disabled: () => loading.val,
+        disabled: () => loading.val || !online.val,
         onclick: () => {
-          if (loading.val) return;
+          if (loading.val || !online.val) return;
           sendMessage(prompt.prompt);
         },
       },
