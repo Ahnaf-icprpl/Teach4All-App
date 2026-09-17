@@ -321,7 +321,9 @@ export function QuizSolver(quizId, { initialClue = false } = {}) {
         currentIndex.val < totalQuestions - 1
           ? button({
             class: 'primary-button',
+            disabled: () => userAnswers.val[currentIndex.val] === undefined || userAnswers.val[currentIndex.val] === null,
             onclick: () => {
+              if (userAnswers.val[currentIndex.val] === undefined || userAnswers.val[currentIndex.val] === null) return;
               const nextIdx = Math.min(totalQuestions - 1, currentIndex.val + 1);
               currentIndex.val = nextIdx;
               currentQNum.val = nextIdx + 1;
@@ -338,7 +340,11 @@ export function QuizSolver(quizId, { initialClue = false } = {}) {
           }, span(() => t('dialogs_quiz_next_btn')))
           : button({
             class: 'primary-button',
-            onclick: finishQuiz,
+            disabled: () => userAnswers.val[currentIndex.val] === undefined || userAnswers.val[currentIndex.val] === null,
+            onclick: () => {
+              if (userAnswers.val[currentIndex.val] === undefined || userAnswers.val[currentIndex.val] === null) return;
+              finishQuiz();
+            },
           }, icon('check'), span(() => t('dialogs_quiz_finish_btn'))),
       ),
     );
