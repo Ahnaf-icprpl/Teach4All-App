@@ -190,6 +190,25 @@ export async function selectChat(id) {
   }).catch(() => {});
 }
 
+export function scrollMessagesToBottom(retry = false) {
+  if (typeof document === 'undefined') return;
+  const doScroll = () => {
+    const pane = document.getElementById('messages');
+    if (pane) pane.scrollTop = pane.scrollHeight;
+    if (typeof window !== 'undefined' && (window.scrollY !== 0 || document.documentElement.scrollTop !== 0 || document.body.scrollTop !== 0)) {
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    }
+  };
+  requestAnimationFrame(doScroll);
+  if (retry) {
+    setTimeout(doScroll, 40);
+    setTimeout(doScroll, 120);
+    setTimeout(doScroll, 250);
+  }
+}
+
 export function sendMessage() {
   const text = draft.val.trim();
   if (!text || loading.val) return;
@@ -221,11 +240,7 @@ export function sendMessage() {
   draft.val = '';
   loading.val = true;
   persist();
-  
-  requestAnimationFrame(() => {
-    const pane = document.getElementById('messages');
-    if (pane) pane.scrollTop = pane.scrollHeight;
-  });
+  scrollMessagesToBottom(true);
 
   const messageHistory = chat.messages.concat(userMessage);
 
@@ -257,10 +272,7 @@ export function sendMessage() {
     loading.val = false;
     persist();
     focusComposer();
-    requestAnimationFrame(() => {
-      const pane = document.getElementById('messages');
-      if (pane) pane.scrollTop = pane.scrollHeight;
-    });
+    scrollMessagesToBottom();
     return;
   }
 
@@ -289,10 +301,7 @@ export function sendMessage() {
       return c;
     });
     chats.val = updatedChats;
-    requestAnimationFrame(() => {
-      const pane = document.getElementById('messages');
-      if (pane && activeId.val === chat.id) pane.scrollTop = pane.scrollHeight;
-    });
+    if (activeId.val === chat.id) scrollMessagesToBottom();
   }, {
     conversationId: chat.id,
     conversationTitle: chat.title,
@@ -354,6 +363,11 @@ export function sendMessage() {
       chats.val = updatedChats;
       toast(errorMessage);
       persist();
+      if (typeof document !== 'undefined') {
+        const inputEl = document.getElementById('message-input');
+        if (inputEl) inputEl.blur();
+      }
+      scrollMessagesToBottom(true);
       return;
     }
 
@@ -373,10 +387,7 @@ export function sendMessage() {
     chats.val = updatedChats;
     persist();
     focusComposer();
-    requestAnimationFrame(() => {
-      const pane = document.getElementById('messages');
-      if (pane && activeId.val === chat.id) pane.scrollTop = pane.scrollHeight;
-    });
+    if (activeId.val === chat.id) scrollMessagesToBottom();
   });
 }
 

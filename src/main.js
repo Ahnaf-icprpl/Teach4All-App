@@ -97,6 +97,20 @@ function App() {
 
 async function initApp() {
   if (typeof window !== 'undefined') {
+    const resetWindowScroll = () => {
+      if (window.scrollY !== 0 || document.documentElement.scrollTop !== 0 || document.body.scrollTop !== 0) {
+        window.scrollTo(0, 0);
+        document.documentElement.scrollTop = 0;
+        document.body.scrollTop = 0;
+      }
+    };
+    window.addEventListener('scroll', resetWindowScroll, { passive: true });
+    window.addEventListener('orientationchange', resetWindowScroll, { passive: true });
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', resetWindowScroll);
+      window.visualViewport.addEventListener('scroll', resetWindowScroll);
+    }
+
     const path = window.location.pathname;
     const isAppPath = path === '/' || path.endsWith('/index.html') || path.endsWith('/');
     if (!isAppPath && !path.includes('404.html')) {

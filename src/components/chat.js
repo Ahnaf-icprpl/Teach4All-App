@@ -193,6 +193,13 @@ function Composer() {
       setDraft(event.target.value);
       autoResize();
     },
+    onblur: () => {
+      if (typeof window !== 'undefined' && (window.scrollY !== 0 || document.documentElement.scrollTop !== 0 || document.body.scrollTop !== 0)) {
+        window.scrollTo(0, 0);
+        document.documentElement.scrollTop = 0;
+        document.body.scrollTop = 0;
+      }
+    },
     onpaste: handlePaste,
     onkeydown: event => {
       if (event.key === 'Enter') {
