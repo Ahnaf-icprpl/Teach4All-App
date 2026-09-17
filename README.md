@@ -1,13 +1,22 @@
+<div align="center">
+
+<img src="public/logo.png" alt="Teach4All Logo" width="88" height="88" />
+
 # Teach4All
 
-[![CI Checks](https://github.com/Ahnaf-icprpl/Teach4All-App/actions/workflows/checks.yml/badge.svg)](https://github.com/Ahnaf-icprpl/Teach4All-App/actions/workflows/checks.yml)
-[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.12.0-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
-[![VanJS](https://img.shields.io/badge/VanJS-1.6.1-F38B00?logo=javascript&logoColor=white)](https://vanjs.org/)
-[![Express](https://img.shields.io/badge/Express-5.2-000000?logo=express&logoColor=white)](https://expressjs.com/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14%2B-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-Tracing%20%26%20Metrics-7F52FF?logo=opentelemetry&logoColor=white)](https://opentelemetry.io/)
-[![Code Limit](https://img.shields.io/badge/Code%20Limit-%3C500%20lines%2Ffile-informational)](#architecture-and-rules)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+**Online-first educational platform combining AI tutoring, interactive quizzes, and structured study modules.**
+
+[![CI Checks](https://img.shields.io/github/actions/workflow/status/Ahnaf-icprpl/Teach4All-App/checks.yml?branch=main&style=for-the-badge&logo=github&label=CI%20Checks)](https://github.com/Ahnaf-icprpl/Teach4All-App/actions/workflows/checks.yml)
+[![Node.js](https://img.shields.io/badge/Node.js-22.12+-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![VanJS](https://img.shields.io/badge/VanJS-1.6.1-F38B00?style=for-the-badge&logo=javascript&logoColor=white)](https://vanjs.org/)
+[![Express](https://img.shields.io/badge/Express-5.2-000000?style=for-the-badge&logo=express&logoColor=white)](https://expressjs.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14+-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Clerk](https://img.shields.io/badge/Clerk-Auth-6C47FF?style=for-the-badge&logo=clerk&logoColor=white)](https://clerk.com/)
+[![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-OTLP-7F52FF?style=for-the-badge&logo=opentelemetry&logoColor=white)](https://opentelemetry.io/)
+[![Code Limit](https://img.shields.io/badge/Code%20Limit-%3C500%20lines-informational?style=for-the-badge)](#architecture-and-rules)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
+
+</div>
 
 Teach4All is an online educational application that combines AI tutoring, interactive quizzes, and structured study modules. The client runs on VanJS without virtual DOM or component frameworks. The backend uses Node.js, Express, PostgreSQL, and Clerk authentication.
 
