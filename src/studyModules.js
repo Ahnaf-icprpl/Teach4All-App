@@ -1,5 +1,9 @@
 import van from 'vanjs-core';
-import { getQuizzesStorageKey, getMaterialsStorageKey } from './storage.js';
+import {
+  getQuizzesStorageKey, getMaterialsStorageKey,
+  saveCachedQuizDetail, loadCachedQuizDetail,
+  saveCachedMaterialDetail, loadCachedMaterialDetail,
+} from './storage.js';
 import { getEffectiveUserId, getAuthHeaders } from './auth.js';
 import { t } from './uiTexts.js';
 
@@ -73,6 +77,7 @@ export async function fetchQuizzes({ search, category } = {}) {
             localStorage.setItem(key, JSON.stringify(formatted));
           }
         } catch {}
+        prefetchQuizDetails(formatted).catch(() => {});
       }
       return formatted;
     }
@@ -116,6 +121,7 @@ export async function fetchMaterials({ search, category } = {}) {
             localStorage.setItem(key, JSON.stringify(formatted));
           }
         } catch {}
+        prefetchMaterialDetails(formatted).catch(() => {});
       }
       return formatted;
     }
@@ -161,6 +167,7 @@ export function clearLocalQuizProgress(quizId) {
  */
 export function syncQuizProgressToServer(quizId, { lastQuestionIndex, userAnswers, isSolved } = {}) {
   if (!quizId) return;
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return;
   fetch('/api/quizzes', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
@@ -177,12 +184,18 @@ export async function markQuizSolved(id, isSolved = true) {
   const val = Boolean(isSolved);
   const updated = quizzes.val.map(q => (q.id === id ? { ...q, is_solved: val, isSolved: val } : q));
   quizzes.val = updated;
+  const userId = getEffectiveUserId();
   try {
     if (typeof localStorage !== 'undefined') {
-      const key = getQuizzesStorageKey(getEffectiveUserId());
+      const key = getQuizzesStorageKey(userId);
       localStorage.setItem(key, JSON.stringify(updated));
     }
+    const cached = loadCachedQuizDetail(id, userId);
+    if (cached) {
+      saveCachedQuizDetail(id, { ...cached, is_solved: val, isSolved: val }, userId);
+    }
   } catch {}
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return updated;
   try {
     await fetch('/api/quizzes', {
       method: 'PATCH',
@@ -197,12 +210,18 @@ export async function markMaterialSolved(id, isSolved = true) {
   const val = Boolean(isSolved);
   const updated = materials.val.map(m => (m.id === id ? { ...m, is_solved: val, isSolved: val, is_completed: val, isCompleted: val } : m));
   materials.val = updated;
+  const userId = getEffectiveUserId();
   try {
     if (typeof localStorage !== 'undefined') {
-      const key = getMaterialsStorageKey(getEffectiveUserId());
+      const key = getMaterialsStorageKey(userId);
       localStorage.setItem(key, JSON.stringify(updated));
     }
+    const cached = loadCachedMaterialDetail(id, userId);
+    if (cached) {
+      saveCachedMaterialDetail(id, { ...cached, is_solved: val, isSolved: val, is_completed: val, isCompleted: val }, userId);
+    }
   } catch {}
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return updated;
   try {
     await fetch('/api/materials', {
       method: 'PATCH',
@@ -302,72 +321,106 @@ export function normalizeMaterialSection(s, idx = 0) {
   };
 }
 
+export async function prefetchQuizDetails(quizzesList) {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+  const userId = getEffectiveUserId();
+  const limit = Math.min(quizzesList?.length || 0, 10);
+  for (let i = 0; i < limit; i++) {
+    const q = quizzesList[i];
+    if (!q?.id || loadCachedQuizDetail(q.id, userId)) continue;
+    try {
+      const res = await fetch(`/api/quizzes?id=${q.id}`, { headers: { ...getAuthHeaders() } });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.quiz) {
+          const raw = Array.isArray(data.quiz.questions) ? data.quiz.questions : [];
+          const questions = raw.map((item, idx) => normalizeQuizQuestion(item, idx)).filter(Boolean);
+          saveCachedQuizDetail(q.id, { ...data.quiz, questions, questionCount: questions.length, question_count: questions.length }, userId);
+        }
+      }
+    } catch {}
+  }
+}
+
+export async function prefetchMaterialDetails(materialsList) {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+  const userId = getEffectiveUserId();
+  const limit = Math.min(materialsList?.length || 0, 10);
+  for (let i = 0; i < limit; i++) {
+    const m = materialsList[i];
+    if (!m?.id || loadCachedMaterialDetail(m.id, userId)) continue;
+    try {
+      const res = await fetch(`/api/materials?id=${m.id}`, { headers: { ...getAuthHeaders() } });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.material) {
+          const raw = Array.isArray(data.material.sections) ? data.material.sections : [];
+          const sections = raw.map(normalizeMaterialSection).filter(Boolean);
+          saveCachedMaterialDetail(m.id, { ...data.material, sections, sectionCount: sections.length, section_count: sections.length }, userId);
+        }
+      }
+    } catch {}
+  }
+}
+
+function resolveCachedQuiz(id, userId, shuffle) {
+  const cached = loadCachedQuizDetail(id, userId) || quizzes.val.find(q => q.id === id);
+  if (!cached) return null;
+  const raw = Array.isArray(cached.questions) ? cached.questions : [];
+  const questions = raw.map((q, idx) => normalizeQuizQuestion(q, idx, { shuffle })).filter(Boolean);
+  return { ...cached, questions, questionCount: questions.length, question_count: questions.length };
+}
+
+function resolveCachedMaterial(id, userId) {
+  const cached = loadCachedMaterialDetail(id, userId) || materials.val.find(m => m.id === id);
+  if (!cached) return null;
+  const raw = Array.isArray(cached.sections) ? cached.sections : [];
+  const sections = raw.map(normalizeMaterialSection).filter(Boolean);
+  return { ...cached, sections, sectionCount: sections.length, section_count: sections.length };
+}
+
 export async function fetchQuizDetails(id, { shuffle = true } = {}) {
   if (!id) return null;
+  const userId = getEffectiveUserId();
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    const localQuiz = quizzes.val.find(q => q.id === id);
-    if (!localQuiz) return null;
-    const rawQuestions = Array.isArray(localQuiz.questions) ? localQuiz.questions : [];
-    const questions = rawQuestions.map((q, qIdx) => normalizeQuizQuestion(q, qIdx, { shuffle })).filter(Boolean);
-    return { ...localQuiz, questions, questionCount: questions.length, question_count: questions.length };
+    return resolveCachedQuiz(id, userId, shuffle);
   }
   try {
-    const res = await fetch(`/api/quizzes?id=${id}`, {
-      headers: { ...getAuthHeaders() },
-    });
+    const res = await fetch(`/api/quizzes?id=${id}`, { headers: { ...getAuthHeaders() } });
     if (res.ok) {
       const data = await res.json();
       if (data?.quiz) {
         const raw = Array.isArray(data.quiz.questions) ? data.quiz.questions : [];
         const questions = raw.map((q, qIdx) => normalizeQuizQuestion(q, qIdx, { shuffle })).filter(Boolean);
-        return {
-          ...data.quiz,
-          questions,
-          questionCount: questions.length,
-          question_count: questions.length,
-        };
+        const fullQuiz = { ...data.quiz, questions, questionCount: questions.length, question_count: questions.length };
+        saveCachedQuizDetail(id, fullQuiz, userId);
+        return fullQuiz;
       }
     }
   } catch {}
-  const localQuiz = quizzes.val.find(q => q.id === id);
-  if (!localQuiz) return null;
-  const rawQuestions = Array.isArray(localQuiz.questions) ? localQuiz.questions : [];
-  const questions = rawQuestions.map((q, qIdx) => normalizeQuizQuestion(q, qIdx, { shuffle })).filter(Boolean);
-  return { ...localQuiz, questions, questionCount: questions.length, question_count: questions.length };
+  return resolveCachedQuiz(id, userId, shuffle);
 }
 
 export async function fetchMaterialDetails(id) {
   if (!id) return null;
+  const userId = getEffectiveUserId();
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    const localMat = materials.val.find(m => m.id === id);
-    if (!localMat) return null;
-    const rawSections = Array.isArray(localMat.sections) ? localMat.sections : [];
-    const sections = rawSections.map(normalizeMaterialSection).filter(Boolean);
-    return { ...localMat, sections, sectionCount: sections.length, section_count: sections.length };
+    return resolveCachedMaterial(id, userId);
   }
   try {
-    const res = await fetch(`/api/materials?id=${id}`, {
-      headers: { ...getAuthHeaders() },
-    });
+    const res = await fetch(`/api/materials?id=${id}`, { headers: { ...getAuthHeaders() } });
     if (res.ok) {
       const data = await res.json();
       if (data?.material) {
         const raw = Array.isArray(data.material.sections) ? data.material.sections : [];
         const sections = raw.map(normalizeMaterialSection).filter(Boolean);
-        return {
-          ...data.material,
-          sections,
-          sectionCount: sections.length,
-          section_count: sections.length,
-        };
+        const fullMat = { ...data.material, sections, sectionCount: sections.length, section_count: sections.length };
+        saveCachedMaterialDetail(id, fullMat, userId);
+        return fullMat;
       }
     }
   } catch {}
-  const localMat = materials.val.find(m => m.id === id);
-  if (!localMat) return null;
-  const rawSections = Array.isArray(localMat.sections) ? localMat.sections : [];
-  const sections = rawSections.map(normalizeMaterialSection).filter(Boolean);
-  return { ...localMat, sections, sectionCount: sections.length, section_count: sections.length };
+  return resolveCachedMaterial(id, userId);
 }
 
 export function initStudyModules() {

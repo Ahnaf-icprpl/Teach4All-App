@@ -1,7 +1,7 @@
 import van from 'vanjs-core';
 import {
   loadWorkspace, saveWorkspace, emptyWorkspace, MAX_CHATS,
-  loadThemeFromLocalDb, saveTheme,
+  loadThemeFromLocalDb, saveTheme, saveCachedRecentChats,
 } from './storage.js';
 import {
   sendMessage as sendApiMessage, generateTitle, generateOfflineTitle,
@@ -86,6 +86,7 @@ export const workspace = () => ({
 
 export function persist() {
   saveWorkspace(storage, workspace());
+  saveCachedRecentChats(chats.val, getEffectiveUserId());
 }
 
 export function toggleWebSearch() {

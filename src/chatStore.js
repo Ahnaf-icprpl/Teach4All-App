@@ -4,6 +4,11 @@ import {
   fetchChatStatus, subscribeToChatStream,
 } from './router.js';
 import { t } from './uiTexts.js';
+import {
+  saveCachedRecentChats, loadCachedRecentChats,
+  saveCachedChatMessages, loadCachedChatMessages,
+} from './storage.js';
+import { getEffectiveUserId } from './auth.js';
 
 export const CHATS_PAGE_SIZE = 20;
 
@@ -17,8 +22,8 @@ export const search = van.state('');
 export const searchResults = van.state(null);
 export const searchLoading = van.state(false);
 
-export const CHATS_CACHE_KEY = 'teach4all.chats_cache.v1';
-export const CHAT_MESSAGES_CACHE_PREFIX = 'teach4all.chat_messages.v1:';
+export const CHATS_CACHE_KEY = 'teach4all.chats.v2';
+export const CHAT_MESSAGES_CACHE_PREFIX = 'teach4all.chat_messages.v2:';
 
 let searchDebounceTimer = null;
 
@@ -73,20 +78,47 @@ export function onSearchInput(query) {
   }, 250);
 }
 
+export async function prefetchMessagesForRecentChats(recentChats) {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+  const userId = getEffectiveUserId();
+  const limit = Math.min(recentChats.length, 10);
+  for (let i = 0; i < limit; i++) {
+    const chat = recentChats[i];
+    if (!chat?.id) continue;
+    const existingCached = loadCachedChatMessages(chat.id, userId);
+    if (existingCached && existingCached.length > 0) {
+      if (!chat.messagesLoaded || !chat.messages?.length) {
+        chats.val = chats.val.map(c => c.id === chat.id ? { ...c, messages: existingCached, messagesLoaded: true } : c);
+      }
+      continue;
+    }
+    try {
+      const data = await fetchMessages(chat.id);
+      if (Array.isArray(data?.messages)) {
+        const loadedMessages = data.messages
+          .filter(m => m && (m.role === 'user' || (m.content && m.content.trim().length > 0)))
+          .map(m => ({
+            id: m.id,
+            role: m.role,
+            text: m.content || '',
+            createdAt: m.created_at ? new Date(m.created_at).getTime() : Date.now(),
+          }));
+        chats.val = chats.val.map(c => c.id === chat.id ? { ...c, messages: loadedMessages, messagesLoaded: true } : c);
+        saveCachedChatMessages(chat.id, loadedMessages, userId);
+      }
+    } catch {}
+  }
+  saveCachedRecentChats(chats.val, userId);
+}
+
 export async function loadMessagesForChat(id) {
+  const userId = getEffectiveUserId();
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    if (typeof localStorage !== 'undefined') {
-      try {
-        const raw = localStorage.getItem(`${CHAT_MESSAGES_CACHE_PREFIX}${id}`);
-        if (raw) {
-          const loadedMessages = JSON.parse(raw);
-          if (Array.isArray(loadedMessages)) {
-            chats.val = chats.val.map(c =>
-              c.id === id ? { ...c, messages: loadedMessages, messagesLoaded: true } : c
-            );
-          }
-        }
-      } catch {}
+    const cached = loadCachedChatMessages(id, userId);
+    if (cached && Array.isArray(cached)) {
+      chats.val = chats.val.map(c =>
+        c.id === id ? { ...c, messages: cached, messagesLoaded: true } : c
+      );
     }
     return;
   }
@@ -106,35 +138,31 @@ export async function loadMessagesForChat(id) {
       chats.val = chats.val.map(c =>
         c.id === id ? { ...c, messages: loadedMessages, messagesLoaded: true } : c
       );
-      if (typeof localStorage !== 'undefined') {
-        try {
-          localStorage.setItem(`${CHAT_MESSAGES_CACHE_PREFIX}${id}`, JSON.stringify(loadedMessages));
-        } catch {}
-      }
+      saveCachedChatMessages(id, loadedMessages, userId);
+      saveCachedRecentChats(chats.val, userId);
       requestAnimationFrame(() => {
         const pane = document.getElementById('messages');
         if (pane) pane.scrollTop = pane.scrollHeight;
       });
     }
   } catch (err) {
-    // Silent failover
+    const cached = loadCachedChatMessages(id, userId);
+    if (cached && Array.isArray(cached)) {
+      chats.val = chats.val.map(c =>
+        c.id === id ? { ...c, messages: cached, messagesLoaded: true } : c
+      );
+    }
   } finally {
     messagesLoading.val = false;
   }
 }
 
 export async function loadChatHistory() {
+  const userId = getEffectiveUserId();
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    if (typeof localStorage !== 'undefined') {
-      try {
-        const raw = localStorage.getItem(CHATS_CACHE_KEY);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            chats.val = parsed;
-          }
-        }
-      } catch {}
+    const cached = loadCachedRecentChats(userId);
+    if (cached.length > 0) {
+      chats.val = cached;
     }
     historyLoading.val = false;
     return;
@@ -159,14 +187,14 @@ export async function loadChatHistory() {
       hasMoreChats.val = typeof data.hasMore === 'boolean'
         ? data.hasMore
         : dbChats.length === CHATS_PAGE_SIZE;
-      if (typeof localStorage !== 'undefined') {
-        try {
-          localStorage.setItem(CHATS_CACHE_KEY, JSON.stringify(chats.val));
-        } catch {}
-      }
+      saveCachedRecentChats(chats.val, userId);
+      prefetchMessagesForRecentChats(chats.val.slice(0, 10)).catch(() => {});
     }
   } catch (err) {
-    // Silent failover
+    const cached = loadCachedRecentChats(userId);
+    if (cached.length > 0 && chats.val.length === 0) {
+      chats.val = cached;
+    }
   } finally {
     historyLoading.val = false;
   }
