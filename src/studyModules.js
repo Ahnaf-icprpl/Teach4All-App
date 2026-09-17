@@ -41,6 +41,9 @@ export const quizzes = van.state(loadCachedQuizzes());
 export const materials = van.state(loadCachedMaterials());
 
 export async function fetchQuizzes({ search, category } = {}) {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return quizzes.val;
+  }
   try {
     const params = new URLSearchParams();
     if (search) params.set('search', search);
@@ -78,6 +81,9 @@ export async function fetchQuizzes({ search, category } = {}) {
 }
 
 export async function fetchMaterials({ search, category } = {}) {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return materials.val;
+  }
   try {
     const params = new URLSearchParams();
     if (search) params.set('search', search);
@@ -298,6 +304,13 @@ export function normalizeMaterialSection(s, idx = 0) {
 
 export async function fetchQuizDetails(id, { shuffle = true } = {}) {
   if (!id) return null;
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    const localQuiz = quizzes.val.find(q => q.id === id);
+    if (!localQuiz) return null;
+    const rawQuestions = Array.isArray(localQuiz.questions) ? localQuiz.questions : [];
+    const questions = rawQuestions.map((q, qIdx) => normalizeQuizQuestion(q, qIdx, { shuffle })).filter(Boolean);
+    return { ...localQuiz, questions, questionCount: questions.length, question_count: questions.length };
+  }
   try {
     const res = await fetch(`/api/quizzes?id=${id}`, {
       headers: { ...getAuthHeaders() },
@@ -325,6 +338,13 @@ export async function fetchQuizDetails(id, { shuffle = true } = {}) {
 
 export async function fetchMaterialDetails(id) {
   if (!id) return null;
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    const localMat = materials.val.find(m => m.id === id);
+    if (!localMat) return null;
+    const rawSections = Array.isArray(localMat.sections) ? localMat.sections : [];
+    const sections = rawSections.map(normalizeMaterialSection).filter(Boolean);
+    return { ...localMat, sections, sectionCount: sections.length, section_count: sections.length };
+  }
   try {
     const res = await fetch(`/api/materials?id=${id}`, {
       headers: { ...getAuthHeaders() },
@@ -352,6 +372,7 @@ export async function fetchMaterialDetails(id) {
 
 export function initStudyModules() {
   if (typeof window === 'undefined') return;
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return;
   fetchQuizzes().catch(() => {});
   fetchMaterials().catch(() => {});
 }
@@ -360,6 +381,10 @@ if (typeof window !== 'undefined') {
   window.addEventListener('teach4all:auth-changed', () => {
     quizzes.val = loadCachedQuizzes();
     materials.val = loadCachedMaterials();
+    fetchQuizzes().catch(() => {});
+    fetchMaterials().catch(() => {});
+  });
+  window.addEventListener('online', () => {
     fetchQuizzes().catch(() => {});
     fetchMaterials().catch(() => {});
   });

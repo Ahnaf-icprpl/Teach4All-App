@@ -28,15 +28,45 @@ export function getClerkUrls() {
   };
 }
 
+export const AUTH_CONFIG_STORAGE_KEY = 'teach4all.auth_config.v1';
+
 export async function initAuthConfig() {
   if (typeof window === 'undefined') return null;
-  if (window.__INITIAL_UI_DATA__?.auth?.signInUrl) return window.__INITIAL_UI_DATA__.auth;
+  if (window.__INITIAL_UI_DATA__?.auth?.signInUrl) {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(AUTH_CONFIG_STORAGE_KEY, JSON.stringify(window.__INITIAL_UI_DATA__.auth));
+      }
+    } catch {}
+    return window.__INITIAL_UI_DATA__.auth;
+  }
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const cached = localStorage.getItem(AUTH_CONFIG_STORAGE_KEY);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed?.signInUrl) {
+            if (!window.__INITIAL_UI_DATA__) window.__INITIAL_UI_DATA__ = {};
+            window.__INITIAL_UI_DATA__.auth = parsed;
+            return parsed;
+          }
+        }
+      }
+    } catch {}
+    return null;
+  }
   try {
     const res = await fetch('./api/auth/config', { cache: 'no-store' });
     if (res.ok) {
       const data = await res.json();
       if (!window.__INITIAL_UI_DATA__) window.__INITIAL_UI_DATA__ = {};
       window.__INITIAL_UI_DATA__.auth = data;
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(AUTH_CONFIG_STORAGE_KEY, JSON.stringify(data));
+        }
+      } catch {}
       return data;
     }
   } catch {}

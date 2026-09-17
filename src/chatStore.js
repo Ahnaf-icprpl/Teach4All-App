@@ -17,6 +17,9 @@ export const search = van.state('');
 export const searchResults = van.state(null);
 export const searchLoading = van.state(false);
 
+export const CHATS_CACHE_KEY = 'teach4all.chats_cache.v1';
+export const CHAT_MESSAGES_CACHE_PREFIX = 'teach4all.chat_messages.v1:';
+
 let searchDebounceTimer = null;
 
 export function onSearchInput(query) {
@@ -25,6 +28,16 @@ export function onSearchInput(query) {
   if (!term) {
     if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
     searchResults.val = null;
+    searchLoading.val = false;
+    return;
+  }
+
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    const qLower = term.toLowerCase();
+    searchResults.val = chats.val.filter(chat =>
+      chat.title.toLowerCase().includes(qLower) ||
+      (chat.messages && chat.messages.some(message => message.text?.toLowerCase().includes(qLower))),
+    );
     searchLoading.val = false;
     return;
   }
@@ -61,6 +74,22 @@ export function onSearchInput(query) {
 }
 
 export async function loadMessagesForChat(id) {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const raw = localStorage.getItem(`${CHAT_MESSAGES_CACHE_PREFIX}${id}`);
+        if (raw) {
+          const loadedMessages = JSON.parse(raw);
+          if (Array.isArray(loadedMessages)) {
+            chats.val = chats.val.map(c =>
+              c.id === id ? { ...c, messages: loadedMessages, messagesLoaded: true } : c
+            );
+          }
+        }
+      } catch {}
+    }
+    return;
+  }
   if (messagesLoading.val) return;
   messagesLoading.val = true;
   try {
@@ -77,6 +106,11 @@ export async function loadMessagesForChat(id) {
       chats.val = chats.val.map(c =>
         c.id === id ? { ...c, messages: loadedMessages, messagesLoaded: true } : c
       );
+      if (typeof localStorage !== 'undefined') {
+        try {
+          localStorage.setItem(`${CHAT_MESSAGES_CACHE_PREFIX}${id}`, JSON.stringify(loadedMessages));
+        } catch {}
+      }
       requestAnimationFrame(() => {
         const pane = document.getElementById('messages');
         if (pane) pane.scrollTop = pane.scrollHeight;
@@ -90,6 +124,21 @@ export async function loadMessagesForChat(id) {
 }
 
 export async function loadChatHistory() {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const raw = localStorage.getItem(CHATS_CACHE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            chats.val = parsed;
+          }
+        }
+      } catch {}
+    }
+    historyLoading.val = false;
+    return;
+  }
   historyLoading.val = true;
   try {
     const data = await fetchConversations({ limit: CHATS_PAGE_SIZE, offset: 0 });
@@ -110,6 +159,11 @@ export async function loadChatHistory() {
       hasMoreChats.val = typeof data.hasMore === 'boolean'
         ? data.hasMore
         : dbChats.length === CHATS_PAGE_SIZE;
+      if (typeof localStorage !== 'undefined') {
+        try {
+          localStorage.setItem(CHATS_CACHE_KEY, JSON.stringify(chats.val));
+        } catch {}
+      }
     }
   } catch (err) {
     // Silent failover
@@ -119,6 +173,7 @@ export async function loadChatHistory() {
 }
 
 export async function loadMoreChats() {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return;
   if (historyLoadingMore.val || historyLoading.val || !hasMoreChats.val) return;
   historyLoadingMore.val = true;
   try {
@@ -179,6 +234,7 @@ export async function checkAndAttachActiveTask(chatId, {
   isSending = false,
 } = {}) {
   if (!chatId || isSending) return;
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return;
   try {
     const status = await fetchChatStatus(chatId);
     if (!status || !status.active || activeId.val !== chatId) return;
@@ -263,6 +319,9 @@ export async function checkAndAttachActiveTask(chatId, {
 if (typeof window !== 'undefined') {
   window.addEventListener('teach4all:auth-changed', () => {
     resetChatStore();
+    loadChatHistory().catch(() => {});
+  });
+  window.addEventListener('online', () => {
     loadChatHistory().catch(() => {});
   });
 }
