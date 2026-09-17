@@ -116,13 +116,22 @@ export function initOpenTelemetry(env = process.env) {
   }
 
   try {
+    const tracesUrl = (env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT || '').trim() ||
+      (config.endpoint.endsWith('/v1/traces') ? config.endpoint : `${config.endpoint}/v1/traces`);
+
+    const metricsUrl = (env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT || '').trim() ||
+      (config.endpoint.endsWith('/v1/metrics') ? config.endpoint : `${config.endpoint}/v1/metrics`);
+
+    const logsUrl = (env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT || '').trim() ||
+      (config.endpoint.endsWith('/v1/logs') ? config.endpoint : `${config.endpoint}/v1/logs`);
+
     const traceExporter = new OTLPTraceExporter({
-      url: `${config.endpoint}/v1/traces`,
+      url: tracesUrl,
       headers: config.headers,
     });
 
     const metricExporter = new OTLPMetricExporter({
-      url: `${config.endpoint}/v1/metrics`,
+      url: metricsUrl,
       headers: config.headers,
     });
 
@@ -132,11 +141,12 @@ export function initOpenTelemetry(env = process.env) {
     });
 
     const logExporter = new OTLPLogExporter({
-      url: `${config.endpoint}/v1/logs`,
+      url: logsUrl,
       headers: config.headers,
     });
 
-    const logRecordProcessor = new BatchLogRecordProcessor(logExporter, {
+    const logRecordProcessor = new BatchLogRecordProcessor({
+      exporter: logExporter,
       scheduledDelayMillis: 2000,
       maxExportBatchSize: 512,
     });
@@ -153,7 +163,7 @@ export function initOpenTelemetry(env = process.env) {
       resource,
       serviceName: config.serviceName,
       traceExporter,
-      metricReader,
+      metricReaders: [metricReader],
       logRecordProcessors: [logRecordProcessor],
       instrumentations: [
         getNodeAutoInstrumentations({
