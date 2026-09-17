@@ -4,6 +4,7 @@ import {
   fetchChatStatus, subscribeToChatStream,
 } from './router.js';
 import { t } from './uiTexts.js';
+
 import {
   saveCachedRecentChats, loadCachedRecentChats,
   saveCachedChatMessages, loadCachedChatMessages,
@@ -21,9 +22,6 @@ export const messagesLoading = van.state(false);
 export const search = van.state('');
 export const searchResults = van.state(null);
 export const searchLoading = van.state(false);
-
-export const CHATS_CACHE_KEY = 'teach4all.chats.v2';
-export const CHAT_MESSAGES_CACHE_PREFIX = 'teach4all.chat_messages.v2:';
 
 let searchDebounceTimer = null;
 
@@ -84,14 +82,9 @@ export async function prefetchMessagesForRecentChats(recentChats) {
   const limit = Math.min(recentChats.length, 10);
   for (let i = 0; i < limit; i++) {
     const chat = recentChats[i];
-    if (!chat?.id) continue;
-    const existingCached = loadCachedChatMessages(chat.id, userId);
-    if (existingCached && existingCached.length > 0) {
-      if (!chat.messagesLoaded || !chat.messages?.length) {
-        chats.val = chats.val.map(c => c.id === chat.id ? { ...c, messages: existingCached, messagesLoaded: true } : c);
-      }
-      continue;
-    }
+    if (!chat || !chat.id) continue;
+    const cachedMsgs = loadCachedChatMessages(chat.id, userId);
+    if (cachedMsgs && cachedMsgs.length > 0 && chat.messagesLoaded) continue;
     try {
       const data = await fetchMessages(chat.id);
       if (Array.isArray(data?.messages)) {
@@ -103,7 +96,9 @@ export async function prefetchMessagesForRecentChats(recentChats) {
             text: m.content || '',
             createdAt: m.created_at ? new Date(m.created_at).getTime() : Date.now(),
           }));
-        chats.val = chats.val.map(c => c.id === chat.id ? { ...c, messages: loadedMessages, messagesLoaded: true } : c);
+        chats.val = chats.val.map(c =>
+          c.id === chat.id ? { ...c, messages: loadedMessages, messagesLoaded: true } : c
+        );
         saveCachedChatMessages(chat.id, loadedMessages, userId);
       }
     } catch {}
@@ -115,7 +110,7 @@ export async function loadMessagesForChat(id) {
   const userId = getEffectiveUserId();
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     const cached = loadCachedChatMessages(id, userId);
-    if (cached && Array.isArray(cached)) {
+    if (cached && cached.length > 0) {
       chats.val = chats.val.map(c =>
         c.id === id ? { ...c, messages: cached, messagesLoaded: true } : c
       );
@@ -147,7 +142,7 @@ export async function loadMessagesForChat(id) {
     }
   } catch (err) {
     const cached = loadCachedChatMessages(id, userId);
-    if (cached && Array.isArray(cached)) {
+    if (cached && cached.length > 0) {
       chats.val = chats.val.map(c =>
         c.id === id ? { ...c, messages: cached, messagesLoaded: true } : c
       );

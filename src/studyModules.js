@@ -166,8 +166,7 @@ export function clearLocalQuizProgress(quizId) {
  * Non-blocking server sync for quiz progress (fire-and-forget).
  */
 export function syncQuizProgressToServer(quizId, { lastQuestionIndex, userAnswers, isSolved } = {}) {
-  if (!quizId) return;
-  if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+  if (!quizId || (typeof navigator !== 'undefined' && !navigator.onLine)) return;
   fetch('/api/quizzes', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
@@ -187,8 +186,7 @@ export async function markQuizSolved(id, isSolved = true) {
   const userId = getEffectiveUserId();
   try {
     if (typeof localStorage !== 'undefined') {
-      const key = getQuizzesStorageKey(userId);
-      localStorage.setItem(key, JSON.stringify(updated));
+      localStorage.setItem(getQuizzesStorageKey(userId), JSON.stringify(updated));
     }
     const cached = loadCachedQuizDetail(id, userId);
     if (cached) {
@@ -213,8 +211,7 @@ export async function markMaterialSolved(id, isSolved = true) {
   const userId = getEffectiveUserId();
   try {
     if (typeof localStorage !== 'undefined') {
-      const key = getMaterialsStorageKey(userId);
-      localStorage.setItem(key, JSON.stringify(updated));
+      localStorage.setItem(getMaterialsStorageKey(userId), JSON.stringify(updated));
     }
     const cached = loadCachedMaterialDetail(id, userId);
     if (cached) {
@@ -324,17 +321,17 @@ export function normalizeMaterialSection(s, idx = 0) {
 export async function prefetchQuizDetails(quizzesList) {
   if (typeof navigator !== 'undefined' && !navigator.onLine) return;
   const userId = getEffectiveUserId();
-  const limit = Math.min(quizzesList?.length || 0, 10);
+  const limit = Math.min(quizzesList.length, 10);
   for (let i = 0; i < limit; i++) {
     const q = quizzesList[i];
-    if (!q?.id || loadCachedQuizDetail(q.id, userId)) continue;
+    if (!q || !q.id || loadCachedQuizDetail(q.id, userId)) continue;
     try {
       const res = await fetch(`/api/quizzes?id=${q.id}`, { headers: { ...getAuthHeaders() } });
       if (res.ok) {
         const data = await res.json();
         if (data?.quiz) {
           const raw = Array.isArray(data.quiz.questions) ? data.quiz.questions : [];
-          const questions = raw.map((item, idx) => normalizeQuizQuestion(item, idx)).filter(Boolean);
+          const questions = raw.map((item, idx) => normalizeQuizQuestion(item, idx, { shuffle: false })).filter(Boolean);
           saveCachedQuizDetail(q.id, { ...data.quiz, questions, questionCount: questions.length, question_count: questions.length }, userId);
         }
       }
@@ -345,10 +342,10 @@ export async function prefetchQuizDetails(quizzesList) {
 export async function prefetchMaterialDetails(materialsList) {
   if (typeof navigator !== 'undefined' && !navigator.onLine) return;
   const userId = getEffectiveUserId();
-  const limit = Math.min(materialsList?.length || 0, 10);
+  const limit = Math.min(materialsList.length, 10);
   for (let i = 0; i < limit; i++) {
     const m = materialsList[i];
-    if (!m?.id || loadCachedMaterialDetail(m.id, userId)) continue;
+    if (!m || !m.id || loadCachedMaterialDetail(m.id, userId)) continue;
     try {
       const res = await fetch(`/api/materials?id=${m.id}`, { headers: { ...getAuthHeaders() } });
       if (res.ok) {
@@ -363,64 +360,93 @@ export async function prefetchMaterialDetails(materialsList) {
   }
 }
 
-function resolveCachedQuiz(id, userId, shuffle) {
-  const cached = loadCachedQuizDetail(id, userId) || quizzes.val.find(q => q.id === id);
-  if (!cached) return null;
-  const raw = Array.isArray(cached.questions) ? cached.questions : [];
-  const questions = raw.map((q, idx) => normalizeQuizQuestion(q, idx, { shuffle })).filter(Boolean);
-  return { ...cached, questions, questionCount: questions.length, question_count: questions.length };
-}
-
-function resolveCachedMaterial(id, userId) {
-  const cached = loadCachedMaterialDetail(id, userId) || materials.val.find(m => m.id === id);
-  if (!cached) return null;
-  const raw = Array.isArray(cached.sections) ? cached.sections : [];
-  const sections = raw.map(normalizeMaterialSection).filter(Boolean);
-  return { ...cached, sections, sectionCount: sections.length, section_count: sections.length };
-}
-
 export async function fetchQuizDetails(id, { shuffle = true } = {}) {
   if (!id) return null;
   const userId = getEffectiveUserId();
+  const cached = loadCachedQuizDetail(id, userId);
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    return resolveCachedQuiz(id, userId, shuffle);
+    if (cached) {
+      const rawQuestions = Array.isArray(cached.questions) ? cached.questions : [];
+      const questions = rawQuestions.map((q, qIdx) => normalizeQuizQuestion(q, qIdx, { shuffle })).filter(Boolean);
+      return { ...cached, questions, questionCount: questions.length, question_count: questions.length };
+    }
+    const localQuiz = quizzes.val.find(q => q.id === id);
+    if (!localQuiz) return null;
+    const rawQuestions = Array.isArray(localQuiz.questions) ? localQuiz.questions : [];
+    const questions = rawQuestions.map((q, qIdx) => normalizeQuizQuestion(q, qIdx, { shuffle })).filter(Boolean);
+    return { ...localQuiz, questions, questionCount: questions.length, question_count: questions.length };
   }
   try {
-    const res = await fetch(`/api/quizzes?id=${id}`, { headers: { ...getAuthHeaders() } });
+    const res = await fetch(`/api/quizzes?id=${id}`, {
+      headers: { ...getAuthHeaders() },
+    });
     if (res.ok) {
       const data = await res.json();
       if (data?.quiz) {
         const raw = Array.isArray(data.quiz.questions) ? data.quiz.questions : [];
-        const questions = raw.map((q, qIdx) => normalizeQuizQuestion(q, qIdx, { shuffle })).filter(Boolean);
-        const fullQuiz = { ...data.quiz, questions, questionCount: questions.length, question_count: questions.length };
+        const questions = raw.map((q, qIdx) => normalizeQuizQuestion(q, qIdx, { shuffle: false })).filter(Boolean);
+        const fullQuiz = {
+          ...data.quiz,
+          questions,
+          questionCount: questions.length,
+          question_count: questions.length,
+        };
         saveCachedQuizDetail(id, fullQuiz, userId);
-        return fullQuiz;
+        const returnQuestions = shuffle ? raw.map((q, qIdx) => normalizeQuizQuestion(q, qIdx, { shuffle: true })).filter(Boolean) : questions;
+        return { ...fullQuiz, questions: returnQuestions };
       }
     }
   } catch {}
-  return resolveCachedQuiz(id, userId, shuffle);
+  if (cached) {
+    const rawQuestions = Array.isArray(cached.questions) ? cached.questions : [];
+    const questions = rawQuestions.map((q, qIdx) => normalizeQuizQuestion(q, qIdx, { shuffle })).filter(Boolean);
+    return { ...cached, questions, questionCount: questions.length, question_count: questions.length };
+  }
+  const localQuiz = quizzes.val.find(q => q.id === id);
+  if (!localQuiz) return null;
+  const rawQuestions = Array.isArray(localQuiz.questions) ? localQuiz.questions : [];
+  const questions = rawQuestions.map((q, qIdx) => normalizeQuizQuestion(q, qIdx, { shuffle })).filter(Boolean);
+  return { ...localQuiz, questions, questionCount: questions.length, question_count: questions.length };
 }
 
 export async function fetchMaterialDetails(id) {
   if (!id) return null;
   const userId = getEffectiveUserId();
+  const cached = loadCachedMaterialDetail(id, userId);
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    return resolveCachedMaterial(id, userId);
+    if (cached) return cached;
+    const localMat = materials.val.find(m => m.id === id);
+    if (!localMat) return null;
+    const rawSections = Array.isArray(localMat.sections) ? localMat.sections : [];
+    const sections = rawSections.map(normalizeMaterialSection).filter(Boolean);
+    return { ...localMat, sections, sectionCount: sections.length, section_count: sections.length };
   }
   try {
-    const res = await fetch(`/api/materials?id=${id}`, { headers: { ...getAuthHeaders() } });
+    const res = await fetch(`/api/materials?id=${id}`, {
+      headers: { ...getAuthHeaders() },
+    });
     if (res.ok) {
       const data = await res.json();
       if (data?.material) {
         const raw = Array.isArray(data.material.sections) ? data.material.sections : [];
         const sections = raw.map(normalizeMaterialSection).filter(Boolean);
-        const fullMat = { ...data.material, sections, sectionCount: sections.length, section_count: sections.length };
+        const fullMat = {
+          ...data.material,
+          sections,
+          sectionCount: sections.length,
+          section_count: sections.length,
+        };
         saveCachedMaterialDetail(id, fullMat, userId);
         return fullMat;
       }
     }
   } catch {}
-  return resolveCachedMaterial(id, userId);
+  if (cached) return cached;
+  const localMat = materials.val.find(m => m.id === id);
+  if (!localMat) return null;
+  const rawSections = Array.isArray(localMat.sections) ? localMat.sections : [];
+  const sections = rawSections.map(normalizeMaterialSection).filter(Boolean);
+  return { ...localMat, sections, sectionCount: sections.length, section_count: sections.length };
 }
 
 export function initStudyModules() {
