@@ -131,7 +131,6 @@ export async function sendMessage(messages, onChunk, options = {}) {
   try {
     const payload = {
       messages,
-      userId: options.userId || getEffectiveUserId(),
       ...(options.conversationId ? { conversationId: options.conversationId } : {}),
       ...(options.conversationTitle ? { conversationTitle: options.conversationTitle } : {}),
       ...(options.userMessageId ? { userMessageId: options.userMessageId } : {}),
@@ -196,9 +195,11 @@ export async function generateTitle(messages, options = {}) {
   const timeoutId = setTimeout(() => controller.abort(), 12000);
 
   try {
+    const recentMessages = Array.isArray(messages)
+      ? messages.slice(-4).map(m => ({ role: m.role, content: (m.content || m.text || '').trim() })).filter(m => m.content)
+      : [];
     const payload = {
-      messages,
-      userId: options.userId || getEffectiveUserId(),
+      messages: recentMessages,
       ...(options.conversationId ? { conversationId: options.conversationId } : {}),
     };
 
@@ -225,8 +226,8 @@ export async function generateTitle(messages, options = {}) {
   }
 }
 
-export async function fetchConversations({ userId = getEffectiveUserId(), limit = 20, offset = 0, query = '' } = {}) {
-  let url = `${CONVERSATIONS_API_URL}?userId=${encodeURIComponent(userId)}&limit=${limit}&offset=${offset}`;
+export async function fetchConversations({ limit = 20, offset = 0, query = '' } = {}) {
+  let url = `${CONVERSATIONS_API_URL}?limit=${limit}&offset=${offset}`;
   if (query && typeof query === 'string' && query.trim()) {
     url += `&q=${encodeURIComponent(query.trim())}`;
   }
@@ -239,12 +240,12 @@ export async function fetchConversations({ userId = getEffectiveUserId(), limit 
   return response.json();
 }
 
-export async function searchConversationsApi(query, { userId = getEffectiveUserId(), limit = 50, offset = 0 } = {}) {
-  return fetchConversations({ userId, limit, offset, query });
+export async function searchConversationsApi(query, { limit = 50, offset = 0 } = {}) {
+  return fetchConversations({ limit, offset, query });
 }
 
-export async function fetchMessages(conversationId, { userId = getEffectiveUserId(), limit = 100, offset = 0 } = {}) {
-  const url = `${MESSAGES_API_URL}?conversationId=${encodeURIComponent(conversationId)}&userId=${encodeURIComponent(userId)}&limit=${limit}&offset=${offset}`;
+export async function fetchMessages(conversationId, { limit = 100, offset = 0 } = {}) {
+  const url = `${MESSAGES_API_URL}?conversationId=${encodeURIComponent(conversationId)}&limit=${limit}&offset=${offset}`;
   const response = await fetch(url, {
     headers: { ...getAuthHeaders() },
   });
@@ -254,8 +255,8 @@ export async function fetchMessages(conversationId, { userId = getEffectiveUserI
   return response.json();
 }
 
-export async function deleteConversationApi(conversationId, { userId = getEffectiveUserId() } = {}) {
-  const url = `${CONVERSATIONS_API_URL}?id=${encodeURIComponent(conversationId)}&userId=${encodeURIComponent(userId)}`;
+export async function deleteConversationApi(conversationId) {
+  const url = `${CONVERSATIONS_API_URL}?id=${encodeURIComponent(conversationId)}`;
   const response = await fetch(url, {
     method: 'DELETE',
     headers: { ...getAuthHeaders() },
@@ -266,14 +267,14 @@ export async function deleteConversationApi(conversationId, { userId = getEffect
   return response.json();
 }
 
-export async function renameConversationApi(conversationId, title, { userId = getEffectiveUserId() } = {}) {
+export async function renameConversationApi(conversationId, title) {
   const response = await fetch(CONVERSATIONS_API_URL, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
       ...getAuthHeaders(),
     },
-    body: JSON.stringify({ id: conversationId, title, userId }),
+    body: JSON.stringify({ id: conversationId, title }),
   });
   if (!response.ok) {
     throw new Error(`Failed to rename conversation (${response.status})`);

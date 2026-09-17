@@ -133,7 +133,7 @@ export async function handleLoginRequest(req, res, serverEnv = {}, endpoint = nu
     res.json(payload);
   } else {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(payload);
+    res.end(JSON.stringify(payload));
   }
 }
 

@@ -245,7 +245,7 @@ export function sendMessage(customText) {
   const messageHistory = chat.messages.concat(userMessage);
 
   if (isNewConversation) {
-    generateTitle(messageHistory, { conversationId: chat.id, userId: getEffectiveUserId() })
+    generateTitle(messageHistory, { conversationId: chat.id })
       .then(generatedTitle => {
         if (generatedTitle && generatedTitle !== chat.title) {
           chats.val = chats.val.map(c => c.id === chat.id ? { ...c, title: generatedTitle } : c);
@@ -396,7 +396,7 @@ export function renameChat(id, title) {
   chats.val = chats.val.map(chat => chat.id === id ? { ...chat, title: trimmed } : chat);
   persist();
   modal.val = null;
-  renameConversationApi(id, trimmed, { userId: getEffectiveUserId() }).catch(() => {});
+  renameConversationApi(id, trimmed).catch(() => {});
 }
 
 export function deleteChat(id) {
@@ -407,7 +407,7 @@ export function deleteChat(id) {
   if (activeId.val === id) activeId.val = null;
   modal.val = null;
   toast(t('state_chat_deleted'));
-  deleteConversationApi(id, { userId: getEffectiveUserId() }).catch(() => {});
+  deleteConversationApi(id).catch(() => {});
 }
 
 export function clearWorkspace() {

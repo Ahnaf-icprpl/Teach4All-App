@@ -83,11 +83,11 @@ export async function handleTitleRequest(req, res, serverEnv = {}) {
   }
 
   const { messages, conversationId } = parsed;
-  const effectiveUserId = req.userId || req.headers?.['x-user-id'] || req.headers?.['x-guest-id'] || parsed?.userId;
+  const effectiveUserId = req.userId || (typeof req.headers?.['x-guest-id'] === 'string' && /^guest_[a-zA-Z0-9_-]{8,64}$/.test(req.headers['x-guest-id'].trim()) ? req.headers['x-guest-id'].trim() : null);
 
   if (!effectiveUserId) {
-    res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: { message: 'User ID is required.' } }));
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: { message: 'Authentication required.' } }));
     return;
   }
 

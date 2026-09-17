@@ -290,7 +290,12 @@ export async function handleChatStreamRequest(req, res, serverEnv = {}) {
   }
 
   if (task.userId && (!req.userId || req.userId !== task.userId)) {
-    res.status(403).json({ error: { message: 'Unauthorized task stream access' } });
+    if (typeof res.status === 'function') {
+      res.status(403).json({ error: { message: 'Unauthorized task stream access' } });
+    } else {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: 'Unauthorized task stream access' } }));
+    }
     return;
   }
 

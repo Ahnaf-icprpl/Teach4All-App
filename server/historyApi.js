@@ -31,11 +31,11 @@ export async function handleConversationsRequest(req, res, serverEnv = {}) {
   const clientIp = getClientIp(req);
   const parsedUrl = new URL(req.url || '/', 'http://localhost');
   const databaseUrl = serverEnv.DATABASE_URL || process.env.DATABASE_URL;
-  const effectiveUserId = req.userId || req.headers?.['x-user-id'] || req.headers?.['x-guest-id'] || parsedUrl.searchParams.get('userId');
+  const effectiveUserId = req.userId || (typeof req.headers?.['x-guest-id'] === 'string' && /^guest_[a-zA-Z0-9_-]{8,64}$/.test(req.headers['x-guest-id'].trim()) ? req.headers['x-guest-id'].trim() : null);
 
   if (!effectiveUserId) {
-    res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: { message: 'User ID is required.' } }));
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: { message: 'Authentication required.' } }));
     return;
   }
 
@@ -57,9 +57,9 @@ export async function handleConversationsRequest(req, res, serverEnv = {}) {
         limit,
         offset,
       }));
-    } catch (err) {
+    } catch {
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: { message: err.message || 'Database error' } }));
+      res.end(JSON.stringify({ error: { message: 'Failed to retrieve conversations.' } }));
     }
     return;
   }
@@ -85,9 +85,9 @@ export async function handleConversationsRequest(req, res, serverEnv = {}) {
       await deleteConversation({ conversationId: id, userId: effectiveUserId, databaseUrl });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true }));
-    } catch (err) {
+    } catch {
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: { message: err.message || 'Database error' } }));
+      res.end(JSON.stringify({ error: { message: 'Failed to delete conversation.' } }));
     }
     return;
   }
@@ -107,9 +107,9 @@ export async function handleConversationsRequest(req, res, serverEnv = {}) {
       const result = await updateConversationTitle({ conversationId: targetId, userId: effectiveUserId, title, databaseUrl });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));
-    } catch (err) {
+    } catch {
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: { message: err.message || 'Database error' } }));
+      res.end(JSON.stringify({ error: { message: 'Failed to update conversation.' } }));
     }
     return;
   }
@@ -130,11 +130,11 @@ export async function handleMessagesRequest(req, res, serverEnv = {}) {
 
   const parsedUrl = new URL(req.url || '/', 'http://localhost');
   const databaseUrl = serverEnv.DATABASE_URL || process.env.DATABASE_URL;
-  const effectiveUserId = req.userId || req.headers?.['x-user-id'] || req.headers?.['x-guest-id'] || parsedUrl.searchParams.get('userId');
+  const effectiveUserId = req.userId || (typeof req.headers?.['x-guest-id'] === 'string' && /^guest_[a-zA-Z0-9_-]{8,64}$/.test(req.headers['x-guest-id'].trim()) ? req.headers['x-guest-id'].trim() : null);
 
   if (!effectiveUserId) {
-    res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: { message: 'User ID is required.' } }));
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: { message: 'Authentication required.' } }));
     return;
   }
 
@@ -156,8 +156,8 @@ export async function handleMessagesRequest(req, res, serverEnv = {}) {
     const messages = await getMessages({ conversationId, userId: effectiveUserId, limit, offset, databaseUrl });
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ messages }));
-  } catch (err) {
+  } catch {
     res.writeHead(500, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: { message: err.message || 'Database error' } }));
+    res.end(JSON.stringify({ error: { message: 'Failed to retrieve messages.' } }));
   }
 }

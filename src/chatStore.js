@@ -1,6 +1,6 @@
 import van from 'vanjs-core';
 import {
-  fetchConversations, fetchMessages, getEffectiveUserId,
+  fetchConversations, fetchMessages,
   fetchChatStatus, subscribeToChatStream,
 } from './router.js';
 import { t } from './uiTexts.js';
@@ -33,7 +33,7 @@ export function onSearchInput(query) {
   if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
   searchDebounceTimer = setTimeout(async () => {
     try {
-      const data = await fetchConversations({ userId: getEffectiveUserId(), query: term, limit: 50 });
+      const data = await fetchConversations({ query: term, limit: 50 });
       if (Array.isArray(data?.conversations)) {
         searchResults.val = data.conversations.map(c => {
           const existing = chats.val.find(item => item.id === c.id);
@@ -64,7 +64,7 @@ export async function loadMessagesForChat(id) {
   if (messagesLoading.val) return;
   messagesLoading.val = true;
   try {
-    const data = await fetchMessages(id, { userId: getEffectiveUserId() });
+    const data = await fetchMessages(id);
     if (Array.isArray(data?.messages)) {
       const loadedMessages = data.messages
         .filter(m => m && (m.role === 'user' || (m.content && m.content.trim().length > 0)))
@@ -92,7 +92,7 @@ export async function loadMessagesForChat(id) {
 export async function loadChatHistory() {
   historyLoading.val = true;
   try {
-    const data = await fetchConversations({ userId: getEffectiveUserId(), limit: CHATS_PAGE_SIZE, offset: 0 });
+    const data = await fetchConversations({ limit: CHATS_PAGE_SIZE, offset: 0 });
     if (Array.isArray(data?.conversations)) {
       const dbChats = data.conversations.map(c => ({
         id: c.id,
@@ -124,7 +124,6 @@ export async function loadMoreChats() {
   try {
     const currentCount = chats.val.length;
     const data = await fetchConversations({
-      userId: getEffectiveUserId(),
       limit: CHATS_PAGE_SIZE,
       offset: currentCount,
     });

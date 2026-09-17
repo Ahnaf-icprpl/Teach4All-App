@@ -34,11 +34,11 @@ export async function handleQuizzesRequest(req, res, env = {}) {
 
   const url = new URL(req.url, 'http://localhost');
   const dbUrl = env.DATABASE_URL || process.env.DATABASE_URL;
-  const userId = req.userId || req.headers?.['x-user-id'] || req.headers?.['x-guest-id'] || url.searchParams.get('userId');
+  const userId = req.userId || (typeof req.headers?.['x-guest-id'] === 'string' && /^guest_[a-zA-Z0-9_-]{8,64}$/.test(req.headers['x-guest-id'].trim()) ? req.headers['x-guest-id'].trim() : null);
 
   if (!userId) {
-    res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: { message: 'User ID is required.' } }));
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: { message: 'Authentication required.' } }));
     return;
   }
 
@@ -179,17 +179,17 @@ export async function generateQuizClue(payload, env = {}, req = null) {
         return existing.clue.trim();
       }
       if (existing) {
-        if (!payload.questionText && existing.question_text) {
+        if (existing.question_text) {
           payload.questionText = existing.question_text;
         }
-        if ((!payload.options || !payload.options.length) && existing.options) {
+        if (existing.options) {
           try {
             payload.options = typeof existing.options === 'string' ? JSON.parse(existing.options) : existing.options;
           } catch {
             payload.options = [];
           }
         }
-        if (!payload.explanation && existing.explanation) {
+        if (existing.explanation) {
           payload.explanation = existing.explanation;
         }
       }

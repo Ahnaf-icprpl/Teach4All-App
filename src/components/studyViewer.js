@@ -53,6 +53,15 @@ export function QuizSolver(quizId, { initialClue = false } = {}) {
       return;
     }
 
+    if (!q.id) {
+      const local = generateLocalClue(q);
+      q.clue = local;
+      cluesCache[idx] = local;
+      clueText.val = local;
+      clueLoading.val = false;
+      return;
+    }
+
     clueLoading.val = true;
     try {
       const res = await fetch('/api/quizzes', {
