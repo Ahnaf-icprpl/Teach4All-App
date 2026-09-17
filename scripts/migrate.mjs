@@ -136,7 +136,6 @@ export async function runMigrations({
   const sanitizedTable = tableName.replace(/[^a-zA-Z0-9_]/g, '');
 
   logger.log('--- PostgreSQL Database Migration Runner ---');
-  logger.log(`Target database: ${databaseUrl.replace(/:[^:@]+@/, ':****@')}`);
   logger.log(`State table:     ${sanitizedTable}`);
   logger.log(`Migrations dir:  ${migrationsDir}`);
 
