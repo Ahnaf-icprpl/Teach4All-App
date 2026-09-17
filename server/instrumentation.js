@@ -15,11 +15,13 @@ try {
 } catch {}
 
 /**
- * Resolves normalized environment name ('production' or 'development').
+ * Resolves normalized environment name ('production', 'staging', or 'development').
  */
 export function resolveOtelEnvironment(env = process.env) {
   const raw = (env.ENV || env.env || env.NODE_ENV || 'development').toLowerCase().trim();
-  return raw === 'production' || raw === 'prod' ? 'production' : 'development';
+  if (raw === 'production' || raw === 'prod') return 'production';
+  if (raw === 'staging' || raw === 'stage') return 'staging';
+  return 'development';
 }
 
 /**
