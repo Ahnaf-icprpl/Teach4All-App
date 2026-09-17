@@ -8,8 +8,8 @@ try {
   }
 } catch {}
 
-const SERVICE_NAME = (process.env.OTEL_SERVICE_NAME || 'teach4all').trim();
-const isProd = (process.env.ENV || process.env.NODE_ENV || 'development').toLowerCase().startsWith('prod');
+const envName = (process.env.ENV || process.env.NODE_ENV || 'development').toLowerCase().trim();
+const isProd = envName.startsWith('prod') || envName === 'staging';
 
 const LOG_LEVELS = {
   debug: { severity: SeverityNumber.DEBUG, text: 'DEBUG', priority: 1 },

@@ -2,7 +2,7 @@
   "id": "./",
   "name": "Teach4All — Ruang untuk Rasa Ingin Tahu",
   "short_name": "Teach4All",
-  "description": "Pendamping belajar luring yang ringan dan mudah diakses.",
+  "description": "Pendamping belajar offline yang ringan dan mudah diakses.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

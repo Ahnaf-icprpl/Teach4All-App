@@ -14,6 +14,15 @@ export function isProductionEnv(env = {}) {
   return fallback.trim().toLowerCase() === 'production';
 }
 
+export function isStagingEnv(env = {}) {
+  const explicit = env?.ENV || env?.env || process.env.ENV || process.env.env;
+  if (explicit) {
+    return explicit.trim().toLowerCase() === 'staging';
+  }
+  const fallback = env?.NODE_ENV || process.env.NODE_ENV || 'development';
+  return fallback.trim().toLowerCase() === 'staging';
+}
+
 import {
   SVG_ICONS,
   escapeHtml,
@@ -38,7 +47,8 @@ export function renderSsrHtml({ htmlTemplate, texts, prompts = [], serverEnv = {
   }
 
   const isProd = isProductionEnv(serverEnv);
-  const appEnv = serverEnv.ENV || serverEnv.env || process.env.ENV || process.env.env || (isProd ? 'production' : 'development');
+  const isStaging = isStagingEnv(serverEnv);
+  const appEnv = serverEnv.ENV || serverEnv.env || process.env.ENV || process.env.env || (isProd ? 'production' : (isStaging ? 'staging' : 'development'));
   const clerkConfig = getClerkConfig(serverEnv);
   const frontend = (clerkConfig.frontendApi || '').replace(/\/$/, '');
   const accounts = (clerkConfig.accountsUrl || '').replace(/\/$/, '');
@@ -310,11 +320,11 @@ export function renderSsrHtml({ htmlTemplate, texts, prompts = [], serverEnv = {
 
 export function loadHtmlTemplate(options = {}) {
   const serverEnv = typeof options === 'object' && options ? (options.serverEnv || {}) : {};
-  const isProd = isProductionEnv(serverEnv);
+  const isProdOrStaging = isProductionEnv(serverEnv) || isStagingEnv(serverEnv);
 
   const distPath = resolve(process.cwd(), 'dist', 'index.html');
   const rootPath = resolve(process.cwd(), 'index.html');
-  if (isProd && existsSync(distPath)) {
+  if (isProdOrStaging && existsSync(distPath)) {
     return readFileSync(distPath, 'utf8');
   }
   if (existsSync(rootPath)) {
@@ -330,11 +340,12 @@ export function load404HtmlTemplate(options = {}) {
   const googleTagId = typeof options === 'string' ? options : (options && typeof options === 'object' ? options.googleTagId : null);
   const serverEnv = typeof options === 'object' && options ? (options.serverEnv || {}) : {};
   const isProd = isProductionEnv(serverEnv);
+  const isProdOrStaging = isProd || isStagingEnv(serverEnv);
 
   const distPath = resolve(process.cwd(), 'dist', '404.html');
   const rootPath = resolve(process.cwd(), '404.html');
   let html = '';
-  if (isProd && existsSync(distPath)) {
+  if (isProdOrStaging && existsSync(distPath)) {
     html = readFileSync(distPath, 'utf8');
   } else if (existsSync(rootPath)) {
     html = readFileSync(rootPath, 'utf8');

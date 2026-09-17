@@ -178,6 +178,9 @@ export async function handleCompletedMaterialToolCalls({
   const conversationHistory = [...formattedMessages];
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (!res.writableEnded && res.writable) {
+      res.write('data: {"type":"material_status","status":"building"}\n\n');
+    }
     const execResult = await parseAndExecuteMaterialTool(currentCall, {
       userId: userId || null,
       conversationId,

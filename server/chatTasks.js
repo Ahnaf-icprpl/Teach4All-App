@@ -59,8 +59,10 @@ export function updateChatTask(conversationId, updates = {}) {
 
   Object.assign(task, updates, { updatedAt: Date.now() });
 
-  if (updates.status === 'building') {
+  if (updates.status === 'building' || updates.status === 'building_quiz') {
     broadcastToTask(conversationId, { type: 'quiz_status', status: 'building' });
+  } else if (updates.status === 'building_material') {
+    broadcastToTask(conversationId, { type: 'material_status', status: 'building' });
   }
 
   return task;
@@ -77,8 +79,10 @@ export function addTaskListener(conversationId, res) {
 
   // Send current catch-up state to the newly connected listener
   if (!res.writableEnded && res.writable) {
-    if (task.status === 'building') {
+    if (task.status === 'building' || task.status === 'building_quiz') {
       res.write('data: {"type":"quiz_status","status":"building"}\n\n');
+    } else if (task.status === 'building_material') {
+      res.write('data: {"type":"material_status","status":"building"}\n\n');
     }
     if (task.accumulatedText) {
       res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: task.accumulatedText } }] })}\n\n`);

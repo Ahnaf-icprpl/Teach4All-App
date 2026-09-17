@@ -2,18 +2,18 @@ import { defineConfig, loadEnv } from 'vite';
 import { resolve } from 'node:path';
 import { createApp } from './server/app.js';
 
-export const VALID_ENVS = ['production', 'development'];
+export const VALID_ENVS = ['production', 'staging', 'development'];
 
 export function resolveAppEnv(env = {}, mode = 'development') {
   const raw = env.ENV || env.env;
   if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
     const normalized = String(raw).trim().toLowerCase();
     if (!VALID_ENVS.includes(normalized)) {
-      throw new Error(`Invalid env "${raw}". Only "production" or "development" is valid.`);
+      throw new Error(`Invalid env "${raw}". Only "production", "staging", or "development" is valid.`);
     }
     return normalized;
   }
-  return mode === 'production' ? 'production' : 'development';
+  return mode === 'production' ? 'production' : (mode === 'staging' ? 'staging' : 'development');
 }
 
 export default defineConfig(({ mode }) => {
@@ -54,7 +54,7 @@ export default defineConfig(({ mode }) => {
           const path = ctx?.path || '';
           const filename = ctx?.filename || '';
           const dbUrl = process.env.DATABASE_URL || env.DATABASE_URL;
-          const isProdBuild = mode === 'production' || appEnv === 'production';
+          const isProdBuild = mode === 'production' || mode === 'staging' || appEnv === 'production' || appEnv === 'staging';
 
           if (path.includes('404') || filename.includes('404') || html.includes('404')) {
             if (isProdBuild && dbUrl) {
@@ -94,7 +94,7 @@ export default defineConfig(({ mode }) => {
                   htmlTemplate: html,
                   texts,
                   prompts,
-                  serverEnv: { ...env, ...process.env, ENV: isProdBuild ? 'production' : appEnv },
+                  serverEnv: { ...env, ...process.env, ENV: appEnv },
                   user,
                 });
               }
@@ -104,7 +104,7 @@ export default defineConfig(({ mode }) => {
         },
         async generateBundle(options, bundle) {
           const dbUrl = process.env.DATABASE_URL || env.DATABASE_URL;
-          const isProdBuild = mode === 'production' || appEnv === 'production';
+          const isProdBuild = mode === 'production' || mode === 'staging' || appEnv === 'production' || appEnv === 'staging';
           let tagId = null;
           if (isProdBuild && dbUrl) {
             try {

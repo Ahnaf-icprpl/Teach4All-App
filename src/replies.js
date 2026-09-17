@@ -17,7 +17,7 @@ export function createReply(input) {
   } else if (/explain|learn|understand|teach|jelaskan|pahami|ajari/.test(text)) {
     reply = 'Salah satu cara terbaik untuk benar-benar memahami suatu gagasan adalah dengan menjelaskannya secara sederhana.\n\nCoba siklus belajar berikut ini:\n\n1. Tuliskan apa yang sudah Anda ketahui tentang topik tersebut.\n2. Jelaskan kembali seolah-olah Anda sedang mengajar teman sebaya.\n3. Beri tanda pada bagian yang masih sulit Anda terangkan dengan lancar. Bagian itulah yang perlu Anda pelajari kembali.\n4. Hubungkan konsep tersebut dengan analogi atau kejadian nyata sehari-hari.\n\nAnda dapat mencoba mengetik “Jelaskan fotosintesis” untuk melihat contoh penjelasan konsep yang ramah dan intuitif.';
   } else {
-    reply = 'Anda memiliki ruang belajar mandiri di sini, bahkan ketika tanpa koneksi internet. Pendamping luring ini memiliki beberapa panduan topik bawaan untuk membantu Anda.\n\nCoba minta saya untuk menjelaskan fotosintesis, membuat rencana belajar, memberikan ide cerita kreatif, menyusun kuis, atau memecahkan masalah langkah demi langkah.\n\nAnda juga dapat menggunakan ruang ini sebagai buku catatan pribadi yang siap menemani proses belajar Anda.';
+    reply = 'Anda memiliki ruang belajar mandiri di sini, bahkan ketika tanpa koneksi internet. Pendamping offline ini memiliki beberapa panduan topik bawaan untuk membantu Anda.\n\nCoba minta saya untuk menjelaskan fotosintesis, membuat rencana belajar, memberikan ide cerita kreatif, menyusun kuis, atau memecahkan masalah langkah demi langkah.\n\nAnda juga dapat menggunakan ruang ini sebagai buku catatan pribadi yang siap menemani proses belajar Anda.';
   }
   return reply;
 }

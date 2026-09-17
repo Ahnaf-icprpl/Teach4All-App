@@ -251,6 +251,11 @@ export async function syncFromClerkClient(frontendApi, dbJwtOverride = null) {
 }
 
 export async function checkAuth() {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    currentUser.val = getStoredUser() || null;
+    authLoading.val = false;
+    return currentUser.val;
+  }
   authLoading.val = true;
   await initAuthConfig();
   await processHandshakeIfPresent();
@@ -470,4 +475,5 @@ export async function openUserProfile() {
 
 if (typeof window !== 'undefined') {
   checkAuth();
+  window.addEventListener('online', () => { checkAuth(); });
 }

@@ -25,6 +25,17 @@ export {
   exchangeClerkDbJwt,
 };
 
+function isHttpsConnection(req) {
+  return Boolean(
+    req?.secure ||
+    req?.headers?.['x-forwarded-proto'] === 'https' ||
+    process.env.NODE_ENV === 'production' ||
+    process.env.NODE_ENV === 'staging' ||
+    process.env.ENV === 'production' ||
+    process.env.ENV === 'staging'
+  );
+}
+
 /**
  * Handles GET /api/whoami and GET /api/auth/whoami.
  */
@@ -48,7 +59,7 @@ export async function handleWhoamiRequest(req, res, serverEnv = {}, endpoint = n
   });
 
   if (authResult.authenticated && authResult.token) {
-    const isHttps = Boolean(req.secure || req.headers?.['x-forwarded-proto'] === 'https' || process.env.NODE_ENV === 'production');
+    const isHttps = isHttpsConnection(req);
     const sec = isHttps ? '; Secure' : '';
     const cookieHeaders = [
       `__session=${encodeURIComponent(authResult.token)}; Path=/; SameSite=Lax${sec}; Max-Age=2592000`,
@@ -124,7 +135,7 @@ export async function handleLoginRequest(req, res, serverEnv = {}, endpoint = nu
     await syncUserToDb(authResult.user, dbUrl);
   }
 
-  const isHttps = Boolean(req.secure || req.headers?.['x-forwarded-proto'] === 'https' || process.env.NODE_ENV === 'production');
+  const isHttps = isHttpsConnection(req);
   const sec = isHttps ? '; Secure' : '';
   const tokenToSet = cred.token || cred.sessionId;
   const cookieHeaders = [
@@ -265,7 +276,7 @@ export async function clerkHandshakeMiddleware(req, res, next) {
         }
 
         if (extractedSessionToken) {
-          const isHttps = Boolean(req.secure || req.headers?.['x-forwarded-proto'] === 'https' || process.env.NODE_ENV === 'production');
+          const isHttps = isHttpsConnection(req);
           const sec = isHttps ? '; Secure' : '';
           cookiesToSet.push(`__session=${extractedSessionToken}; Path=/; SameSite=Lax${sec}; Max-Age=2592000`);
           cookiesToSet.push(`clerk_session=${extractedSessionToken}; Path=/; SameSite=Lax${sec}; Max-Age=2592000`);
@@ -286,7 +297,7 @@ export async function clerkHandshakeMiddleware(req, res, next) {
 
     const dbJwt = parsed.searchParams.get('__clerk_db_jwt');
     if (dbJwt) {
-      const isHttps = Boolean(req.secure || req.headers?.['x-forwarded-proto'] === 'https' || process.env.NODE_ENV === 'production');
+      const isHttps = isHttpsConnection(req);
       const sec = isHttps ? '; Secure' : '';
       const existingHeaders = res.getHeader('Set-Cookie') || [];
       const cookieList = Array.isArray(existingHeaders) ? [...existingHeaders] : (existingHeaders ? [existingHeaders] : []);

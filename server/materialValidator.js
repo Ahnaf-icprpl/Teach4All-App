@@ -59,6 +59,36 @@ export function estimateReadTime(text) {
 }
 
 /**
+ * Normalizes and formats raw material markdown into clean, valid markdown.
+ * Unescapes literal line breaks, ensures proper spacing for headings, lists,
+ * blockquotes, and enforces clean paragraph breaks.
+ *
+ * @param {string} content
+ * @returns {string}
+ */
+export function formatMaterialMarkdown(content) {
+  if (!content || typeof content !== 'string') return '';
+  let text = content;
+
+  if (text.includes('\\n')) {
+    text = text.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n').replace(/\\t/g, '\t');
+  }
+  text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+  text = text.replace(/^(#{1,6})([^\s#])/gm, '$1 $2');
+  text = text.replace(/^([-*+])([^\s\-*+])/gm, '$1 $2');
+  text = text.replace(/^(\d+\.)([^\s\d])/gm, '$1 $2');
+  text = text.replace(/^(>+)([^\s>])/gm, '$1 $2');
+
+  text = text.replace(/([^\n])\n(#{1,6}\s+)/g, '$1\n\n$2');
+  text = text.replace(/([^\n])\n(>\s+)/g, '$1\n\n$2');
+  text = text.replace(/([^\n\-*+\d>#])\n([-*+]\s+|\d+\.\s+)/g, '$1\n\n$2');
+
+  text = text.split('\n').map(line => line.trimEnd()).join('\n');
+  return text.replace(/\n{3,}/g, '\n\n').trim();
+}
+
+/**
  * Validates parsed material arguments algorithmically against the multi-section schema.
  * Coerces soft mismatches and returns structured algorithmic diagnostics if constraints fail.
  *
@@ -171,7 +201,7 @@ export function diagnoseAndValidateMaterialArgs(rawArgs) {
       if (typeof secContent !== 'string' || !secContent.trim()) {
         errors.push(`${secPrefix}: missing or empty 'content'. Every section must provide detailed educational content.`);
       } else {
-        secContent = secContent.trim();
+        secContent = formatMaterialMarkdown(secContent);
         if (secContent.length < 50) {
           errors.push(`${secPrefix}: 'content' is too brief (${secContent.length} chars). A learning material section must provide a comprehensive, multi-paragraph educational explanation with proper markdown formatting.`);
         }

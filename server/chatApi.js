@@ -352,9 +352,9 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
       const hasQuizToolCall = Object.values(accumulatedToolCalls).some(c => c.function?.name === 'create_quiz');
 
       if (hasMaterialToolCall || isMaterialRequest) {
-        updateChatTask(conversationId, { status: 'building' });
+        updateChatTask(conversationId, { status: 'building_material' });
         if (!res.writableEnded && res.writable !== false) {
-          res.write('data: {"type":"quiz_status","status":"building"}\n\n');
+          res.write('data: {"type":"material_status","status":"building"}\n\n');
         }
         const toolMap = hasMaterialToolCall ? accumulatedToolCalls : {
           0: { id: `call_mat_${Date.now()}`, type: 'function', function: { name: MATERIAL_TOOL_NAME, arguments: '{}' } },
@@ -380,7 +380,7 @@ export async function handleChatRequest(req, res, serverEnv = {}) {
           providerRouting,
         });
       } else if (hasQuizToolCall || isQuizRequest || Object.keys(accumulatedToolCalls).length > 0) {
-        updateChatTask(conversationId, { status: 'building' });
+        updateChatTask(conversationId, { status: 'building_quiz' });
         if (!res.writableEnded && res.writable !== false) {
           res.write('data: {"type":"quiz_status","status":"building"}\n\n');
         }

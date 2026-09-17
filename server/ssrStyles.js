@@ -98,7 +98,12 @@ export function injectBundledStyles(html, options = {}) {
     return html;
   }
 
-  const isProd = options.isProd ?? (process.env.ENV === 'production' || process.env.NODE_ENV === 'production');
+  const isProd = options.isProd ?? (
+    process.env.ENV === 'production' ||
+    process.env.ENV === 'staging' ||
+    process.env.NODE_ENV === 'production' ||
+    process.env.NODE_ENV === 'staging'
+  );
   const css = getBundledCss({ forceReload: !isProd });
   if (!css) return html;
 

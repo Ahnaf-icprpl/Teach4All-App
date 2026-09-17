@@ -1,7 +1,7 @@
 import van from 'vanjs-core';
 import {
   loadWorkspace, saveWorkspace, emptyWorkspace, MAX_CHATS,
-  loadThemeFromLocalDb, saveTheme,
+  loadThemeFromLocalDb, saveTheme, saveCachedRecentChats,
 } from './storage.js';
 import {
   sendMessage as sendApiMessage, generateTitle, generateOfflineTitle,
@@ -14,7 +14,6 @@ import {
   abortActiveTaskSubscription, checkAndAttachActiveTask,
 } from './chatStore.js';
 import { createReply } from './replies.js';
-import { isDevEnv } from './env.js';
 import { t, rotatePrompts } from './uiTexts.js';
 
 export {
@@ -33,20 +32,11 @@ try {
 } catch { /* Storage unavailable */ }
 
 const initialTheme = loadWorkspace(storage).data.theme;
-export const draft = van.state('');
-export const theme = van.state(initialTheme);
-export const webSearchEnabled = van.state(true);
-export const searchingWeb = van.state(false);
-export const buildingQuiz = van.state(false);
-export const loading = van.state(false);
-export const sidebarOpen = van.state(false);
-export const sidebarCollapsed = van.state(false);
-export const storageError = van.state('');
-export const notice = van.state('');
-export const online = van.state(typeof navigator !== 'undefined' ? navigator.onLine : true);
-export const offlineReady = van.state(false);
-export const updateReady = van.state(false);
-export const modal = van.state(null);
+export const draft = van.state(''), theme = van.state(initialTheme), webSearchEnabled = van.state(true);
+export const searchingWeb = van.state(false), buildingQuiz = van.state(false), buildingMaterial = van.state(false);
+export const loading = van.state(false), sidebarOpen = van.state(false), sidebarCollapsed = van.state(false);
+export const storageError = van.state(''), notice = van.state(''), online = van.state(typeof navigator !== 'undefined' ? navigator.onLine : true);
+export const offlineReady = van.state(false), updateReady = van.state(false), modal = van.state(null);
 let toastTimer;
 let activeChatAbortController = null;
 let activeGeneratingChatId = null;
@@ -75,6 +65,7 @@ export function abortActiveGeneration() {
   loading.val = false;
   searchingWeb.val = false;
   buildingQuiz.val = false;
+  buildingMaterial.val = false;
 }
 
 export const currentChat = () => chats.val.find(chat => chat.id === activeId.val);
@@ -86,6 +77,7 @@ export const workspace = () => ({
 
 export function persist() {
   saveWorkspace(storage, workspace());
+  saveCachedRecentChats(chats.val, getEffectiveUserId());
 }
 
 export function toggleWebSearch() {
@@ -103,9 +95,10 @@ export function toast(message) {
 }
 
 export function focusComposer() {
+  if (!online.val) return;
   requestAnimationFrame(() => {
     const el = document.getElementById('message-input');
-    if (el) {
+    if (el && !el.disabled) {
       el.focus();
       if (typeof el.selectionStart === 'number') {
         el.selectionStart = el.selectionEnd = el.value.length;
@@ -185,6 +178,7 @@ export async function selectChat(id) {
   checkAndAttachActiveTask(id, {
     setLoading: v => { loading.val = v; },
     setBuildingQuiz: v => { buildingQuiz.val = v; },
+    setBuildingMaterial: v => { buildingMaterial.val = v; },
     setSearchingWeb: v => { searchingWeb.val = v; },
     isSending: activeGeneratingChatId === id,
   }).catch(() => {});
@@ -210,6 +204,10 @@ export function scrollMessagesToBottom(retry = false) {
 }
 
 export function sendMessage(customText) {
+  if (!online.val) {
+    toast(t('state_offline_notice'));
+    return;
+  }
   const text = (typeof customText === 'string' ? customText : draft.val).trim();
   if (!text || loading.val) return;
   const existing = currentChat();
@@ -277,7 +275,9 @@ export function sendMessage(customText) {
   }
 
   const isQuizIntent = /\b(kuis|quiz|soal|latihan|evaluasi|test me)\b/i.test(userMessage.text || '');
+  const isMaterialIntent = !isQuizIntent && /\b(materi|modul|ringkasan|rangkuman|bacaan|pelajaran|material|study guide)\b/i.test(userMessage.text || '');
   buildingQuiz.val = Boolean(isQuizIntent);
+  buildingMaterial.val = Boolean(isMaterialIntent);
   searchingWeb.val = Boolean(online.val);
 
   const abortController = new AbortController();
@@ -286,8 +286,9 @@ export function sendMessage(customText) {
 
   sendApiMessage(messageHistory, (chunkText) => {
     if (activeGeneratingChatId !== chat.id) return;
-    if (buildingQuiz.val) buildingQuiz.val = false;
     if (searchingWeb.val) searchingWeb.val = false;
+    if (chunkText.includes('TEACH4ALL_QUIZ_CARD')) buildingQuiz.val = false;
+    if (chunkText.includes('TEACH4ALL_MATERIAL_CARD')) buildingMaterial.val = false;
     const updatedChats = chats.val.map(c => {
       if (c.id === chat.id) {
         return {
@@ -314,6 +315,11 @@ export function sendMessage(customText) {
       if (activeGeneratingChatId !== chat.id) return;
       if (status === 'building_quiz') {
         buildingQuiz.val = true;
+        buildingMaterial.val = false;
+        searchingWeb.val = false;
+      } else if (status === 'building_material') {
+        buildingMaterial.val = true;
+        buildingQuiz.val = false;
         searchingWeb.val = false;
       }
     },
@@ -322,6 +328,7 @@ export function sendMessage(customText) {
       activeChatAbortController = null;
       activeGeneratingChatId = null;
       buildingQuiz.val = false;
+      buildingMaterial.val = false;
       searchingWeb.val = false;
       loading.val = false;
       persist();
@@ -332,6 +339,7 @@ export function sendMessage(customText) {
       activeChatAbortController = null;
       activeGeneratingChatId = null;
       buildingQuiz.val = false;
+      buildingMaterial.val = false;
       searchingWeb.val = false;
       loading.val = false;
     }
@@ -463,6 +471,7 @@ if (typeof window !== 'undefined') {
       checkAndAttachActiveTask(activeId.val, {
         setLoading: v => { loading.val = v; },
         setBuildingQuiz: v => { buildingQuiz.val = v; },
+        setBuildingMaterial: v => { buildingMaterial.val = v; },
         setSearchingWeb: v => { searchingWeb.val = v; },
         isSending: activeGeneratingChatId === activeId.val,
       }).catch(() => {});

@@ -48,6 +48,12 @@ export async function readSseStream(responseBody, onChunk, options = {}, initial
           }
           continue;
         }
+        if (json.type === 'material_status' && json.status === 'building') {
+          if (typeof options.onStatus === 'function') {
+            options.onStatus('building_material');
+          }
+          continue;
+        }
         const delta = json.choices?.[0]?.delta?.content || '';
         if (delta) {
           fullText += delta;

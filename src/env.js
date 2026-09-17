@@ -2,9 +2,9 @@ import { appEnvState } from './uiTexts.js';
 
 /**
  * Environment configuration helper for Teach4All.
- * Valid values: 'production' | 'development'
+ * Valid values: 'production' | 'staging' | 'development'
  */
-export const VALID_ENVS = ['production', 'development'];
+export const VALID_ENVS = ['production', 'staging', 'development'];
 
 /**
  * Validate whether an env string is acceptable.
@@ -16,7 +16,7 @@ export function isValidEnv(val) {
 
 /**
  * Parse and validate application environment.
- * Throws if an explicitly provided value is neither 'production' nor 'development'.
+ * Throws if an explicitly provided value is neither 'production', 'staging', nor 'development'.
  */
 export function parseAppEnv(raw, fallback = 'development') {
   if (raw === undefined || raw === null || String(raw).trim() === '') {
@@ -26,7 +26,7 @@ export function parseAppEnv(raw, fallback = 'development') {
   if (VALID_ENVS.includes(normalized)) {
     return normalized;
   }
-  throw new Error(`Invalid env "${raw}". Only "production" or "development" is valid.`);
+  throw new Error(`Invalid env "${raw}". Only "production", "staging", or "development" is valid.`);
 }
 
 /**
@@ -43,7 +43,7 @@ export function getAppEnv() {
     procEnv?.ENV ||
     procEnv?.env ||
     procEnv?.NODE_ENV ||
-    (metaEnv?.MODE === 'production' ? 'production' : 'development')
+    (metaEnv?.MODE === 'production' ? 'production' : (metaEnv?.MODE === 'staging' ? 'staging' : 'development'))
   );
 
   return parseAppEnv(candidate, 'development');
@@ -63,6 +63,22 @@ export function isDevEnv() {
     return import.meta.env.ENV === 'development';
   }
   return getAppEnv() === 'development';
+}
+
+/**
+ * Check if running in staging environment.
+ */
+export function isStagingEnv() {
+  if (appEnvState?.val) {
+    return appEnvState.val === 'staging';
+  }
+  if (typeof window !== 'undefined' && window.__INITIAL_UI_DATA__?.env) {
+    return window.__INITIAL_UI_DATA__.env === 'staging';
+  }
+  if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.ENV) {
+    return import.meta.env.ENV === 'staging';
+  }
+  return getAppEnv() === 'staging';
 }
 
 /**

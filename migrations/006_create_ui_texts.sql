@@ -21,7 +21,7 @@ INSERT INTO ui_texts (key, value) VALUES
     ('app_skip_link', 'Lompat ke kolom pesan'),
     ('topbar_open_nav', 'Buka menu navigasi'),
     ('topbar_new_chat', 'Percakapan baru'),
-    ('topbar_offline_badge', 'Mode luring'),
+    ('topbar_offline_badge', 'Mode offline'),
     ('topbar_theme_prefix', 'Beralih ke tema '),
     ('topbar_theme_light', 'terang'),
     ('topbar_theme_dark', 'gelap'),
@@ -83,7 +83,7 @@ INSERT INTO ui_texts (key, value) VALUES
     ('chat_prompt4_title', 'Pecahkan masalah'),
     ('chat_prompt4_detail', 'Satu langkah demi satu langkah'),
     ('chat_prompt4_prompt', 'Tunjukkan langkah demi langkah cara menyelesaikan masalah atau soal ini.'),
-    ('chat_offline_warning', 'Anda sedang luring. Tab ini tetap berfungsi, tetapi pemuatan ulang luring belum disiapkan.'),
+    ('chat_offline_warning', 'Anda sedang offline. Tab ini tetap berfungsi, tetapi pemuatan ulang offline belum disiapkan.'),
     ('chat_messages_aria', 'Percakapan'),
     ('chat_footer_text', 'Belajar tanpa batas. Begitu pula potensi Anda.'),
     ('dialogs_tools_new_chat', 'Mulai percakapan baru'),
@@ -131,13 +131,13 @@ INSERT INTO ui_texts (key, value) VALUES
     ('dialogs_cat_literacy_science', 'Literasi & Sains'),
     ('dialogs_close_aria', 'Tutup dialog'),
     ('state_default_title', 'Percakapan baru'),
-    ('state_offline_notice', 'Anda tampaknya sedang luring. Sambungkan kembali untuk mengirim pesan.'),
+    ('state_offline_notice', 'Anda tampaknya sedang offline. Sambungkan kembali untuk mengirim pesan.'),
     ('state_max_chats_notice', 'Ruang kerja Anda memiliki 100 obrolan. Ekspor atau hapus percakapan lama untuk memberi ruang.'),
     ('state_send_failed', 'Gagal mengirim pesan. Silakan coba lagi.'),
     ('state_chat_deleted', 'Percakapan telah dihapus.'),
     ('state_workspace_cleared', 'Percakapan dan draf telah dibersihkan.'),
     ('state_export_success', 'Ekspor ruang kerja berhasil diunduh.'),
-    ('offline_setup_failed', 'Pemasangan mode luring belum selesai. Percakapan Anda tetap tersimpan secara lokal; sambungkan kembali dan muat ulang untuk mencoba lagi.')
+    ('offline_setup_failed', 'Pemasangan mode offline belum selesai. Percakapan Anda tetap tersimpan secara lokal; sambungkan kembali dan muat ulang untuk mencoba lagi.')
 ON CONFLICT (key) DO UPDATE SET
     value = EXCLUDED.value,
     updated_at = CURRENT_TIMESTAMP;
