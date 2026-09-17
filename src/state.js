@@ -106,8 +106,16 @@ export function toast(message) {
   toastTimer = setTimeout(() => { notice.val = ''; }, 4500);
 }
 
+if (typeof window !== 'undefined') {
+  window.addEventListener('teach4all:toast', event => {
+    if (event?.detail?.message) toast(event.detail.message);
+  });
+}
+
 export function focusComposer() {
+  if (modal.val) return;
   requestAnimationFrame(() => {
+    if (modal.val) return;
     const el = document.getElementById('message-input');
     if (el && !el.disabled) {
       el.focus();

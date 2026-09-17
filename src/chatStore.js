@@ -5,11 +5,16 @@ import {
 } from './router.js';
 import { t } from './uiTexts.js';
 import { loadUiState } from './storage.js';
+import { getStoredUser } from './authUtils.js';
 
 export const CHATS_PAGE_SIZE = 20;
 
 const initialUiState = loadUiState();
-export const chats = van.state([]);
+export const chats = van.state(
+  initialUiState.activeChatId
+    ? [{ id: initialUiState.activeChatId, title: '', messages: [], messagesLoaded: false, updatedAt: Date.now() }]
+    : []
+);
 export const activeId = van.state(initialUiState.activeChatId || null);
 export const historyLoading = van.state(false);
 export const historyLoadingMore = van.state(false);
@@ -62,45 +67,57 @@ export function onSearchInput(query) {
   }, 250);
 }
 
+const inFlightMessageFetches = new Map();
+
 export async function loadMessagesForChat(id) {
-  if (!id || messagesLoading.val) return;
-  messagesLoading.val = true;
-  try {
-    const data = await fetchMessages(id);
-    if (Array.isArray(data?.messages)) {
-      const loadedMessages = data.messages
-        .filter(m => m && (m.role === 'user' || (m.content && m.content.trim().length > 0)))
-        .map(m => ({
-          id: m.id,
-          role: m.role,
-          text: m.content || '',
-          createdAt: m.created_at ? new Date(m.created_at).getTime() : Date.now(),
-        }));
-      if (chats.val.some(c => c.id === id)) {
-        chats.val = chats.val.map(c =>
-          c.id === id ? { ...c, messages: loadedMessages, messagesLoaded: true } : c
-        );
-      } else {
-        chats.val = [{
-          id,
-          title: t('state_default_title'),
-          messages: loadedMessages,
-          messagesLoaded: true,
-          updatedAt: Date.now(),
-        }, ...chats.val];
-      }
-      requestAnimationFrame(() => {
-        const pane = document.getElementById('messages');
-        if (pane) pane.scrollTop = pane.scrollHeight;
-      });
-    }
-  } catch (err) {
-    if (err?.message?.includes('404') && activeId.val === id) {
-      activeId.val = null;
-    }
-  } finally {
-    messagesLoading.val = false;
+  if (!id) return;
+  if (inFlightMessageFetches.has(id)) {
+    return inFlightMessageFetches.get(id);
   }
+  messagesLoading.val = true;
+  const promise = (async () => {
+    try {
+      const data = await fetchMessages(id);
+      if (Array.isArray(data?.messages)) {
+        const loadedMessages = data.messages
+          .filter(m => m && (m.role === 'user' || (m.content && m.content.trim().length > 0)))
+          .map(m => ({
+            id: m.id,
+            role: m.role,
+            text: m.content || '',
+            createdAt: m.created_at ? new Date(m.created_at).getTime() : Date.now(),
+          }));
+        if (chats.val.some(c => c.id === id)) {
+          chats.val = chats.val.map(c =>
+            c.id === id ? { ...c, messages: loadedMessages, messagesLoaded: true } : c
+          );
+        } else {
+          chats.val = [{
+            id,
+            title: t('state_default_title'),
+            messages: loadedMessages,
+            messagesLoaded: true,
+            updatedAt: Date.now(),
+          }, ...chats.val];
+        }
+        requestAnimationFrame(() => {
+          const pane = document.getElementById('messages');
+          if (pane) pane.scrollTop = pane.scrollHeight;
+        });
+      }
+    } catch (err) {
+      if (err?.message?.includes('404') && activeId.val === id) {
+        activeId.val = null;
+      }
+    } finally {
+      inFlightMessageFetches.delete(id);
+      if (inFlightMessageFetches.size === 0) {
+        messagesLoading.val = false;
+      }
+    }
+  })();
+  inFlightMessageFetches.set(id, promise);
+  return promise;
 }
 
 export async function loadChatHistory() {
@@ -117,13 +134,23 @@ export async function loadChatHistory() {
       }));
       const active = chats.val.find(c => c.id === activeId.val);
       const mergedChats = dbChats.map(c => {
-        if (active && c.id === active.id && active.messagesLoaded) {
-          return { ...c, messages: active.messages, messagesLoaded: true };
+        if (active && c.id === active.id) {
+          return {
+            ...c,
+            messages: (active.messages && active.messages.length > 0) ? active.messages : c.messages,
+            messagesLoaded: Boolean(active.messagesLoaded),
+          };
         }
         return c;
       });
       if (active && !mergedChats.some(c => c.id === active.id)) {
-        chats.val = [active, ...mergedChats];
+        if (hasMoreChats.val === false && (!active.messages || active.messages.length === 0) && active.messagesLoaded) {
+          if (activeId.val === active.id) {
+            activeId.val = null;
+          }
+        } else {
+          chats.val = [active, ...mergedChats];
+        }
       } else {
         chats.val = mergedChats;
       }
@@ -292,8 +319,13 @@ export async function checkAndAttachActiveTask(chatId, {
   }
 }
 
+let lastKnownUserId = typeof window !== 'undefined' ? (getStoredUser()?.id || null) : null;
+
 if (typeof window !== 'undefined') {
-  window.addEventListener('teach4all:auth-changed', () => {
+  window.addEventListener('teach4all:auth-changed', (event) => {
+    const newUserId = event.detail?.user?.id || null;
+    if (newUserId === lastKnownUserId) return;
+    lastKnownUserId = newUserId;
     resetChatStore();
     loadChatHistory().catch(() => {});
   });
