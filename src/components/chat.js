@@ -261,7 +261,11 @@ function Suggestions() {
       button({
         type: 'button',
         class: 'suggestion-card',
-        onclick: () => { setDraft(prompt.prompt); focusComposer(); },
+        disabled: () => loading.val,
+        onclick: () => {
+          if (loading.val) return;
+          sendMessage(prompt.prompt);
+        },
       },
         span({ class: `suggestion-icon ${prompt.color || 'amber'}` }, icon(prompt.icon || 'bulb')),
         span({ class: 'suggestion-title' }, prompt.title),

@@ -209,8 +209,8 @@ export function scrollMessagesToBottom(retry = false) {
   }
 }
 
-export function sendMessage() {
-  const text = draft.val.trim();
+export function sendMessage(customText) {
+  const text = (typeof customText === 'string' ? customText : draft.val).trim();
   if (!text || loading.val) return;
   const existing = currentChat();
   if (!existing && chats.val.length >= MAX_CHATS) {
