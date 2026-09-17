@@ -180,7 +180,7 @@ export async function syncFromClerkClient(frontendApi, dbJwtOverride = null) {
     const fullName = [firstName, lastName].filter(Boolean).join(' ').trim() ||
       u.username ||
       (primaryEmail ? primaryEmail.split('@')[0] : null) ||
-      'Pengguna';
+      t('auth_default_user_name');
     const avatarUrl = u.image_url || u.profile_image_url || null;
 
     let jwt = null;
@@ -413,8 +413,8 @@ export async function login(returnUrl) {
   await initAuthConfig();
   const urls = getClerkUrls();
   if (!urls.signInUrl || (!urls.signInUrl.startsWith('http://') && !urls.signInUrl.startsWith('https://'))) {
-    const msg = t('auth_not_configured') || 'Autentikasi belum dikonfigurasi pada server.';
-    toast(msg);
+    const msg = t('auth_not_configured');
+    if (msg) toast(msg);
     return;
   }
   const target = returnUrl || `${window.location.origin}${window.location.pathname}`;
@@ -427,8 +427,8 @@ export async function signup(returnUrl) {
   await initAuthConfig();
   const urls = getClerkUrls();
   if (!urls.signUpUrl || (!urls.signUpUrl.startsWith('http://') && !urls.signUpUrl.startsWith('https://'))) {
-    const msg = t('auth_not_configured') || 'Autentikasi belum dikonfigurasi pada server.';
-    toast(msg);
+    const msg = t('auth_not_configured');
+    if (msg) toast(msg);
     return;
   }
   const target = returnUrl || `${window.location.origin}${window.location.pathname}`;

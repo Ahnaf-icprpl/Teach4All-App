@@ -330,7 +330,7 @@ export function sendMessage(customText) {
       loading.val = false;
     }
 
-    if (error.message === 'Request was cancelled.') {
+    if (error.message === 'Request was cancelled.' || error.message === t('router_request_cancelled')) {
       return;
     }
 

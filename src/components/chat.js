@@ -118,7 +118,7 @@ function Messages() {
               type: 'button',
               class: 'error-login-action-btn',
               onclick: () => login(),
-            }, icon('login'), span(() => t('auth_login_button') || 'Masuk'))
+            }, icon('login'), span(() => t('auth_login_button')))
           : null,
       );
     }),

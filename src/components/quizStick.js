@@ -16,11 +16,11 @@ export function generateLocalClue(q = {}) {
       .trim();
     const firstSentence = cleaned.split(/[.!?]\s+/)[0];
     if (firstSentence && firstSentence.length > 15) {
-      return `Pikirkan konsep ini: ${firstSentence.trim()}. Analisis pilihan mana yang paling sesuai dengan prinsip tersebut.`;
+      return `${t('dialogs_quiz_clue_concept_prefix')}${firstSentence.trim()}${t('dialogs_quiz_clue_concept_suffix')}`;
     }
   }
 
-  return 'Cermati kata kunci utama pada pertanyaan. Analisis karakteristik khas setiap pilihan dan eliminasi opsi yang tidak berkaitan dengan konsep yang ditanyakan.';
+  return t('dialogs_quiz_clue_generic');
 }
 
 /**
@@ -33,19 +33,19 @@ export function QuizClueStick({ isOpen, loading, clueText, onClose, questionNumb
     return div({
       class: 'quiz-clue-stick',
       role: 'region',
-      'aria-label': () => t('dialogs_quiz_clue_title') || 'Petunjuk AI',
+      'aria-label': () => t('dialogs_quiz_clue_title'),
     },
       div({ class: 'quiz-stick-header' },
         div({ class: 'quiz-stick-badge' },
           icon('spark', 'quiz-stick-spark-icon'),
-          span({ class: 'quiz-stick-title' }, () => t('dialogs_quiz_clue_title') || 'Petunjuk AI'),
-          span({ class: 'quiz-stick-qnum' }, () => `${t('dialogs_quiz_question_label') || 'Soal'} ${questionNumber.val}`),
+          span({ class: 'quiz-stick-title' }, () => t('dialogs_quiz_clue_title')),
+          span({ class: 'quiz-stick-qnum' }, () => `${t('dialogs_quiz_question_label')} ${questionNumber.val}`),
         ),
         button({
           type: 'button',
           class: 'quiz-stick-close-btn',
-          'aria-label': () => t('dialogs_quiz_clue_close') || 'Tutup Petunjuk',
-          title: () => t('dialogs_quiz_clue_close') || 'Tutup Petunjuk',
+          'aria-label': () => t('dialogs_quiz_clue_close'),
+          title: () => t('dialogs_quiz_clue_close'),
           onclick: onClose,
         }, icon('close')),
       ),
@@ -53,7 +53,7 @@ export function QuizClueStick({ isOpen, loading, clueText, onClose, questionNumb
         loading.val
           ? div({ class: 'quiz-stick-loading' },
               div({ class: 'quiz-stick-spinner' }, icon('spark')),
-              p(() => t('dialogs_quiz_clue_loading') || 'Menyiapkan petunjuk cerdas...'),
+              p(() => t('dialogs_quiz_clue_loading')),
             )
           : div({ class: 'quiz-stick-content' },
               p({ class: 'quiz-stick-text' }, () => clueText.val),
