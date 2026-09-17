@@ -203,7 +203,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       console.error('Migration error: DATABASE_URL environment variable is required.');
       process.exit(1);
     }
-    console.log('[!] DATABASE_URL not set. Skipping database migrations during build.');
+    console.log('[!] DATABASE_URL not set. Skipping database migrations.');
     process.exit(0);
   }
 
