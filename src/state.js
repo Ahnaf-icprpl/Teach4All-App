@@ -2,6 +2,7 @@ import van from 'vanjs-core';
 import {
   loadWorkspace, saveWorkspace, emptyWorkspace, MAX_CHATS,
   loadThemeFromLocalDb, saveTheme,
+  loadUiState, saveUiState, getStorage,
 } from './storage.js';
 import {
   sendMessage as sendApiMessage, generateTitle, generateOfflineTitle,
@@ -23,18 +24,32 @@ export {
   abortActiveTaskSubscription, checkAndAttachActiveTask,
 };
 
-let storage;
+const storage = getStorage();
 try {
-  storage = window.localStorage;
   storage?.removeItem('teach4all.workspace.v1');
   storage?.removeItem('teach4all.openrouter-key.v1');
-} catch { /* Storage unavailable */ }
+} catch {}
 
+const initialUi = loadUiState(storage);
 const initialTheme = loadWorkspace(storage).data.theme;
-export const draft = van.state(''), theme = van.state(initialTheme), webSearchEnabled = van.state(true);
+export const draft = van.state(initialUi.draft || '');
+export const theme = van.state(initialTheme);
+export const webSearchEnabled = van.state(initialUi.webSearchEnabled ?? true);
 export const searchingWeb = van.state(false), buildingQuiz = van.state(false), buildingMaterial = van.state(false);
-export const loading = van.state(false), sidebarOpen = van.state(false), sidebarCollapsed = van.state(false);
-export const storageError = van.state(''), notice = van.state(''), modal = van.state(null);
+export const loading = van.state(false), sidebarOpen = van.state(false);
+export const sidebarCollapsed = van.state(initialUi.sidebarCollapsed ?? false);
+export const storageError = van.state(''), notice = van.state('');
+export const modal = van.state(initialUi.modal || null);
+
+van.derive(() => {
+  saveUiState(storage, {
+    activeChatId: activeId.val,
+    draft: draft.val,
+    sidebarCollapsed: sidebarCollapsed.val,
+    webSearchEnabled: webSearchEnabled.val,
+    modal: modal.val,
+  });
+});
 let toastTimer;
 let activeChatAbortController = null;
 let activeGeneratingChatId = null;
@@ -70,7 +85,7 @@ export const currentChat = () => chats.val.find(chat => chat.id === activeId.val
 export const hasMessages = () => Boolean(activeId.val || currentChat()?.messages?.length);
 export const workspace = () => ({
   version: 1, chats: chats.val, activeId: activeId.val, draft: draft.val, theme: theme.val,
-  webSearchEnabled: webSearchEnabled.val,
+  webSearchEnabled: webSearchEnabled.val, sidebarCollapsed: sidebarCollapsed.val, modal: modal.val,
 });
 
 export function persist() {
@@ -389,7 +404,17 @@ export function setTheme(value) {
 }
 
 if (typeof window !== 'undefined') {
+  const flushUiState = () => {
+    saveUiState(storage, {
+      activeChatId: activeId.val,
+      draft: draft.val,
+      sidebarCollapsed: sidebarCollapsed.val,
+      webSearchEnabled: webSearchEnabled.val,
+      modal: modal.val,
+    });
+  };
   window.addEventListener('beforeunload', () => {
+    flushUiState();
     if (activeChatAbortController) {
       try {
         activeChatAbortController.abort();
@@ -397,6 +422,7 @@ if (typeof window !== 'undefined') {
     }
   });
   window.addEventListener('pagehide', () => {
+    flushUiState();
     if (activeChatAbortController) {
       try {
         activeChatAbortController.abort();
@@ -409,8 +435,15 @@ if (typeof window !== 'undefined') {
       saveTheme(storage, dbTheme);
     }
   }).catch(() => {});
-  loadChatHistory().then(() => {
+  if (activeId.val) {
+    loadMessagesForChat(activeId.val).catch(() => {});
+  }
+  loadChatHistory().then(async () => {
     if (activeId.val) {
+      const activeChat = chats.val.find(c => c.id === activeId.val);
+      if (!activeChat || !activeChat.messagesLoaded) {
+        await loadMessagesForChat(activeId.val).catch(() => {});
+      }
       checkAndAttachActiveTask(activeId.val, {
         setLoading: v => { loading.val = v; },
         setBuildingQuiz: v => { buildingQuiz.val = v; },

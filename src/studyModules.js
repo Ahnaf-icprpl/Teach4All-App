@@ -111,6 +111,38 @@ export function clearLocalQuizProgress(quizId) {
   } catch {}
 }
 
+export function getMaterialProgressStorageKey(materialId) {
+  return `teach4all.material_progress.v1.${getEffectiveUserId()}.${materialId}`;
+}
+
+export function loadLocalMaterialProgress(materialId) {
+  if (typeof localStorage === 'undefined' || !materialId) return null;
+  try {
+    const raw = localStorage.getItem(getMaterialProgressStorageKey(materialId));
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
+}
+
+export function saveLocalMaterialProgress(materialId, { lastSectionIndex = 0, isSolved = undefined } = {}) {
+  if (typeof localStorage === 'undefined' || !materialId) return;
+  try {
+    const data = {
+      lastSectionIndex: Number(lastSectionIndex) || 0,
+      isSolved,
+      updatedAt: Date.now(),
+    };
+    localStorage.setItem(getMaterialProgressStorageKey(materialId), JSON.stringify(data));
+  } catch {}
+}
+
+export function clearLocalMaterialProgress(materialId) {
+  if (typeof localStorage === 'undefined' || !materialId) return;
+  try {
+    localStorage.removeItem(getMaterialProgressStorageKey(materialId));
+  } catch {}
+}
+
 /**
  * Non-blocking server sync for quiz progress (fire-and-forget).
  */

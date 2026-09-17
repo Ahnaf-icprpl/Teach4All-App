@@ -4,12 +4,13 @@ import {
   fetchChatStatus, subscribeToChatStream,
 } from './router.js';
 import { t } from './uiTexts.js';
-import { getEffectiveUserId } from './auth.js';
+import { loadUiState } from './storage.js';
 
 export const CHATS_PAGE_SIZE = 20;
 
+const initialUiState = loadUiState();
 export const chats = van.state([]);
-export const activeId = van.state(null);
+export const activeId = van.state(initialUiState.activeChatId || null);
 export const historyLoading = van.state(false);
 export const historyLoadingMore = van.state(false);
 export const hasMoreChats = van.state(true);
@@ -62,7 +63,7 @@ export function onSearchInput(query) {
 }
 
 export async function loadMessagesForChat(id) {
-  if (messagesLoading.val) return;
+  if (!id || messagesLoading.val) return;
   messagesLoading.val = true;
   try {
     const data = await fetchMessages(id);
@@ -75,16 +76,28 @@ export async function loadMessagesForChat(id) {
           text: m.content || '',
           createdAt: m.created_at ? new Date(m.created_at).getTime() : Date.now(),
         }));
-      chats.val = chats.val.map(c =>
-        c.id === id ? { ...c, messages: loadedMessages, messagesLoaded: true } : c
-      );
+      if (chats.val.some(c => c.id === id)) {
+        chats.val = chats.val.map(c =>
+          c.id === id ? { ...c, messages: loadedMessages, messagesLoaded: true } : c
+        );
+      } else {
+        chats.val = [{
+          id,
+          title: t('state_default_title'),
+          messages: loadedMessages,
+          messagesLoaded: true,
+          updatedAt: Date.now(),
+        }, ...chats.val];
+      }
       requestAnimationFrame(() => {
         const pane = document.getElementById('messages');
         if (pane) pane.scrollTop = pane.scrollHeight;
       });
     }
   } catch (err) {
-    // Keep in-memory state on fetch error
+    if (err?.message?.includes('404') && activeId.val === id) {
+      activeId.val = null;
+    }
   } finally {
     messagesLoading.val = false;
   }
@@ -103,10 +116,16 @@ export async function loadChatHistory() {
         updatedAt: c.updated_at ? new Date(c.updated_at).getTime() : Date.now(),
       }));
       const active = chats.val.find(c => c.id === activeId.val);
-      if (active && !dbChats.some(c => c.id === active.id)) {
-        chats.val = [active, ...dbChats];
+      const mergedChats = dbChats.map(c => {
+        if (active && c.id === active.id && active.messagesLoaded) {
+          return { ...c, messages: active.messages, messagesLoaded: true };
+        }
+        return c;
+      });
+      if (active && !mergedChats.some(c => c.id === active.id)) {
+        chats.val = [active, ...mergedChats];
       } else {
-        chats.val = dbChats;
+        chats.val = mergedChats;
       }
       hasMoreChats.val = typeof data.hasMore === 'boolean'
         ? data.hasMore

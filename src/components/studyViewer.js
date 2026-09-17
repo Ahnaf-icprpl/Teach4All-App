@@ -21,16 +21,19 @@ const { div, h2, h3, p, span, button } = van.tags;
 export function QuizSolver(quizId, { initialClue = false } = {}) {
   const loading = van.state(true);
   const quiz = van.state(null);
-  const currentIndex = van.state(0);
+  const localProg = loadLocalQuizProgress(quizId);
+  const initialIndex = (typeof localProg?.lastQuestionIndex === 'number' && localProg.lastQuestionIndex >= 0)
+    ? localProg.lastQuestionIndex
+    : 0;
+  const currentIndex = van.state(initialIndex);
   const userAnswers = van.state({});
-  const isCompleted = van.state(false);
+  const isCompleted = van.state(Boolean(localProg?.isSolved));
   const showClueStick = van.state(Boolean(initialClue));
   const clueLoading = van.state(false);
   const clueText = van.state('');
   const cluesCache = {};
-  const currentQNum = van.state(1);
+  const currentQNum = van.state(initialIndex + 1);
 
-  const localProg = loadLocalQuizProgress(quizId);
   if (localProg?.userAnswers && typeof localProg.userAnswers === 'object') {
     userAnswers.val = { ...localProg.userAnswers };
   }
@@ -99,7 +102,8 @@ export function QuizSolver(quizId, { initialClue = false } = {}) {
     }
   };
 
-  fetchQuizDetails(quizId, { shuffle: true }).then(data => {
+  const hasExistingAnswers = Boolean(localProg?.userAnswers && Object.keys(localProg.userAnswers).length > 0);
+  fetchQuizDetails(quizId, { shuffle: !hasExistingAnswers }).then(data => {
     quiz.val = data;
     loading.val = false;
     if (!data) return;
@@ -118,13 +122,21 @@ export function QuizSolver(quizId, { initialClue = false } = {}) {
       }
     }
 
-    if (totalQ > 0 && firstUnfinishedIdx === -1) {
-      isCompleted.val = true;
-      currentIndex.val = 0;
-      currentQNum.val = 1;
-    } else {
-      isCompleted.val = false;
-      const targetIdx = firstUnfinishedIdx !== -1 ? firstUnfinishedIdx : 0;
+    const solved = Boolean(localProg?.isSolved || data.is_solved || data.isSolved);
+    if (solved || (totalQ > 0 && firstUnfinishedIdx === -1)) {
+      isCompleted.val = solved;
+      if (solved) {
+        currentIndex.val = 0;
+        currentQNum.val = 1;
+      }
+    }
+    if (!isCompleted.val) {
+      let targetIdx = 0;
+      if (typeof localProg?.lastQuestionIndex === 'number' && localProg.lastQuestionIndex >= 0 && localProg.lastQuestionIndex < totalQ) {
+        targetIdx = localProg.lastQuestionIndex;
+      } else if (firstUnfinishedIdx !== -1) {
+        targetIdx = firstUnfinishedIdx;
+      }
       currentIndex.val = targetIdx;
       currentQNum.val = targetIdx + 1;
       if (showClueStick.val) {

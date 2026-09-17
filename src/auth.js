@@ -443,6 +443,7 @@ export async function logout() {
       localStorage.removeItem('teach4all_session');
       localStorage.removeItem('teach4all_session_id');
       localStorage.removeItem('teach4all_db_jwt');
+      localStorage.removeItem('teach4all.ui_state.v1');
       localStorage.removeItem(GUEST_COOKIE_NAME);
     }
     document.cookie = '__session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
