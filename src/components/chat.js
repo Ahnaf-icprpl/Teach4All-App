@@ -4,7 +4,7 @@ import { MAX_INPUT } from '../storage.js';
 import {
   currentChat, hasMessages, draft, setDraft, sendMessage, focusComposer,
   modal, toast, online, offlineReady, storageError, loading, messagesLoading,
-  webSearchEnabled, toggleWebSearch, searchingWeb, buildingQuiz,
+  searchingWeb, buildingQuiz,
 } from '../state.js';
 import { getModel } from '../router.js';
 import { renderMarkdown } from '../markdown.js';
@@ -233,15 +233,6 @@ function Composer() {
             'aria-label': () => t('chat_composer_tools_aria'), title: () => t('chat_composer_tools_aria'),
             onclick: () => { modal.val = { type: 'tools' }; },
           }, icon('plus')),
-          button({
-            type: 'button',
-            class: () => `icon-button search-toggle-button ${webSearchEnabled.val && online.val ? 'is-active' : ''}`,
-            'aria-label': () => !online.val ? t('chat_web_search_offline') : (webSearchEnabled.val ? t('chat_web_search_active') : t('chat_web_search_inactive')),
-            title: () => !online.val ? t('chat_web_search_offline') : (webSearchEnabled.val ? t('chat_web_search_active') : t('chat_web_search_inactive')),
-            'aria-pressed': () => String(webSearchEnabled.val && online.val),
-            disabled: () => !online.val,
-            onclick: () => toggleWebSearch(),
-          }, icon('globe')),
         ),
         div({ class: 'send-tools' },
           () => span({ class: `input-count ${draft.val.length > MAX_INPUT - 300 ? '' : 'is-hidden'}` }, `${draft.val.length}/${MAX_INPUT}`),

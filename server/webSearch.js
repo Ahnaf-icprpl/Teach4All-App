@@ -18,10 +18,16 @@ export function buildWebSearchPlugin(serverEnv = {}) {
     DEFAULT_SEARCH_ENGINE
   ).trim();
 
+  const maxResults = Math.max(1, Math.min(10, Number(
+    serverEnv.OPENROUTER_SEARCH_MAX_RESULTS ||
+    process.env.OPENROUTER_SEARCH_MAX_RESULTS ||
+    8
+  ) || 8));
+
   return {
     id: 'web',
     engine,
-    max_results: 3,
+    max_results: maxResults,
   };
 }
 
@@ -37,11 +43,17 @@ export function buildWebSearchTool(serverEnv = {}) {
     DEFAULT_SEARCH_ENGINE
   ).trim();
 
+  const maxResults = Math.max(1, Math.min(10, Number(
+    serverEnv.OPENROUTER_SEARCH_MAX_RESULTS ||
+    process.env.OPENROUTER_SEARCH_MAX_RESULTS ||
+    8
+  ) || 8));
+
   return {
     type: 'openrouter:web_search',
     parameters: {
       engine,
-      max_results: 3,
+      max_results: maxResults,
       max_uses: 1,
     },
   };

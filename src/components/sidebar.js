@@ -38,7 +38,7 @@ if (typeof document !== 'undefined') {
 }
 
 export function formatDisplayName(user, fallback = '') {
-  if (!user) return fallback || t('auth_guest_name') || 'Akun Tamu';
+  if (!user) return fallback || t('auth_guest_name');
   if (user.name && user.name !== 'User' && user.name !== 'Pengguna') return user.name;
   const parts = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
   if (parts && parts !== 'User') return parts;
@@ -47,14 +47,14 @@ export function formatDisplayName(user, fallback = '') {
     const local = user.email.split('@')[0];
     return local.charAt(0).toUpperCase() + local.slice(1);
   }
-  return user.name || 'Pengguna';
+  return user.name || '';
 }
 
 export function formatDisplayDetail(user, fallback = '') {
-  if (!user) return fallback || t('auth_guest_detail') || 'Klik untuk masuk';
+  if (!user) return fallback || t('auth_guest_detail');
   if (user.email) return user.email;
   if (user.username && user.username !== 'teach4all_user') return `@${user.username}`;
-  return 'Terautentikasi';
+  return t('auth_status_authenticated');
 }
 
 function profileDropupMenu() {
@@ -69,8 +69,8 @@ function profileDropupMenu() {
       if (!user) {
         return div({ class: 'profile-menu-content' },
           div({ class: 'profile-menu-header' },
-            span({ class: 'profile-menu-name' }, () => t('auth_guest_name') || 'Akun Tamu'),
-            span({ class: 'profile-menu-email' }, () => t('auth_guest_detail') || 'Klik untuk masuk'),
+            span({ class: 'profile-menu-name' }, () => t('auth_guest_name')),
+            span({ class: 'profile-menu-email' }, () => t('auth_guest_detail')),
           ),
           div({ class: 'profile-menu-divider' }),
           button({

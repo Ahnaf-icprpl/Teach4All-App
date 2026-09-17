@@ -89,7 +89,7 @@ export function persist() {
 }
 
 export function toggleWebSearch() {
-  webSearchEnabled.val = !webSearchEnabled.val;
+  webSearchEnabled.val = true;
 }
 
 export function setDraft(value) {
@@ -278,7 +278,7 @@ export function sendMessage() {
 
   const isQuizIntent = /\b(kuis|quiz|soal|latihan|evaluasi|test me)\b/i.test(userMessage.text || '');
   buildingQuiz.val = Boolean(isQuizIntent);
-  searchingWeb.val = Boolean(online.val && (webSearchEnabled.val || isQuizIntent));
+  searchingWeb.val = Boolean(online.val);
 
   const abortController = new AbortController();
   activeChatAbortController = abortController;
@@ -308,7 +308,7 @@ export function sendMessage() {
     userMessageId: userMessage.id,
     assistantMessageId: assistantMessage.id,
     userId: getEffectiveUserId(),
-    webSearch: isQuizIntent ? Boolean(online.val) : (webSearchEnabled.val && online.val),
+    webSearch: Boolean(online.val),
     signal: abortController.signal,
     onStatus: (status) => {
       if (activeGeneratingChatId !== chat.id) return;

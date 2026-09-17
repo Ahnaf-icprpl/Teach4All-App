@@ -69,20 +69,20 @@ export function renderSsrHtml({ htmlTemplate, texts, prompts = [], serverEnv = {
     </button>
   `).join('');
 
-  let displayName = texts.auth_guest_name || 'Akun Tamu';
-  let displayDetail = texts.auth_guest_detail || 'Klik untuk masuk';
+  let displayName = texts.auth_guest_name || '';
+  let displayDetail = texts.auth_guest_detail || '';
   if (user) {
     if (user.name && user.name !== 'User' && user.name !== 'Pengguna') {
       displayName = user.name;
     } else if (user.firstName || user.lastName) {
-      displayName = [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || 'Pengguna';
+      displayName = [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || (user.name || '');
     } else if (user.username && user.username !== 'teach4all_user') {
       displayName = user.username;
     } else if (user.email && user.email.includes('@')) {
       const local = user.email.split('@')[0];
       displayName = local.charAt(0).toUpperCase() + local.slice(1);
     } else {
-      displayName = user.name || 'Pengguna';
+      displayName = user.name || '';
     }
 
     if (user.email) {
@@ -90,14 +90,14 @@ export function renderSsrHtml({ htmlTemplate, texts, prompts = [], serverEnv = {
     } else if (user.username && user.username !== 'teach4all_user') {
       displayDetail = `@${user.username}`;
     } else {
-      displayDetail = 'Terautentikasi';
+      displayDetail = texts.auth_status_authenticated || '';
     }
   }
   const profileBtnClass = user ? 'profile-button is-authenticated' : 'profile-button is-guest';
   const avatarHtml = user
     ? (user.avatarUrl
         ? `<img src="${escapeHtml(user.avatarUrl)}" alt="${escapeHtml(displayName)}" class="avatar avatar-img" aria-hidden="true" referrerpolicy="no-referrer" />`
-        : `<span class="avatar">${escapeHtml((displayName[0] || 'U').toUpperCase())}</span>`)
+        : `<span class="avatar">${escapeHtml((displayName[0] || '').toUpperCase())}</span>`)
     : `<span class="avatar"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon">${SVG_ICONS.user}</svg></span>`;
 
   const profileMenuHtml = user
@@ -109,31 +109,31 @@ export function renderSsrHtml({ htmlTemplate, texts, prompts = [], serverEnv = {
             <div class="profile-menu-divider"></div>
             <button type="button" class="profile-menu-item" role="menuitem">
               <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon">${SVG_ICONS.user}</svg>
-              <span>${escapeHtml(texts.auth_user_profile_button || 'Profil Pengguna')}</span>
+              <span>${escapeHtml(texts.auth_user_profile_button || '')}</span>
             </button>
             <button type="button" class="profile-menu-item" role="menuitem">
               <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon">${SVG_ICONS.login}</svg>
-              <span>${escapeHtml(texts.auth_logout_button || 'Keluar')}</span>
+              <span>${escapeHtml(texts.auth_logout_button || '')}</span>
             </button>
           </div>`
     : `<div class="profile-menu-content">
             <div class="profile-menu-header">
-              <span class="profile-menu-name">${escapeHtml(texts.auth_guest_name || 'Akun Tamu')}</span>
-              <span class="profile-menu-email">${escapeHtml(texts.auth_guest_detail || 'Klik untuk masuk')}</span>
+              <span class="profile-menu-name">${escapeHtml(texts.auth_guest_name || '')}</span>
+              <span class="profile-menu-email">${escapeHtml(texts.auth_guest_detail || '')}</span>
             </div>
             <div class="profile-menu-divider"></div>
             <button type="button" class="profile-menu-item" role="menuitem">
               <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon">${SVG_ICONS.login}</svg>
-              <span>${escapeHtml(texts.auth_login_button || 'Masuk')}</span>
+              <span>${escapeHtml(texts.auth_login_button || '')}</span>
             </button>
             <button type="button" class="profile-menu-item" role="menuitem">
               <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon">${SVG_ICONS.user}</svg>
-              <span>${escapeHtml(texts.auth_signup_with_clerk || 'Daftar akun baru')}</span>
+              <span>${escapeHtml(texts.auth_signup_with_clerk || '')}</span>
             </button>
             <div class="profile-menu-divider"></div>
             <button type="button" class="profile-menu-item" role="menuitem">
               <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon">${SVG_ICONS.download}</svg>
-              <span>${escapeHtml(texts.auth_export_workspace || 'expor histori chat')}</span>
+              <span>${escapeHtml(texts.auth_export_workspace || '')}</span>
             </button>
           </div>`;
 
