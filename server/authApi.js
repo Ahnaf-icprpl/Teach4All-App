@@ -10,6 +10,7 @@ import {
   verifyClerkSessionId,
   extractAuthCredential,
   authenticateClerkRequest,
+  exchangeClerkDbJwt,
 } from './clerkVerifier.js';
 
 export {
@@ -21,6 +22,7 @@ export {
   verifyClerkSessionId,
   extractAuthCredential,
   authenticateClerkRequest,
+  exchangeClerkDbJwt,
 };
 
 /**
@@ -44,6 +46,19 @@ export async function handleWhoamiRequest(req, res, serverEnv = {}, endpoint = n
     sessionId: authResult.sessionId || null,
     guestId: req.isGuest ? req.userId : null,
   });
+
+  if (authResult.authenticated && authResult.token) {
+    const isHttps = Boolean(req.secure || req.headers?.['x-forwarded-proto'] === 'https' || process.env.NODE_ENV === 'production');
+    const sec = isHttps ? '; Secure' : '';
+    const cookieHeaders = [
+      `__session=${encodeURIComponent(authResult.token)}; Path=/; SameSite=Lax${sec}; Max-Age=2592000`,
+      `clerk_session=${encodeURIComponent(authResult.token)}; Path=/; SameSite=Lax${sec}; Max-Age=2592000`,
+    ];
+    if (authResult.sessionId) {
+      cookieHeaders.push(`clerk_session_id=${encodeURIComponent(authResult.sessionId)}; Path=/; SameSite=Lax${sec}; Max-Age=2592000`);
+    }
+    res.setHeader('Set-Cookie', cookieHeaders);
+  }
 
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
 
@@ -219,9 +234,9 @@ export async function handleAuthConfigRequest(req, res, serverEnv = {}) {
 /**
  * Middleware that intercepts Clerk handshake redirect query parameters.
  */
-export function clerkHandshakeMiddleware(req, res, next) {
+export async function clerkHandshakeMiddleware(req, res, next) {
   const urlString = req.originalUrl || req.url || '';
-  if (!urlString.includes('__clerk_handshake')) {
+  if (!urlString.includes('__clerk_handshake') && !urlString.includes('__clerk_db_jwt')) {
     return next();
   }
 
@@ -266,6 +281,55 @@ export function clerkHandshakeMiddleware(req, res, next) {
         }
 
         res.setHeader('Set-Cookie', cookiesToSet);
+      }
+    }
+
+    const dbJwt = parsed.searchParams.get('__clerk_db_jwt');
+    if (dbJwt) {
+      const isHttps = Boolean(req.secure || req.headers?.['x-forwarded-proto'] === 'https' || process.env.NODE_ENV === 'production');
+      const sec = isHttps ? '; Secure' : '';
+      const existingHeaders = res.getHeader('Set-Cookie') || [];
+      const cookieList = Array.isArray(existingHeaders) ? [...existingHeaders] : (existingHeaders ? [existingHeaders] : []);
+      cookieList.push(`__clerk_db_jwt=${encodeURIComponent(dbJwt)}; Path=/; SameSite=Lax${sec}; Max-Age=2592000`);
+
+      const config = getClerkConfig();
+      if (config.frontendApi) {
+        const authData = await exchangeClerkDbJwt(dbJwt, config.frontendApi);
+        if (authData) {
+          if (authData.token) {
+            cookieList.push(`__session=${encodeURIComponent(authData.token)}; Path=/; SameSite=Lax${sec}; Max-Age=2592000`);
+            cookieList.push(`clerk_session=${encodeURIComponent(authData.token)}; Path=/; SameSite=Lax${sec}; Max-Age=2592000`);
+          }
+          if (authData.sessionId) {
+            cookieList.push(`clerk_session_id=${encodeURIComponent(authData.sessionId)}; Path=/; SameSite=Lax${sec}; Max-Age=2592000`);
+          }
+          res.setHeader('Set-Cookie', cookieList);
+
+          const curCookies = req.headers?.cookie ? `${req.headers.cookie}; ` : '';
+          const newCookies = [
+            `__clerk_db_jwt=${encodeURIComponent(dbJwt)}`,
+            authData.token ? `__session=${encodeURIComponent(authData.token)}` : '',
+            authData.token ? `clerk_session=${encodeURIComponent(authData.token)}` : '',
+            authData.sessionId ? `clerk_session_id=${encodeURIComponent(authData.sessionId)}` : '',
+          ].filter(Boolean).join('; ');
+          req.headers = req.headers || {};
+          req.headers.cookie = `${curCookies}${newCookies}`;
+
+          if (authData.user && process.env.DATABASE_URL) {
+            syncUserToDb(authData.user, process.env.DATABASE_URL).catch(() => {});
+          }
+
+          if (req.method === 'GET' && !urlString.startsWith('/api')) {
+            parsed.searchParams.delete('__clerk_db_jwt');
+            parsed.searchParams.delete('__clerk_status');
+            const cleanTarget = parsed.pathname + (parsed.search || '');
+            return res.redirect(cleanTarget);
+          }
+        } else {
+          res.setHeader('Set-Cookie', cookieList);
+        }
+      } else {
+        res.setHeader('Set-Cookie', cookieList);
       }
     }
   } catch {}

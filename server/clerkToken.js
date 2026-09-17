@@ -133,3 +133,62 @@ export async function verifyClerkJwt(token, frontendApi) {
 
   return payload;
 }
+
+/**
+ * Exchanges a Clerk device buffer JWT (__clerk_db_jwt) for client session and token.
+ */
+export async function exchangeClerkDbJwt(dbJwt, frontendApi) {
+  if (!dbJwt || !frontendApi) return null;
+  try {
+    const clean = frontendApi.replace(/\/$/, '');
+    const clientUrl = `${clean}/v1/client?__clerk_db_jwt=${encodeURIComponent(dbJwt)}`;
+    const res = await fetch(clientUrl, {
+      signal: AbortSignal.timeout(5000),
+      cache: 'no-store',
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const sessions = data.response?.sessions || data.client?.sessions || [];
+    const activeSession = sessions.find(s => s.status === 'active') || sessions[0];
+    if (!activeSession) return null;
+
+    let jwt = null;
+    try {
+      const tokenUrl = `${clean}/v1/client/sessions/${encodeURIComponent(activeSession.id)}/tokens?__clerk_db_jwt=${encodeURIComponent(dbJwt)}`;
+      const tRes = await fetch(tokenUrl, {
+        method: 'POST',
+        signal: AbortSignal.timeout(5000),
+      });
+      if (tRes.ok) {
+        const tData = await tRes.json();
+        jwt = tData.jwt || tData.response?.jwt || null;
+      }
+    } catch {}
+
+    const u = activeSession.user;
+    const firstName = u?.first_name || '';
+    const lastName = u?.last_name || '';
+    const primaryEmail = u?.email_addresses?.[0]?.email_address || null;
+    const fullName = [firstName, lastName].filter(Boolean).join(' ').trim() ||
+      u?.username ||
+      (primaryEmail ? primaryEmail.split('@')[0] : null) ||
+      'Pengguna';
+
+    return {
+      sessionId: activeSession.id,
+      token: jwt,
+      user: {
+        id: u?.id || activeSession.user_id,
+        name: fullName,
+        firstName,
+        lastName,
+        email: primaryEmail,
+        avatarUrl: u?.image_url || u?.profile_image_url || null,
+        username: u?.username || null,
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+

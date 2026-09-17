@@ -118,6 +118,15 @@ export function getAuthHeaders(currentUserVal = null) {
   if (sessionId) {
     headers['X-Session-ID'] = sessionId;
   }
+  let dbJwt = getCookie('__clerk_db_jwt');
+  if (!dbJwt && typeof localStorage !== 'undefined') {
+    try {
+      dbJwt = localStorage.getItem('teach4all_db_jwt');
+    } catch {}
+  }
+  if (dbJwt && !token) {
+    headers['X-Clerk-Db-Jwt'] = dbJwt;
+  }
   const stored = getStoredUser();
   if (stored?.name && stored.name !== 'User' && !String(stored.id).startsWith('guest_')) {
     try {
@@ -125,7 +134,7 @@ export function getAuthHeaders(currentUserVal = null) {
     } catch {}
   }
   const guestId = getOrCreateGuestId();
-  if (guestId && !token && !currentUserVal) {
+  if (guestId && !token && !currentUserVal && !dbJwt) {
     headers['X-Guest-ID'] = guestId;
   }
   return headers;

@@ -118,15 +118,50 @@ export async function processHandshakeIfPresent() {
       window.history.replaceState({}, '', url.pathname + (url.search || ''));
       return true;
     }
+
+    const dbJwt = url.searchParams.get('__clerk_db_jwt');
+    if (dbJwt) {
+      document.cookie = `__clerk_db_jwt=${encodeURIComponent(dbJwt)}; Path=/; SameSite=Lax; Max-Age=2592000`;
+      try {
+        localStorage.setItem('teach4all_db_jwt', dbJwt);
+      } catch {}
+
+      await initAuthConfig();
+      const urls = getClerkUrls();
+      if (urls.frontendApi) {
+        const syncResult = await syncFromClerkClient(urls.frontendApi, dbJwt);
+        if (syncResult && syncResult.user) {
+          currentUser.val = syncResult.user;
+        }
+      }
+
+      url.searchParams.delete('__clerk_db_jwt');
+      url.searchParams.delete('__clerk_status');
+      window.history.replaceState({}, '', url.pathname + (url.search || ''));
+      return true;
+    }
   } catch {}
   return false;
 }
 
-export async function syncFromClerkClient(frontendApi) {
+export async function syncFromClerkClient(frontendApi, dbJwtOverride = null) {
   if (!frontendApi || typeof window === 'undefined') return null;
   try {
     const clean = frontendApi.replace(/\/$/, '');
-    const res = await fetch(`${clean}/v1/client`, {
+    let dbJwt = dbJwtOverride || getCookie('__clerk_db_jwt');
+    if (!dbJwt && typeof localStorage !== 'undefined') {
+      try {
+        dbJwt = localStorage.getItem('teach4all_db_jwt');
+      } catch {}
+    }
+    if (!dbJwt) {
+      try {
+        const u = new URL(window.location.href);
+        dbJwt = u.searchParams.get('__clerk_db_jwt');
+      } catch {}
+    }
+    const query = dbJwt ? `?__clerk_db_jwt=${encodeURIComponent(dbJwt)}` : '';
+    const res = await fetch(`${clean}/v1/client${query}`, {
       credentials: 'include',
       cache: 'no-store',
     });
@@ -150,7 +185,8 @@ export async function syncFromClerkClient(frontendApi) {
 
     let jwt = null;
     try {
-      const tRes = await fetch(`${clean}/v1/client/sessions/${encodeURIComponent(activeSession.id)}/tokens`, {
+      const tokenUrl = `${clean}/v1/client/sessions/${encodeURIComponent(activeSession.id)}/tokens${query}`;
+      const tRes = await fetch(tokenUrl, {
         method: 'POST',
         credentials: 'include',
       });
@@ -183,16 +219,27 @@ export async function syncFromClerkClient(frontendApi) {
         localStorage.setItem('teach4all_session_id', activeSession.id);
       } catch {}
     }
+    if (dbJwt) {
+      document.cookie = `__clerk_db_jwt=${encodeURIComponent(dbJwt)}; Path=/; SameSite=Lax; Max-Age=2592000`;
+      try {
+        localStorage.setItem('teach4all_db_jwt', dbJwt);
+      } catch {}
+    }
 
     try {
       localStorage.setItem('teach4all_user', JSON.stringify(user));
     } catch {}
 
+    currentUser.val = user;
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('teach4all:auth-changed', { detail: { user } }));
+    }
+
     try {
       fetch('./api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: jwt, sessionId: activeSession.id, user }),
+        body: JSON.stringify({ token: jwt, sessionId: activeSession.id, dbJwt, user }),
         credentials: 'include',
       }).catch(() => {});
     } catch {}
@@ -223,8 +270,9 @@ export async function checkAuth() {
     }
 
     const urls = getClerkUrls();
-    if ((!token || !currentUser.val || currentUser.val.name === 'User' || !currentUser.val.email) && urls.frontendApi) {
-      const clerkSync = await syncFromClerkClient(urls.frontendApi);
+    const dbJwt = getCookie('__clerk_db_jwt') || (typeof localStorage !== 'undefined' ? localStorage.getItem('teach4all_db_jwt') : null);
+    if ((!token || !currentUser.val || currentUser.val.name === 'User' || !currentUser.val.email || dbJwt) && urls.frontendApi) {
+      const clerkSync = await syncFromClerkClient(urls.frontendApi, dbJwt);
       if (clerkSync) {
         if (clerkSync.token) token = clerkSync.token;
         if (clerkSync.sessionId) sessionId = clerkSync.sessionId;
@@ -241,6 +289,9 @@ export async function checkAuth() {
     if (sessionId) {
       headers['X-Session-ID'] = sessionId;
     }
+    if (dbJwt && !token) {
+      headers['X-Clerk-Db-Jwt'] = dbJwt;
+    }
     const stored = getStoredUser();
     if (stored?.name && stored.name !== 'User' && !String(stored.id).startsWith('guest_')) {
       try {
@@ -255,18 +306,30 @@ export async function checkAuth() {
     });
     if (!res.ok) {
       if (res.status >= 400 && res.status < 500) {
-        currentUser.val = null;
-        if (typeof localStorage !== 'undefined') {
-          try {
-            localStorage.removeItem('teach4all_user');
-            localStorage.removeItem('teach4all_session');
-            localStorage.removeItem('teach4all_session_id');
-          } catch {}
+        let recovered = false;
+        if (dbJwt && urls.frontendApi) {
+          const syncResult = await syncFromClerkClient(urls.frontendApi, dbJwt);
+          if (syncResult && syncResult.user && syncResult.token) {
+            currentUser.val = syncResult.user;
+            recovered = true;
+          }
         }
-        if (typeof document !== 'undefined') {
-          document.cookie = '__session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
-          document.cookie = 'clerk_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
-          document.cookie = 'clerk_session_id=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+        if (!recovered) {
+          currentUser.val = null;
+          if (typeof localStorage !== 'undefined') {
+            try {
+              localStorage.removeItem('teach4all_user');
+              localStorage.removeItem('teach4all_session');
+              localStorage.removeItem('teach4all_session_id');
+              localStorage.removeItem('teach4all_db_jwt');
+            } catch {}
+          }
+          if (typeof document !== 'undefined') {
+            document.cookie = '__session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+            document.cookie = 'clerk_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+            document.cookie = 'clerk_session_id=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+            document.cookie = '__clerk_db_jwt=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+          }
         }
       }
       authLoading.val = false;
@@ -308,21 +371,33 @@ export async function checkAuth() {
         window.dispatchEvent(new CustomEvent('teach4all:auth-changed', { detail: { user: finalUser } }));
       }
     } else if (data && data.authenticated === false) {
-      currentUser.val = null;
-      if (typeof localStorage !== 'undefined') {
-        try {
-          localStorage.removeItem('teach4all_user');
-          localStorage.removeItem('teach4all_session');
-          localStorage.removeItem('teach4all_session_id');
-        } catch {}
+      let recovered = false;
+      if (dbJwt && urls.frontendApi) {
+        const syncResult = await syncFromClerkClient(urls.frontendApi, dbJwt);
+        if (syncResult && syncResult.user && syncResult.token) {
+          currentUser.val = syncResult.user;
+          recovered = true;
+        }
       }
-      if (typeof document !== 'undefined') {
-        document.cookie = '__session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
-        document.cookie = 'clerk_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
-        document.cookie = 'clerk_session_id=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
-      }
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('teach4all:auth-changed', { detail: { user: null } }));
+      if (!recovered) {
+        currentUser.val = null;
+        if (typeof localStorage !== 'undefined') {
+          try {
+            localStorage.removeItem('teach4all_user');
+            localStorage.removeItem('teach4all_session');
+            localStorage.removeItem('teach4all_session_id');
+            localStorage.removeItem('teach4all_db_jwt');
+          } catch {}
+        }
+        if (typeof document !== 'undefined') {
+          document.cookie = '__session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+          document.cookie = 'clerk_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+          document.cookie = 'clerk_session_id=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+          document.cookie = '__clerk_db_jwt=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+        }
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('teach4all:auth-changed', { detail: { user: null } }));
+        }
       }
     }
   } catch {
@@ -367,11 +442,13 @@ export async function logout() {
       localStorage.removeItem('teach4all_user');
       localStorage.removeItem('teach4all_session');
       localStorage.removeItem('teach4all_session_id');
+      localStorage.removeItem('teach4all_db_jwt');
       localStorage.removeItem(GUEST_COOKIE_NAME);
     }
     document.cookie = '__session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
     document.cookie = 'clerk_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
     document.cookie = 'clerk_session_id=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+    document.cookie = '__clerk_db_jwt=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
     document.cookie = `${GUEST_COOKIE_NAME}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
     await fetch('./api/auth/logout', { method: 'POST' });
   } catch {}

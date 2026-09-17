@@ -1,8 +1,9 @@
 import crypto from 'node:crypto';
 import { syncUserToDb, getUserFromDb } from './db.js';
-import { parseCookies, getClerkJwks, verifyClerkJwt } from './clerkToken.js';
+import { parseCookies, getClerkJwks, verifyClerkJwt, exchangeClerkDbJwt } from './clerkToken.js';
 
-export { parseCookies, getClerkJwks, verifyClerkJwt };
+export { parseCookies, getClerkJwks, verifyClerkJwt, exchangeClerkDbJwt };
+
 
 const userCache = new Map();
 const sessionCache = new Map();
@@ -273,6 +274,7 @@ export function extractAuthCredential(req) {
   }
 
   let sessionId = headers['x-session-id'] || headers['X-Session-ID'] || cookies.clerk_session_id || null;
+  let dbJwt = headers['x-clerk-db-jwt'] || cookies.__clerk_db_jwt || null;
 
   try {
     const rawUrl = req.originalUrl || req.url || '/';
@@ -281,6 +283,8 @@ export function extractAuthCredential(req) {
     if (qToken) token = qToken;
     const qSession = parsedUrl.searchParams.get('sessionId') || parsedUrl.searchParams.get('session_id');
     if (qSession) sessionId = qSession;
+    const qDbJwt = parsedUrl.searchParams.get('__clerk_db_jwt');
+    if (qDbJwt) dbJwt = qDbJwt;
 
     const qHandshake = parsedUrl.searchParams.get('__clerk_handshake');
     if (qHandshake && qHandshake.includes('.')) {
@@ -322,13 +326,14 @@ export function extractAuthCredential(req) {
   if (req.body && typeof req.body === 'object') {
     if (req.body.token) token = req.body.token;
     if (req.body.sessionId) sessionId = req.body.sessionId;
+    if (req.body.dbJwt) dbJwt = req.body.dbJwt;
     if (req.body.user && typeof req.body.user === 'object') {
       clientProfile = { ...clientProfile, ...req.body.user };
     }
   }
 
-  if (token || sessionId || clientProfile) {
-    return { token, sessionId, clientProfile };
+  if (token || sessionId || clientProfile || dbJwt) {
+    return { token, sessionId, clientProfile, dbJwt };
   }
 
   return null;
@@ -436,5 +441,22 @@ export async function authenticateClerkRequest(req, serverEnv = {}) {
     }
   }
 
+  // 3. Fallback to Clerk DB JWT exchange
+  if (cred.dbJwt && config.frontendApi) {
+    try {
+      const exchanged = await exchangeClerkDbJwt(cred.dbJwt, config.frontendApi);
+      if (exchanged && exchanged.user) {
+        if (dbUrl) syncUserToDb(exchanged.user, dbUrl).catch(() => {});
+        return {
+          authenticated: true,
+          user: exchanged.user,
+          sessionId: exchanged.sessionId || null,
+          token: exchanged.token || null,
+        };
+      }
+    } catch {}
+  }
+
   return { authenticated: false, user: null, sessionId: null };
 }
+
