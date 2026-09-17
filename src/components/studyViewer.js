@@ -61,9 +61,6 @@ export function QuizSolver(quizId, { initialClue = false } = {}) {
         body: JSON.stringify({
           action: 'clue',
           questionId: q.id,
-          questionText: q.questionText || q.question_text || '',
-          options: (q.options || []).map(o => o.text || o),
-          explanation: q.explanation || '',
         }),
       });
       if (res.ok) {

@@ -183,7 +183,11 @@ export async function generateQuizClue(payload, env = {}, req = null) {
           payload.questionText = existing.question_text;
         }
         if ((!payload.options || !payload.options.length) && existing.options) {
-          payload.options = existing.options;
+          try {
+            payload.options = typeof existing.options === 'string' ? JSON.parse(existing.options) : existing.options;
+          } catch {
+            payload.options = [];
+          }
         }
         if (!payload.explanation && existing.explanation) {
           payload.explanation = existing.explanation;
