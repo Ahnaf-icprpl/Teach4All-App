@@ -119,7 +119,7 @@ export function renderSsrHtml({ htmlTemplate, texts, prompts = [], serverEnv = {
             <div class="profile-menu-divider"></div>
             <button type="button" class="profile-menu-item" role="menuitem">
               <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon">${SVG_ICONS.user}</svg>
-              <span>${escapeHtml(texts.auth_user_profile_button || '')}</span>
+              <span>${escapeHtml(texts.auth_manage_account || texts.auth_user_profile_button || '')}</span>
             </button>
             <button type="button" class="profile-menu-item" role="menuitem">
               <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="icon">${SVG_ICONS.login}</svg>

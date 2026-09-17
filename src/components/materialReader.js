@@ -5,6 +5,8 @@ import {
   fetchMaterialDetails,
   markMaterialSolved,
   normalizeMaterialSection,
+  loadLocalMaterialProgress,
+  saveLocalMaterialProgress,
 } from '../studyModules.js';
 import { t } from '../uiTexts.js';
 import { renderMarkdown } from '../markdown.js';
@@ -14,11 +16,19 @@ const { div, h2, span, button, p } = van.tags;
 export function MaterialReader(materialId) {
   const loading = van.state(true);
   const material = van.state(null);
-  const currentSectionIndex = van.state(0);
+  const localProg = loadLocalMaterialProgress(materialId);
+  const initialIndex = (typeof localProg?.lastSectionIndex === 'number' && localProg.lastSectionIndex >= 0)
+    ? localProg.lastSectionIndex
+    : 0;
+  const currentSectionIndex = van.state(initialIndex);
 
   fetchMaterialDetails(materialId).then(data => {
     material.val = data;
     loading.val = false;
+    const sections = (data?.sections || []).map(normalizeMaterialSection).filter(Boolean);
+    if (currentSectionIndex.val >= sections.length && sections.length > 0) {
+      currentSectionIndex.val = Math.max(0, sections.length - 1);
+    }
   }).catch(() => {
     loading.val = false;
   });
@@ -38,7 +48,13 @@ export function MaterialReader(materialId) {
     const totalSections = sections.length;
     const currentSec = sections[currentSectionIndex.val] || {};
 
+    const goToSection = (idx) => {
+      currentSectionIndex.val = idx;
+      saveLocalMaterialProgress(materialId, { lastSectionIndex: idx });
+    };
+
     const markFinished = () => {
+      saveLocalMaterialProgress(materialId, { lastSectionIndex: currentSectionIndex.val, isSolved: true });
       markMaterialSolved(materialId, true).then(() => {
         toast(t('dialogs_toast_material_solved'));
       });
@@ -65,7 +81,7 @@ export function MaterialReader(materialId) {
         button({
           class: 'secondary-button',
           disabled: currentSectionIndex.val === 0,
-          onclick: () => { currentSectionIndex.val = Math.max(0, currentSectionIndex.val - 1); },
+          onclick: () => goToSection(Math.max(0, currentSectionIndex.val - 1)),
         }, span(() => t('dialogs_material_prev_btn'))),
         div({ class: 'study-footer-actions' },
           button({
@@ -75,7 +91,7 @@ export function MaterialReader(materialId) {
           currentSectionIndex.val < totalSections - 1
             ? button({
               class: 'primary-button',
-              onclick: () => { currentSectionIndex.val = Math.min(totalSections - 1, currentSectionIndex.val + 1); },
+              onclick: () => goToSection(Math.min(totalSections - 1, currentSectionIndex.val + 1)),
             }, span(() => t('dialogs_material_next_btn')))
             : button({
               class: 'secondary-button',

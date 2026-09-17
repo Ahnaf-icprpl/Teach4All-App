@@ -1,5 +1,4 @@
 import van from 'vanjs-core';
-import { toast } from './state.js';
 import { t } from './uiTexts.js';
 import {
   GUEST_COOKIE_NAME,
@@ -180,7 +179,7 @@ export async function syncFromClerkClient(frontendApi, dbJwtOverride = null) {
     const fullName = [firstName, lastName].filter(Boolean).join(' ').trim() ||
       u.username ||
       (primaryEmail ? primaryEmail.split('@')[0] : null) ||
-      'Pengguna';
+      t('auth_default_user_name');
     const avatarUrl = u.image_url || u.profile_image_url || null;
 
     let jwt = null;
@@ -251,12 +250,9 @@ export async function syncFromClerkClient(frontendApi, dbJwtOverride = null) {
 }
 
 export async function checkAuth() {
-  if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    currentUser.val = getStoredUser() || null;
-    authLoading.val = false;
-    return currentUser.val;
-  }
   authLoading.val = true;
+  const prevUser = currentUser.val;
+  const prevUserId = prevUser?.id || null;
   await initAuthConfig();
   await processHandshakeIfPresent();
 
@@ -372,8 +368,8 @@ export async function checkAuth() {
           }
         } catch {}
       }
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('teach4all:auth-changed', { detail: { user: finalUser } }));
+      if (prevUserId !== finalUser.id && typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('teach4all:auth-changed', { detail: { user: finalUser, previousUser: prevUser } }));
       }
     } else if (data && data.authenticated === false) {
       let recovered = false;
@@ -400,8 +396,8 @@ export async function checkAuth() {
           document.cookie = 'clerk_session_id=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
           document.cookie = '__clerk_db_jwt=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
         }
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('teach4all:auth-changed', { detail: { user: null } }));
+        if (prevUserId !== null && typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('teach4all:auth-changed', { detail: { user: null, previousUser: prevUser } }));
         }
       }
     }
@@ -413,13 +409,18 @@ export async function checkAuth() {
   return currentUser.val;
 }
 
+function showAuthToast(message) {
+  if (!message || typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('teach4all:toast', { detail: { message } }));
+}
+
 export async function login(returnUrl) {
   if (typeof window === 'undefined') return;
   await initAuthConfig();
   const urls = getClerkUrls();
   if (!urls.signInUrl || (!urls.signInUrl.startsWith('http://') && !urls.signInUrl.startsWith('https://'))) {
-    const msg = t('auth_not_configured') || 'Autentikasi belum dikonfigurasi pada server.';
-    toast(msg);
+    const msg = t('auth_not_configured');
+    if (msg) showAuthToast(msg);
     return;
   }
   const target = returnUrl || `${window.location.origin}${window.location.pathname}`;
@@ -432,8 +433,8 @@ export async function signup(returnUrl) {
   await initAuthConfig();
   const urls = getClerkUrls();
   if (!urls.signUpUrl || (!urls.signUpUrl.startsWith('http://') && !urls.signUpUrl.startsWith('https://'))) {
-    const msg = t('auth_not_configured') || 'Autentikasi belum dikonfigurasi pada server.';
-    toast(msg);
+    const msg = t('auth_not_configured');
+    if (msg) showAuthToast(msg);
     return;
   }
   const target = returnUrl || `${window.location.origin}${window.location.pathname}`;
@@ -448,6 +449,7 @@ export async function logout() {
       localStorage.removeItem('teach4all_session');
       localStorage.removeItem('teach4all_session_id');
       localStorage.removeItem('teach4all_db_jwt');
+      localStorage.removeItem('teach4all.ui_state.v1');
       localStorage.removeItem(GUEST_COOKIE_NAME);
     }
     document.cookie = '__session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
@@ -462,7 +464,7 @@ export async function logout() {
     window.dispatchEvent(new CustomEvent('teach4all:auth-changed', { detail: { user: null } }));
   }
   const msg = t('auth_logout_success');
-  if (msg) toast(msg);
+  if (msg) showAuthToast(msg);
 }
 
 export async function openUserProfile() {
@@ -475,5 +477,4 @@ export async function openUserProfile() {
 
 if (typeof window !== 'undefined') {
   checkAuth();
-  window.addEventListener('online', () => { checkAuth(); });
 }

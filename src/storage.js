@@ -1,141 +1,61 @@
 export const THEME_STORAGE_KEY = 'teach4all.theme.v1';
-export const QUIZZES_STORAGE_KEY = 'teach4all.quizzes.v2';
-export const MATERIALS_STORAGE_KEY = 'teach4all.materials.v2';
-export const CHATS_STORAGE_KEY = 'teach4all.chats.v2';
-export const CHAT_MESSAGES_STORAGE_PREFIX = 'teach4all.chat_messages.v2:';
-export const QUIZ_DETAIL_STORAGE_PREFIX = 'teach4all.quiz_detail.v2:';
-export const MATERIAL_DETAIL_STORAGE_PREFIX = 'teach4all.material_detail.v2:';
-
-export function getQuizzesStorageKey(userId) {
-  return userId ? `${QUIZZES_STORAGE_KEY}:${userId}` : QUIZZES_STORAGE_KEY;
-}
-
-export function getMaterialsStorageKey(userId) {
-  return userId ? `${MATERIALS_STORAGE_KEY}:${userId}` : MATERIALS_STORAGE_KEY;
-}
-
-export function getChatsStorageKey(userId) {
-  return userId ? `${CHATS_STORAGE_KEY}:${userId}` : CHATS_STORAGE_KEY;
-}
-
-export function getChatMessagesStorageKey(chatId, userId) {
-  return userId ? `${CHAT_MESSAGES_STORAGE_PREFIX}${userId}:${chatId}` : `${CHAT_MESSAGES_STORAGE_PREFIX}${chatId}`;
-}
-
-export function getQuizDetailStorageKey(quizId, userId) {
-  return userId ? `${QUIZ_DETAIL_STORAGE_PREFIX}${userId}:${quizId}` : `${QUIZ_DETAIL_STORAGE_PREFIX}${quizId}`;
-}
-
-export function getMaterialDetailStorageKey(materialId, userId) {
-  return userId ? `${MATERIAL_DETAIL_STORAGE_PREFIX}${userId}:${materialId}` : `${MATERIAL_DETAIL_STORAGE_PREFIX}${materialId}`;
-}
-
-export function saveCachedRecentChats(chatsList, userId) {
-  if (typeof localStorage === 'undefined' || !Array.isArray(chatsList)) return;
-  try {
-    const top10 = chatsList.slice(0, 10).map(c => ({
-      id: c.id,
-      title: c.title,
-      messages: Array.isArray(c.messages) ? c.messages : [],
-      messagesLoaded: Boolean(c.messagesLoaded),
-      updatedAt: c.updatedAt || Date.now(),
-    }));
-    localStorage.setItem(getChatsStorageKey(userId), JSON.stringify(top10));
-    for (const c of top10) {
-      if (Array.isArray(c.messages) && c.messages.length > 0) {
-        localStorage.setItem(getChatMessagesStorageKey(c.id, userId), JSON.stringify(c.messages));
-      }
-    }
-  } catch {}
-}
-
-export function loadCachedRecentChats(userId) {
-  if (typeof localStorage === 'undefined') return [];
-  try {
-    const key = getChatsStorageKey(userId);
-    const raw = localStorage.getItem(key);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.slice(0, 10).map(c => {
-      let messages = Array.isArray(c.messages) ? c.messages : [];
-      let messagesLoaded = Boolean(c.messagesLoaded);
-      if (messages.length === 0) {
-        try {
-          const msgRaw = localStorage.getItem(getChatMessagesStorageKey(c.id, userId));
-          if (msgRaw) {
-            const parsedMsgs = JSON.parse(msgRaw);
-            if (Array.isArray(parsedMsgs) && parsedMsgs.length > 0) {
-              messages = parsedMsgs;
-              messagesLoaded = true;
-            }
-          }
-        } catch {}
-      }
-      return { ...c, messages, messagesLoaded };
-    });
-  } catch {
-    return [];
-  }
-}
-
-export function saveCachedChatMessages(chatId, messages, userId) {
-  if (typeof localStorage === 'undefined' || !chatId || !Array.isArray(messages)) return;
-  try {
-    localStorage.setItem(getChatMessagesStorageKey(chatId, userId), JSON.stringify(messages));
-  } catch {}
-}
-
-export function loadCachedChatMessages(chatId, userId) {
-  if (typeof localStorage === 'undefined' || !chatId) return null;
-  try {
-    const raw = localStorage.getItem(getChatMessagesStorageKey(chatId, userId));
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
-    }
-  } catch {}
-  return null;
-}
-
-export function saveCachedQuizDetail(quizId, quizData, userId) {
-  if (typeof localStorage === 'undefined' || !quizId || !quizData) return;
-  try {
-    localStorage.setItem(getQuizDetailStorageKey(quizId, userId), JSON.stringify(quizData));
-  } catch {}
-}
-
-export function loadCachedQuizDetail(quizId, userId) {
-  if (typeof localStorage === 'undefined' || !quizId) return null;
-  try {
-    const raw = localStorage.getItem(getQuizDetailStorageKey(quizId, userId));
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return null;
-}
-
-export function saveCachedMaterialDetail(materialId, materialData, userId) {
-  if (typeof localStorage === 'undefined' || !materialId || !materialData) return;
-  try {
-    localStorage.setItem(getMaterialDetailStorageKey(materialId, userId), JSON.stringify(materialData));
-  } catch {}
-}
-
-export function loadCachedMaterialDetail(materialId, userId) {
-  if (typeof localStorage === 'undefined' || !materialId) return null;
-  try {
-    const raw = localStorage.getItem(getMaterialDetailStorageKey(materialId, userId));
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return null;
-}
+export const UI_STATE_STORAGE_KEY = 'teach4all.ui_state.v1';
 export const LOCAL_DB_NAME = 'teach4all_localdb';
 export const LOCAL_DB_STORE = 'settings';
 export const MAX_CHATS = 100;
 export const MAX_INPUT = 6000;
 
+const PERSISTENT_MODAL_TYPES = new Set(['quiz-solver', 'material-reader', 'quiz', 'material']);
+
+export function getStorage() {
+  try {
+    return typeof window !== 'undefined' ? window.localStorage : null;
+  } catch {
+    return null;
+  }
+}
+
 export function emptyWorkspace() {
-  return { version: 1, chats: [], activeId: null, draft: '', theme: 'system', webSearchEnabled: true };
+  return { version: 1, chats: [], activeId: null, draft: '', theme: 'system', webSearchEnabled: true, sidebarCollapsed: false, modal: null };
+}
+
+export function loadUiState(storage = getStorage()) {
+  try {
+    const raw = storage?.getItem(UI_STATE_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') {
+      const modal = (parsed.modal && typeof parsed.modal === 'object' && PERSISTENT_MODAL_TYPES.has(parsed.modal.type))
+        ? { type: parsed.modal.type, id: parsed.modal.id || null, initialClue: Boolean(parsed.modal.initialClue) }
+        : null;
+      return {
+        activeChatId: typeof parsed.activeChatId === 'string' ? parsed.activeChatId : null,
+        draft: typeof parsed.draft === 'string' ? parsed.draft : '',
+        sidebarCollapsed: Boolean(parsed.sidebarCollapsed),
+        webSearchEnabled: parsed.webSearchEnabled !== undefined ? Boolean(parsed.webSearchEnabled) : true,
+        modal,
+      };
+    }
+  } catch {}
+  return {};
+}
+
+export function saveUiState(storage = getStorage(), state = {}) {
+  try {
+    if (!storage) return;
+    const modal = (state?.modal && typeof state.modal === 'object' && PERSISTENT_MODAL_TYPES.has(state.modal.type))
+      ? { type: state.modal.type, id: state.modal.id || null, initialClue: Boolean(state.modal.initialClue) }
+      : null;
+    const toSave = {
+      version: 1,
+      activeChatId: state?.activeChatId || null,
+      draft: typeof state?.draft === 'string' ? state.draft : '',
+      sidebarCollapsed: Boolean(state?.sidebarCollapsed),
+      webSearchEnabled: Boolean(state?.webSearchEnabled ?? true),
+      modal,
+    };
+    storage.setItem(UI_STATE_STORAGE_KEY, JSON.stringify(toSave));
+  } catch {}
 }
 
 /**
@@ -250,6 +170,15 @@ export function loadWorkspace(storage) {
 export function saveWorkspace(storage, workspace) {
   if (workspace?.theme) {
     saveTheme(storage, workspace.theme);
+  }
+  if (workspace) {
+    saveUiState(storage, {
+      activeChatId: workspace.activeId,
+      draft: workspace.draft,
+      sidebarCollapsed: workspace.sidebarCollapsed,
+      webSearchEnabled: workspace.webSearchEnabled,
+      modal: workspace.modal,
+    });
   }
   return '';
 }

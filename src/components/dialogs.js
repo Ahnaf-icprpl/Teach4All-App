@@ -283,7 +283,14 @@ export function Dialogs() {
       button({ class: 'icon-button', 'aria-label': () => t('dialogs_close_aria'), onclick: () => { modal.val = null; } }, icon('close'))),
     content,
     );
-    requestAnimationFrame(() => { if (element.isConnected) element.showModal(); });
+    const showIfConnected = () => {
+      if (element.isConnected && !element.open) {
+        try { element.showModal(); } catch {}
+      } else if (!element.isConnected) {
+        setTimeout(showIfConnected, 20);
+      }
+    };
+    requestAnimationFrame(showIfConnected);
     // Native dialog handles focus trapping; restore the opener when Van removes it.
     const observer = new MutationObserver(() => {
       if (element.isConnected) return;

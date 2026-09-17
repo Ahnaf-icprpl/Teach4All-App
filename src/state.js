@@ -1,7 +1,8 @@
 import van from 'vanjs-core';
 import {
   loadWorkspace, saveWorkspace, emptyWorkspace, MAX_CHATS,
-  loadThemeFromLocalDb, saveTheme, saveCachedRecentChats,
+  loadThemeFromLocalDb, saveTheme,
+  loadUiState, saveUiState, getStorage,
 } from './storage.js';
 import {
   sendMessage as sendApiMessage, generateTitle, generateOfflineTitle,
@@ -13,7 +14,6 @@ import {
   onSearchInput, loadMessagesForChat, loadChatHistory, loadMoreChats,
   abortActiveTaskSubscription, checkAndAttachActiveTask,
 } from './chatStore.js';
-import { createReply } from './replies.js';
 import { t, rotatePrompts } from './uiTexts.js';
 
 export {
@@ -24,19 +24,32 @@ export {
   abortActiveTaskSubscription, checkAndAttachActiveTask,
 };
 
-let storage;
+const storage = getStorage();
 try {
-  storage = window.localStorage;
   storage?.removeItem('teach4all.workspace.v1');
   storage?.removeItem('teach4all.openrouter-key.v1');
-} catch { /* Storage unavailable */ }
+} catch {}
 
+const initialUi = loadUiState(storage);
 const initialTheme = loadWorkspace(storage).data.theme;
-export const draft = van.state(''), theme = van.state(initialTheme), webSearchEnabled = van.state(true);
+export const draft = van.state(initialUi.draft || '');
+export const theme = van.state(initialTheme);
+export const webSearchEnabled = van.state(initialUi.webSearchEnabled ?? true);
 export const searchingWeb = van.state(false), buildingQuiz = van.state(false), buildingMaterial = van.state(false);
-export const loading = van.state(false), sidebarOpen = van.state(false), sidebarCollapsed = van.state(false);
-export const storageError = van.state(''), notice = van.state(''), online = van.state(typeof navigator !== 'undefined' ? navigator.onLine : true);
-export const offlineReady = van.state(false), updateReady = van.state(false), modal = van.state(null);
+export const loading = van.state(false), sidebarOpen = van.state(false);
+export const sidebarCollapsed = van.state(initialUi.sidebarCollapsed ?? false);
+export const storageError = van.state(''), notice = van.state('');
+export const modal = van.state(initialUi.modal || null);
+
+van.derive(() => {
+  saveUiState(storage, {
+    activeChatId: activeId.val,
+    draft: draft.val,
+    sidebarCollapsed: sidebarCollapsed.val,
+    webSearchEnabled: webSearchEnabled.val,
+    modal: modal.val,
+  });
+});
 let toastTimer;
 let activeChatAbortController = null;
 let activeGeneratingChatId = null;
@@ -72,12 +85,11 @@ export const currentChat = () => chats.val.find(chat => chat.id === activeId.val
 export const hasMessages = () => Boolean(activeId.val || currentChat()?.messages?.length);
 export const workspace = () => ({
   version: 1, chats: chats.val, activeId: activeId.val, draft: draft.val, theme: theme.val,
-  webSearchEnabled: webSearchEnabled.val,
+  webSearchEnabled: webSearchEnabled.val, sidebarCollapsed: sidebarCollapsed.val, modal: modal.val,
 });
 
 export function persist() {
   saveWorkspace(storage, workspace());
-  saveCachedRecentChats(chats.val, getEffectiveUserId());
 }
 
 export function toggleWebSearch() {
@@ -94,9 +106,16 @@ export function toast(message) {
   toastTimer = setTimeout(() => { notice.val = ''; }, 4500);
 }
 
+if (typeof window !== 'undefined') {
+  window.addEventListener('teach4all:toast', event => {
+    if (event?.detail?.message) toast(event.detail.message);
+  });
+}
+
 export function focusComposer() {
-  if (!online.val) return;
+  if (modal.val) return;
   requestAnimationFrame(() => {
+    if (modal.val) return;
     const el = document.getElementById('message-input');
     if (el && !el.disabled) {
       el.focus();
@@ -204,10 +223,6 @@ export function scrollMessagesToBottom(retry = false) {
 }
 
 export function sendMessage(customText) {
-  if (!online.val) {
-    toast(t('state_offline_notice'));
-    return;
-  }
   const text = (typeof customText === 'string' ? customText : draft.val).trim();
   if (!text || loading.val) return;
   const existing = currentChat();
@@ -252,33 +267,12 @@ export function sendMessage(customText) {
       })
       .catch(() => {});
   }
-  
-  if ((typeof navigator !== 'undefined' && !navigator.onLine) || !online.val) {
-    const replyText = createReply(text);
-    chats.val = chats.val.map(c => {
-      if (c.id === chat.id) {
-        return {
-          ...c,
-          messages: c.messages.map(m => 
-            m.id === assistantMessage.id ? { ...m, text: replyText } : m
-          ),
-          updatedAt: Date.now(),
-        };
-      }
-      return c;
-    });
-    loading.val = false;
-    persist();
-    focusComposer();
-    scrollMessagesToBottom();
-    return;
-  }
 
   const isQuizIntent = /\b(kuis|quiz|soal|latihan|evaluasi|test me)\b/i.test(userMessage.text || '');
   const isMaterialIntent = !isQuizIntent && /\b(materi|modul|ringkasan|rangkuman|bacaan|pelajaran|material|study guide)\b/i.test(userMessage.text || '');
   buildingQuiz.val = Boolean(isQuizIntent);
   buildingMaterial.val = Boolean(isMaterialIntent);
-  searchingWeb.val = Boolean(online.val);
+  searchingWeb.val = Boolean(webSearchEnabled.val);
 
   const abortController = new AbortController();
   activeChatAbortController = abortController;
@@ -309,7 +303,7 @@ export function sendMessage(customText) {
     userMessageId: userMessage.id,
     assistantMessageId: assistantMessage.id,
     userId: getEffectiveUserId(),
-    webSearch: Boolean(online.val),
+    webSearch: Boolean(webSearchEnabled.val),
     signal: abortController.signal,
     onStatus: (status) => {
       if (activeGeneratingChatId !== chat.id) return;
@@ -344,47 +338,17 @@ export function sendMessage(customText) {
       loading.val = false;
     }
 
-    if (error.message === 'Request was cancelled.') {
+    if (error.message === 'Request was cancelled.' || error.message === t('router_request_cancelled')) {
       return;
     }
 
     const errorMessage = error.message || t('state_send_failed');
-
-    const isBlocked = errorMessage.toLowerCase().includes('rate limit') ||
-      errorMessage.toLowerCase().includes('tamu') ||
-      errorMessage.toLowerCase().includes('guest') ||
-      errorMessage.toLowerCase().includes('masuk') ||
-      errorMessage.toLowerCase().includes('login');
-
-    if (isBlocked) {
-      const updatedChats = chats.val.map(c => {
-        if (c.id === chat.id) {
-          return {
-            ...c,
-            messages: c.messages.map(m => 
-              m.id === assistantMessage.id ? { ...m, text: `Error: ${errorMessage}` } : m
-            ),
-          };
-        }
-        return c;
-      });
-      chats.val = updatedChats;
-      persist();
-      if (typeof document !== 'undefined') {
-        const inputEl = document.getElementById('message-input');
-        if (inputEl) inputEl.blur();
-      }
-      scrollMessagesToBottom(true);
-      return;
-    }
-
-    const replyText = createReply(text);
     const updatedChats = chats.val.map(c => {
       if (c.id === chat.id) {
         return {
           ...c,
           messages: c.messages.map(m => 
-            m.id === assistantMessage.id ? { ...m, text: replyText } : m
+            m.id === assistantMessage.id ? { ...m, text: `Error: ${errorMessage}` } : m
           ),
           updatedAt: Date.now(),
         };
@@ -393,8 +357,12 @@ export function sendMessage(customText) {
     });
     chats.val = updatedChats;
     persist();
+    if (typeof document !== 'undefined') {
+      const inputEl = document.getElementById('message-input');
+      if (inputEl) inputEl.blur();
+    }
     focusComposer();
-    if (activeId.val === chat.id) scrollMessagesToBottom();
+    scrollMessagesToBottom(true);
   });
 }
 
@@ -444,9 +412,17 @@ export function setTheme(value) {
 }
 
 if (typeof window !== 'undefined') {
-  window.addEventListener('online', () => { online.val = true; });
-  window.addEventListener('offline', () => { online.val = false; });
+  const flushUiState = () => {
+    saveUiState(storage, {
+      activeChatId: activeId.val,
+      draft: draft.val,
+      sidebarCollapsed: sidebarCollapsed.val,
+      webSearchEnabled: webSearchEnabled.val,
+      modal: modal.val,
+    });
+  };
   window.addEventListener('beforeunload', () => {
+    flushUiState();
     if (activeChatAbortController) {
       try {
         activeChatAbortController.abort();
@@ -454,6 +430,7 @@ if (typeof window !== 'undefined') {
     }
   });
   window.addEventListener('pagehide', () => {
+    flushUiState();
     if (activeChatAbortController) {
       try {
         activeChatAbortController.abort();
@@ -466,8 +443,15 @@ if (typeof window !== 'undefined') {
       saveTheme(storage, dbTheme);
     }
   }).catch(() => {});
-  loadChatHistory().then(() => {
+  if (activeId.val) {
+    loadMessagesForChat(activeId.val).catch(() => {});
+  }
+  loadChatHistory().then(async () => {
     if (activeId.val) {
+      const activeChat = chats.val.find(c => c.id === activeId.val);
+      if (!activeChat || !activeChat.messagesLoaded) {
+        await loadMessagesForChat(activeId.val).catch(() => {});
+      }
       checkAndAttachActiveTask(activeId.val, {
         setLoading: v => { loading.val = v; },
         setBuildingQuiz: v => { buildingQuiz.val = v; },

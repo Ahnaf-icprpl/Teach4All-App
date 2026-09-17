@@ -8,6 +8,7 @@ export const MESSAGES_API_URL = './api/messages';
 export const TIMEOUT_MS = 15 * 60 * 1000;
 import { cleanTitle, generateOfflineTitle, formatTitleMessages, TITLE_SYSTEM_PROMPT } from './prompts/titlePrompt.js';
 import { getEffectiveUserId, getAuthHeaders } from './auth.js';
+import { t } from './uiTexts.js';
 export { cleanTitle, generateOfflineTitle, formatTitleMessages, TITLE_SYSTEM_PROMPT, getEffectiveUserId, getAuthHeaders };
 
 export function getModel() {
@@ -172,7 +173,7 @@ export async function sendMessage(messages, onChunk, options = {}) {
     }
 
     if (!response.body) {
-      throw new Error('No response received from server.');
+      throw new Error(t('router_no_response'));
     }
 
     return await readSseStream(response.body, onChunk, options);
@@ -180,9 +181,9 @@ export async function sendMessage(messages, onChunk, options = {}) {
     clearTimeout(timeoutId);
     if (error.name === 'AbortError') {
       if (options.signal?.aborted) {
-        throw new Error('Request was cancelled.');
+        throw new Error(t('router_request_cancelled'));
       }
-      throw new Error('Request timed out. Please check your connection and try again.');
+      throw new Error(t('router_request_timed_out'));
     }
     throw error;
   }
@@ -192,10 +193,6 @@ export async function generateTitle(messages, options = {}) {
   const firstUserMsg = Array.isArray(messages) ? messages.find(m => m && m.role === 'user') : null;
   const rawText = firstUserMsg ? (firstUserMsg.text || firstUserMsg.content || '') : '';
   const fallbackTitle = generateOfflineTitle(rawText);
-
-  if (typeof window !== 'undefined' && typeof navigator !== 'undefined' && navigator.onLine === false) {
-    return fallbackTitle;
-  }
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 12000);

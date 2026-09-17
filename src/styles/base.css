@@ -117,15 +117,9 @@
   .icon-button:hover { background: var(--hover); color: var(--text); }
   .text-button { color: inherit; font-size: inherit; padding: 0; text-underline-offset: 3px; }
   .text-button:hover { text-decoration: underline; }
-  .connection-badge { display: flex; align-items: center; gap: 6px; background: var(--soft-beige); color: var(--slate-gray); border: 0; padding: 6px 9px; border-radius: 6px; font-size: 11px; font-weight: 500; white-space: nowrap; }
-  .connection-badge .icon { width: 13px; height: 13px; color: var(--terracotta); }
-  .offline-badge { background: var(--terracotta); color: var(--off-white); }
-  .offline-badge .icon { color: var(--off-white); }
   .toast { position: fixed; bottom: 24px; left: 50%; transform: translate(-50%, 12px); opacity: 0; pointer-events: none; background: var(--deep-navy); color: var(--off-white); padding: 13px 20px; border-radius: 10px; font-size: 13px; box-shadow: var(--shadow); max-width: calc(100% - 32px); width: max-content; z-index: 50; transition: opacity .2s, transform .2s; border: 0; }
   .toast.is-visible { opacity: 1; transform: translate(-50%, 0); }
-  .update-notice { position: fixed; bottom: 18px; right: 20px; z-index: 40; background: var(--surface); border: 0; padding: 14px; display: flex; align-items: center; gap: 16px; font-size: 12px; border-radius: 10px; box-shadow: var(--shadow); color: var(--text); }
-  .update-notice button { color: var(--terracotta); font-weight: 600; }
-  .storage-warning, .connection-warning { padding: 10px 22px; color: var(--off-white); background: var(--terracotta); font-size: 12px; line-height: 1.6; display: flex; gap: 10px; align-items: center; }
+  .storage-warning { padding: 10px 22px; color: var(--off-white); background: var(--terracotta); font-size: 12px; line-height: 1.6; display: flex; gap: 10px; align-items: center; }
   .storage-warning button { text-decoration: underline; margin-left: auto; }
   .dev-notice-wrapper { position: sticky; top: 0; z-index: 45; display: flex; justify-content: center; padding: 8px 16px 0; pointer-events: none; background: transparent; }
   .dev-notice-popup { pointer-events: auto; display: flex; align-items: center; gap: 8px; padding: 5px 12px 5px 10px; border-radius: 9999px; background: var(--surface); border: 1px solid rgba(212, 161, 45, 0.45); box-shadow: 0 4px 18px rgba(34, 46, 60, 0.08); font-size: 11px; line-height: 1.4; color: var(--text); max-width: min(720px, calc(100vw - 32px)); backdrop-filter: blur(8px); }
@@ -140,10 +134,6 @@
   [data-theme="dark"] .icon-button:hover { color: var(--text); background: var(--hover); }
   [data-theme="dark"] .dev-notice-icon-box { background: rgba(212, 161, 45, 0.25); color: #F5C860; }
   [data-theme="dark"] .dev-notice-badge { background: #F5C860; color: #151D26; }
-  [data-theme="dark"] .connection-badge { background: var(--hover); color: var(--muted); }
-  [data-theme="dark"] .connection-badge .icon { color: var(--accent); }
-  [data-theme="dark"] .offline-badge { background: var(--danger); color: #151D26; }
-  [data-theme="dark"] .offline-badge .icon { color: #151D26; }
 }
 
 @layer responsive {

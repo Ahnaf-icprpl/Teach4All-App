@@ -4,17 +4,18 @@ import {
   fetchChatStatus, subscribeToChatStream,
 } from './router.js';
 import { t } from './uiTexts.js';
-
-import {
-  saveCachedRecentChats, loadCachedRecentChats,
-  saveCachedChatMessages, loadCachedChatMessages,
-} from './storage.js';
-import { getEffectiveUserId } from './auth.js';
+import { loadUiState } from './storage.js';
+import { getStoredUser } from './authUtils.js';
 
 export const CHATS_PAGE_SIZE = 20;
 
-export const chats = van.state([]);
-export const activeId = van.state(null);
+const initialUiState = loadUiState();
+export const chats = van.state(
+  initialUiState.activeChatId
+    ? [{ id: initialUiState.activeChatId, title: '', messages: [], messagesLoaded: false, updatedAt: Date.now() }]
+    : []
+);
+export const activeId = van.state(initialUiState.activeChatId || null);
 export const historyLoading = van.state(false);
 export const historyLoadingMore = van.state(false);
 export const hasMoreChats = van.state(true);
@@ -31,16 +32,6 @@ export function onSearchInput(query) {
   if (!term) {
     if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
     searchResults.val = null;
-    searchLoading.val = false;
-    return;
-  }
-
-  if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    const qLower = term.toLowerCase();
-    searchResults.val = chats.val.filter(chat =>
-      chat.title.toLowerCase().includes(qLower) ||
-      (chat.messages && chat.messages.some(message => message.text?.toLowerCase().includes(qLower))),
-    );
     searchLoading.val = false;
     return;
   }
@@ -76,17 +67,17 @@ export function onSearchInput(query) {
   }, 250);
 }
 
-export async function prefetchMessagesForRecentChats(recentChats) {
-  if (typeof navigator !== 'undefined' && !navigator.onLine) return;
-  const userId = getEffectiveUserId();
-  const limit = Math.min(recentChats.length, 10);
-  for (let i = 0; i < limit; i++) {
-    const chat = recentChats[i];
-    if (!chat || !chat.id) continue;
-    const cachedMsgs = loadCachedChatMessages(chat.id, userId);
-    if (cachedMsgs && cachedMsgs.length > 0 && chat.messagesLoaded) continue;
+const inFlightMessageFetches = new Map();
+
+export async function loadMessagesForChat(id) {
+  if (!id) return;
+  if (inFlightMessageFetches.has(id)) {
+    return inFlightMessageFetches.get(id);
+  }
+  messagesLoading.val = true;
+  const promise = (async () => {
     try {
-      const data = await fetchMessages(chat.id);
+      const data = await fetchMessages(id);
       if (Array.isArray(data?.messages)) {
         const loadedMessages = data.messages
           .filter(m => m && (m.role === 'user' || (m.content && m.content.trim().length > 0)))
@@ -96,72 +87,40 @@ export async function prefetchMessagesForRecentChats(recentChats) {
             text: m.content || '',
             createdAt: m.created_at ? new Date(m.created_at).getTime() : Date.now(),
           }));
-        chats.val = chats.val.map(c =>
-          c.id === chat.id ? { ...c, messages: loadedMessages, messagesLoaded: true } : c
-        );
-        saveCachedChatMessages(chat.id, loadedMessages, userId);
+        if (chats.val.some(c => c.id === id)) {
+          chats.val = chats.val.map(c =>
+            c.id === id ? { ...c, messages: loadedMessages, messagesLoaded: true } : c
+          );
+        } else {
+          chats.val = [{
+            id,
+            title: t('state_default_title'),
+            messages: loadedMessages,
+            messagesLoaded: true,
+            updatedAt: Date.now(),
+          }, ...chats.val];
+        }
+        requestAnimationFrame(() => {
+          const pane = document.getElementById('messages');
+          if (pane) pane.scrollTop = pane.scrollHeight;
+        });
       }
-    } catch {}
-  }
-  saveCachedRecentChats(chats.val, userId);
-}
-
-export async function loadMessagesForChat(id) {
-  const userId = getEffectiveUserId();
-  if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    const cached = loadCachedChatMessages(id, userId);
-    if (cached && cached.length > 0) {
-      chats.val = chats.val.map(c =>
-        c.id === id ? { ...c, messages: cached, messagesLoaded: true } : c
-      );
+    } catch (err) {
+      if (err?.message?.includes('404') && activeId.val === id) {
+        activeId.val = null;
+      }
+    } finally {
+      inFlightMessageFetches.delete(id);
+      if (inFlightMessageFetches.size === 0) {
+        messagesLoading.val = false;
+      }
     }
-    return;
-  }
-  if (messagesLoading.val) return;
-  messagesLoading.val = true;
-  try {
-    const data = await fetchMessages(id);
-    if (Array.isArray(data?.messages)) {
-      const loadedMessages = data.messages
-        .filter(m => m && (m.role === 'user' || (m.content && m.content.trim().length > 0)))
-        .map(m => ({
-          id: m.id,
-          role: m.role,
-          text: m.content || '',
-          createdAt: m.created_at ? new Date(m.created_at).getTime() : Date.now(),
-        }));
-      chats.val = chats.val.map(c =>
-        c.id === id ? { ...c, messages: loadedMessages, messagesLoaded: true } : c
-      );
-      saveCachedChatMessages(id, loadedMessages, userId);
-      saveCachedRecentChats(chats.val, userId);
-      requestAnimationFrame(() => {
-        const pane = document.getElementById('messages');
-        if (pane) pane.scrollTop = pane.scrollHeight;
-      });
-    }
-  } catch (err) {
-    const cached = loadCachedChatMessages(id, userId);
-    if (cached && cached.length > 0) {
-      chats.val = chats.val.map(c =>
-        c.id === id ? { ...c, messages: cached, messagesLoaded: true } : c
-      );
-    }
-  } finally {
-    messagesLoading.val = false;
-  }
+  })();
+  inFlightMessageFetches.set(id, promise);
+  return promise;
 }
 
 export async function loadChatHistory() {
-  const userId = getEffectiveUserId();
-  if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    const cached = loadCachedRecentChats(userId);
-    if (cached.length > 0) {
-      chats.val = cached;
-    }
-    historyLoading.val = false;
-    return;
-  }
   historyLoading.val = true;
   try {
     const data = await fetchConversations({ limit: CHATS_PAGE_SIZE, offset: 0 });
@@ -174,29 +133,39 @@ export async function loadChatHistory() {
         updatedAt: c.updated_at ? new Date(c.updated_at).getTime() : Date.now(),
       }));
       const active = chats.val.find(c => c.id === activeId.val);
-      if (active && !dbChats.some(c => c.id === active.id)) {
-        chats.val = [active, ...dbChats];
+      const mergedChats = dbChats.map(c => {
+        if (active && c.id === active.id) {
+          return {
+            ...c,
+            messages: (active.messages && active.messages.length > 0) ? active.messages : c.messages,
+            messagesLoaded: Boolean(active.messagesLoaded),
+          };
+        }
+        return c;
+      });
+      if (active && !mergedChats.some(c => c.id === active.id)) {
+        if (hasMoreChats.val === false && (!active.messages || active.messages.length === 0) && active.messagesLoaded) {
+          if (activeId.val === active.id) {
+            activeId.val = null;
+          }
+        } else {
+          chats.val = [active, ...mergedChats];
+        }
       } else {
-        chats.val = dbChats;
+        chats.val = mergedChats;
       }
       hasMoreChats.val = typeof data.hasMore === 'boolean'
         ? data.hasMore
         : dbChats.length === CHATS_PAGE_SIZE;
-      saveCachedRecentChats(chats.val, userId);
-      prefetchMessagesForRecentChats(chats.val.slice(0, 10)).catch(() => {});
     }
   } catch (err) {
-    const cached = loadCachedRecentChats(userId);
-    if (cached.length > 0 && chats.val.length === 0) {
-      chats.val = cached;
-    }
+    // Keep in-memory state on error
   } finally {
     historyLoading.val = false;
   }
 }
 
 export async function loadMoreChats() {
-  if (typeof navigator !== 'undefined' && !navigator.onLine) return;
   if (historyLoadingMore.val || historyLoading.val || !hasMoreChats.val) return;
   historyLoadingMore.val = true;
   try {
@@ -258,7 +227,6 @@ export async function checkAndAttachActiveTask(chatId, {
   isSending = false,
 } = {}) {
   if (!chatId || isSending) return;
-  if (typeof navigator !== 'undefined' && !navigator.onLine) return;
   try {
     const status = await fetchChatStatus(chatId);
     if (!status || !status.active || activeId.val !== chatId) return;
@@ -351,12 +319,14 @@ export async function checkAndAttachActiveTask(chatId, {
   }
 }
 
+let lastKnownUserId = typeof window !== 'undefined' ? (getStoredUser()?.id || null) : null;
+
 if (typeof window !== 'undefined') {
-  window.addEventListener('teach4all:auth-changed', () => {
+  window.addEventListener('teach4all:auth-changed', (event) => {
+    const newUserId = event.detail?.user?.id || null;
+    if (newUserId === lastKnownUserId) return;
+    lastKnownUserId = newUserId;
     resetChatStore();
-    loadChatHistory().catch(() => {});
-  });
-  window.addEventListener('online', () => {
     loadChatHistory().catch(() => {});
   });
 }

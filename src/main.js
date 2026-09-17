@@ -6,9 +6,8 @@ import { Dialogs } from './components/dialogs.js';
 import { DevNotice } from './components/devNotice.js';
 import {
   sidebarOpen, sidebarCollapsed, theme, setTheme, modal, notice,
-  online, newChat, focusComposer, currentChat,
+  newChat, focusComposer, currentChat,
 } from './state.js';
-import { registerOffline } from './offline.js';
 import { isDevEnv } from './env.js';
 import { initUiTexts, t } from './uiTexts.js';
 import { initStudyModules } from './studyModules.js';
@@ -52,9 +51,6 @@ function Topbar() {
       },
     ),
     div({ class: 'topbar-right' },
-      () => !online.val
-        ? span({ class: 'connection-badge offline-badge', role: 'status' }, icon('signalOff'), () => t('topbar_offline_badge'))
-        : null,
       button({
         class: 'icon-button theme-toggle', 'aria-label': () => `${t('topbar_theme_prefix')}${isDark() ? t('topbar_theme_light') : t('topbar_theme_dark')}`,
         onclick: () => setTheme(isDark() ? 'light' : 'dark'),
@@ -134,7 +130,14 @@ async function initApp() {
     } else {
       van.add(document.body, newApp);
     }
-    registerOffline();
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(regs => {
+        for (const reg of regs) reg.unregister();
+      }).catch(() => {});
+      if ('caches' in window) {
+        caches.keys().then(keys => keys.forEach(key => caches.delete(key))).catch(() => {});
+      }
+    }
     focusComposer();
   };
 
