@@ -4,11 +4,6 @@ import {
   fetchChatStatus, subscribeToChatStream,
 } from './router.js';
 import { t } from './uiTexts.js';
-
-import {
-  saveCachedRecentChats, loadCachedRecentChats,
-  saveCachedChatMessages, loadCachedChatMessages,
-} from './storage.js';
 import { getEffectiveUserId } from './auth.js';
 
 export const CHATS_PAGE_SIZE = 20;
@@ -31,16 +26,6 @@ export function onSearchInput(query) {
   if (!term) {
     if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
     searchResults.val = null;
-    searchLoading.val = false;
-    return;
-  }
-
-  if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    const qLower = term.toLowerCase();
-    searchResults.val = chats.val.filter(chat =>
-      chat.title.toLowerCase().includes(qLower) ||
-      (chat.messages && chat.messages.some(message => message.text?.toLowerCase().includes(qLower))),
-    );
     searchLoading.val = false;
     return;
   }
@@ -76,47 +61,7 @@ export function onSearchInput(query) {
   }, 250);
 }
 
-export async function prefetchMessagesForRecentChats(recentChats) {
-  if (typeof navigator !== 'undefined' && !navigator.onLine) return;
-  const userId = getEffectiveUserId();
-  const limit = Math.min(recentChats.length, 10);
-  for (let i = 0; i < limit; i++) {
-    const chat = recentChats[i];
-    if (!chat || !chat.id) continue;
-    const cachedMsgs = loadCachedChatMessages(chat.id, userId);
-    if (cachedMsgs && cachedMsgs.length > 0 && chat.messagesLoaded) continue;
-    try {
-      const data = await fetchMessages(chat.id);
-      if (Array.isArray(data?.messages)) {
-        const loadedMessages = data.messages
-          .filter(m => m && (m.role === 'user' || (m.content && m.content.trim().length > 0)))
-          .map(m => ({
-            id: m.id,
-            role: m.role,
-            text: m.content || '',
-            createdAt: m.created_at ? new Date(m.created_at).getTime() : Date.now(),
-          }));
-        chats.val = chats.val.map(c =>
-          c.id === chat.id ? { ...c, messages: loadedMessages, messagesLoaded: true } : c
-        );
-        saveCachedChatMessages(chat.id, loadedMessages, userId);
-      }
-    } catch {}
-  }
-  saveCachedRecentChats(chats.val, userId);
-}
-
 export async function loadMessagesForChat(id) {
-  const userId = getEffectiveUserId();
-  if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    const cached = loadCachedChatMessages(id, userId);
-    if (cached && cached.length > 0) {
-      chats.val = chats.val.map(c =>
-        c.id === id ? { ...c, messages: cached, messagesLoaded: true } : c
-      );
-    }
-    return;
-  }
   if (messagesLoading.val) return;
   messagesLoading.val = true;
   try {
@@ -133,35 +78,19 @@ export async function loadMessagesForChat(id) {
       chats.val = chats.val.map(c =>
         c.id === id ? { ...c, messages: loadedMessages, messagesLoaded: true } : c
       );
-      saveCachedChatMessages(id, loadedMessages, userId);
-      saveCachedRecentChats(chats.val, userId);
       requestAnimationFrame(() => {
         const pane = document.getElementById('messages');
         if (pane) pane.scrollTop = pane.scrollHeight;
       });
     }
   } catch (err) {
-    const cached = loadCachedChatMessages(id, userId);
-    if (cached && cached.length > 0) {
-      chats.val = chats.val.map(c =>
-        c.id === id ? { ...c, messages: cached, messagesLoaded: true } : c
-      );
-    }
+    // Keep in-memory state on fetch error
   } finally {
     messagesLoading.val = false;
   }
 }
 
 export async function loadChatHistory() {
-  const userId = getEffectiveUserId();
-  if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    const cached = loadCachedRecentChats(userId);
-    if (cached.length > 0) {
-      chats.val = cached;
-    }
-    historyLoading.val = false;
-    return;
-  }
   historyLoading.val = true;
   try {
     const data = await fetchConversations({ limit: CHATS_PAGE_SIZE, offset: 0 });
@@ -182,21 +111,15 @@ export async function loadChatHistory() {
       hasMoreChats.val = typeof data.hasMore === 'boolean'
         ? data.hasMore
         : dbChats.length === CHATS_PAGE_SIZE;
-      saveCachedRecentChats(chats.val, userId);
-      prefetchMessagesForRecentChats(chats.val.slice(0, 10)).catch(() => {});
     }
   } catch (err) {
-    const cached = loadCachedRecentChats(userId);
-    if (cached.length > 0 && chats.val.length === 0) {
-      chats.val = cached;
-    }
+    // Keep in-memory state on error
   } finally {
     historyLoading.val = false;
   }
 }
 
 export async function loadMoreChats() {
-  if (typeof navigator !== 'undefined' && !navigator.onLine) return;
   if (historyLoadingMore.val || historyLoading.val || !hasMoreChats.val) return;
   historyLoadingMore.val = true;
   try {
@@ -258,7 +181,6 @@ export async function checkAndAttachActiveTask(chatId, {
   isSending = false,
 } = {}) {
   if (!chatId || isSending) return;
-  if (typeof navigator !== 'undefined' && !navigator.onLine) return;
   try {
     const status = await fetchChatStatus(chatId);
     if (!status || !status.active || activeId.val !== chatId) return;
@@ -354,9 +276,6 @@ export async function checkAndAttachActiveTask(chatId, {
 if (typeof window !== 'undefined') {
   window.addEventListener('teach4all:auth-changed', () => {
     resetChatStore();
-    loadChatHistory().catch(() => {});
-  });
-  window.addEventListener('online', () => {
     loadChatHistory().catch(() => {});
   });
 }

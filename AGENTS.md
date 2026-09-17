@@ -30,12 +30,12 @@ These rules apply to all application code files (`.js`, `.mjs`, `.cjs`, `.css`) 
   - `@opentelemetry/api`, `@opentelemetry/api-logs`, `@opentelemetry/sdk-node`, `@opentelemetry/sdk-logs`, `@opentelemetry/auto-instrumentations-node`, `@opentelemetry/exporter-trace-otlp-http`, `@opentelemetry/exporter-metrics-otlp-http`, `@opentelemetry/exporter-logs-otlp-http` (OpenTelemetry instrumentation)
 - Development tools (Vite, Playwright) are devDependencies only.
 
-## Offline-First Design
+## Online-First Architecture
 
-- The app must work offline after one successful load over HTTPS/localhost.
-- Service worker caches the shell and assets.
-- All user data persists via localStorage.
-- No network calls for chat replies. The demo uses local text templates.
+- The app operates with an online-first architecture connected to server APIs.
+- Chat completions, quizzes, materials, and search are powered by backend services.
+- User theme preferences persist via localStorage and local settings DB.
+- Network requests are sent directly to the server without service worker interception.
 
 ## Keep It Light
 

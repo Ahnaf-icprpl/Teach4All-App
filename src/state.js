@@ -1,7 +1,7 @@
 import van from 'vanjs-core';
 import {
   loadWorkspace, saveWorkspace, emptyWorkspace, MAX_CHATS,
-  loadThemeFromLocalDb, saveTheme, saveCachedRecentChats,
+  loadThemeFromLocalDb, saveTheme,
 } from './storage.js';
 import {
   sendMessage as sendApiMessage, generateTitle, generateOfflineTitle,
@@ -13,7 +13,6 @@ import {
   onSearchInput, loadMessagesForChat, loadChatHistory, loadMoreChats,
   abortActiveTaskSubscription, checkAndAttachActiveTask,
 } from './chatStore.js';
-import { createReply } from './replies.js';
 import { t, rotatePrompts } from './uiTexts.js';
 
 export {
@@ -35,8 +34,7 @@ const initialTheme = loadWorkspace(storage).data.theme;
 export const draft = van.state(''), theme = van.state(initialTheme), webSearchEnabled = van.state(true);
 export const searchingWeb = van.state(false), buildingQuiz = van.state(false), buildingMaterial = van.state(false);
 export const loading = van.state(false), sidebarOpen = van.state(false), sidebarCollapsed = van.state(false);
-export const storageError = van.state(''), notice = van.state(''), online = van.state(typeof navigator !== 'undefined' ? navigator.onLine : true);
-export const offlineReady = van.state(false), updateReady = van.state(false), modal = van.state(null);
+export const storageError = van.state(''), notice = van.state(''), modal = van.state(null);
 let toastTimer;
 let activeChatAbortController = null;
 let activeGeneratingChatId = null;
@@ -77,7 +75,6 @@ export const workspace = () => ({
 
 export function persist() {
   saveWorkspace(storage, workspace());
-  saveCachedRecentChats(chats.val, getEffectiveUserId());
 }
 
 export function toggleWebSearch() {
@@ -95,7 +92,6 @@ export function toast(message) {
 }
 
 export function focusComposer() {
-  if (!online.val) return;
   requestAnimationFrame(() => {
     const el = document.getElementById('message-input');
     if (el && !el.disabled) {
@@ -204,10 +200,6 @@ export function scrollMessagesToBottom(retry = false) {
 }
 
 export function sendMessage(customText) {
-  if (!online.val) {
-    toast(t('state_offline_notice'));
-    return;
-  }
   const text = (typeof customText === 'string' ? customText : draft.val).trim();
   if (!text || loading.val) return;
   const existing = currentChat();
@@ -252,33 +244,12 @@ export function sendMessage(customText) {
       })
       .catch(() => {});
   }
-  
-  if ((typeof navigator !== 'undefined' && !navigator.onLine) || !online.val) {
-    const replyText = createReply(text);
-    chats.val = chats.val.map(c => {
-      if (c.id === chat.id) {
-        return {
-          ...c,
-          messages: c.messages.map(m => 
-            m.id === assistantMessage.id ? { ...m, text: replyText } : m
-          ),
-          updatedAt: Date.now(),
-        };
-      }
-      return c;
-    });
-    loading.val = false;
-    persist();
-    focusComposer();
-    scrollMessagesToBottom();
-    return;
-  }
 
   const isQuizIntent = /\b(kuis|quiz|soal|latihan|evaluasi|test me)\b/i.test(userMessage.text || '');
   const isMaterialIntent = !isQuizIntent && /\b(materi|modul|ringkasan|rangkuman|bacaan|pelajaran|material|study guide)\b/i.test(userMessage.text || '');
   buildingQuiz.val = Boolean(isQuizIntent);
   buildingMaterial.val = Boolean(isMaterialIntent);
-  searchingWeb.val = Boolean(online.val);
+  searchingWeb.val = Boolean(webSearchEnabled.val);
 
   const abortController = new AbortController();
   activeChatAbortController = abortController;
@@ -309,7 +280,7 @@ export function sendMessage(customText) {
     userMessageId: userMessage.id,
     assistantMessageId: assistantMessage.id,
     userId: getEffectiveUserId(),
-    webSearch: Boolean(online.val),
+    webSearch: Boolean(webSearchEnabled.val),
     signal: abortController.signal,
     onStatus: (status) => {
       if (activeGeneratingChatId !== chat.id) return;
@@ -349,42 +320,12 @@ export function sendMessage(customText) {
     }
 
     const errorMessage = error.message || t('state_send_failed');
-
-    const isBlocked = errorMessage.toLowerCase().includes('rate limit') ||
-      errorMessage.toLowerCase().includes('tamu') ||
-      errorMessage.toLowerCase().includes('guest') ||
-      errorMessage.toLowerCase().includes('masuk') ||
-      errorMessage.toLowerCase().includes('login');
-
-    if (isBlocked) {
-      const updatedChats = chats.val.map(c => {
-        if (c.id === chat.id) {
-          return {
-            ...c,
-            messages: c.messages.map(m => 
-              m.id === assistantMessage.id ? { ...m, text: `Error: ${errorMessage}` } : m
-            ),
-          };
-        }
-        return c;
-      });
-      chats.val = updatedChats;
-      persist();
-      if (typeof document !== 'undefined') {
-        const inputEl = document.getElementById('message-input');
-        if (inputEl) inputEl.blur();
-      }
-      scrollMessagesToBottom(true);
-      return;
-    }
-
-    const replyText = createReply(text);
     const updatedChats = chats.val.map(c => {
       if (c.id === chat.id) {
         return {
           ...c,
           messages: c.messages.map(m => 
-            m.id === assistantMessage.id ? { ...m, text: replyText } : m
+            m.id === assistantMessage.id ? { ...m, text: `Error: ${errorMessage}` } : m
           ),
           updatedAt: Date.now(),
         };
@@ -393,8 +334,12 @@ export function sendMessage(customText) {
     });
     chats.val = updatedChats;
     persist();
+    if (typeof document !== 'undefined') {
+      const inputEl = document.getElementById('message-input');
+      if (inputEl) inputEl.blur();
+    }
     focusComposer();
-    if (activeId.val === chat.id) scrollMessagesToBottom();
+    scrollMessagesToBottom(true);
   });
 }
 
@@ -444,8 +389,6 @@ export function setTheme(value) {
 }
 
 if (typeof window !== 'undefined') {
-  window.addEventListener('online', () => { online.val = true; });
-  window.addEventListener('offline', () => { online.val = false; });
   window.addEventListener('beforeunload', () => {
     if (activeChatAbortController) {
       try {

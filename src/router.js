@@ -193,10 +193,6 @@ export async function generateTitle(messages, options = {}) {
   const rawText = firstUserMsg ? (firstUserMsg.text || firstUserMsg.content || '') : '';
   const fallbackTitle = generateOfflineTitle(rawText);
 
-  if (typeof window !== 'undefined' && typeof navigator !== 'undefined' && navigator.onLine === false) {
-    return fallbackTitle;
-  }
-
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 12000);
 

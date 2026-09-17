@@ -59,7 +59,6 @@ Teach4All-App/
 ├── prompts/                    # AI System prompts and guidelines
 │   └── chat.txt                # Teach4All pedagogical system prompt
 ├── scripts/                    # Build, migration, and verification tools
-│   ├── build-sw.mjs            # Service worker cache manifest generator
 │   ├── check.mjs               # 500-line file size enforcement script
 │   └── migrate.mjs             # Database schema migration runner
 ├── server/                     # Backend Express server and API layer

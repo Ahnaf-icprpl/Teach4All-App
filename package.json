@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "A lightweight, offline-first learning chat built with VanJS.",
+  "description": "A lightweight learning chat built with VanJS.",
   "scripts": {
     "dev": "node --watch --watch-path=server --watch-path=.env --import ./server/instrumentation.js server/dev.js",
-    "build": "npm run check && vite build && node scripts/build-sw.mjs",
+    "build": "npm run check && vite build",
     "preview": "vite preview --host 0.0.0.0",
     "check": "node scripts/check.mjs",
     "test": "node --test tests/*.test.mjs",
