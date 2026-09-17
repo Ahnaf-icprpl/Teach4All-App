@@ -200,6 +200,9 @@ export async function handleCompletedToolCalls({
   const conversationHistory = [...formattedMessages];
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (!res.writableEnded && res.writable !== false) {
+      res.write('data: {"type":"quiz_status","status":"building"}\n\n');
+    }
     const execResult = await parseAndExecuteQuizTool(currentQuizCall, {
       userId: userId || null,
       conversationId,

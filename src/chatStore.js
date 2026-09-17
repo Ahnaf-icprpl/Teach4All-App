@@ -253,6 +253,7 @@ export function abortActiveTaskSubscription() {
 export async function checkAndAttachActiveTask(chatId, {
   setLoading,
   setBuildingQuiz,
+  setBuildingMaterial,
   setSearchingWeb,
   isSending = false,
 } = {}) {
@@ -264,7 +265,10 @@ export async function checkAndAttachActiveTask(chatId, {
 
     if (typeof setLoading === 'function') setLoading(true);
     if (typeof setBuildingQuiz === 'function') {
-      setBuildingQuiz(status.status === 'building' || status.type === 'quiz' || status.type === 'material');
+      setBuildingQuiz(status.status === 'building' || status.status === 'building_quiz' || status.type === 'quiz');
+    }
+    if (typeof setBuildingMaterial === 'function') {
+      setBuildingMaterial(status.status === 'building_material' || status.type === 'material');
     }
     if (typeof setSearchingWeb === 'function') {
       setSearchingWeb(status.status === 'processing' && status.type === 'chat');
@@ -294,8 +298,9 @@ export async function checkAndAttachActiveTask(chatId, {
 
     await subscribeToChatStream(chatId, (fullText) => {
       if (activeTaskChatId !== chatId) return;
-      if (typeof setBuildingQuiz === 'function') setBuildingQuiz(false);
       if (typeof setSearchingWeb === 'function') setSearchingWeb(false);
+      if (fullText.includes('TEACH4ALL_QUIZ_CARD') && typeof setBuildingQuiz === 'function') setBuildingQuiz(false);
+      if (fullText.includes('TEACH4ALL_MATERIAL_CARD') && typeof setBuildingMaterial === 'function') setBuildingMaterial(false);
       chats.val = chats.val.map(c => {
         if (c.id === chatId) {
           const msgs = (c.messages || []).map((m, idx) =>
@@ -315,6 +320,11 @@ export async function checkAndAttachActiveTask(chatId, {
         if (activeTaskChatId !== chatId) return;
         if (st === 'building_quiz' && typeof setBuildingQuiz === 'function') {
           setBuildingQuiz(true);
+          if (typeof setBuildingMaterial === 'function') setBuildingMaterial(false);
+          if (typeof setSearchingWeb === 'function') setSearchingWeb(false);
+        } else if (st === 'building_material' && typeof setBuildingMaterial === 'function') {
+          setBuildingMaterial(true);
+          if (typeof setBuildingQuiz === 'function') setBuildingQuiz(false);
           if (typeof setSearchingWeb === 'function') setSearchingWeb(false);
         }
       },
@@ -325,6 +335,7 @@ export async function checkAndAttachActiveTask(chatId, {
       activeTaskChatId = null;
       if (typeof setLoading === 'function') setLoading(false);
       if (typeof setBuildingQuiz === 'function') setBuildingQuiz(false);
+      if (typeof setBuildingMaterial === 'function') setBuildingMaterial(false);
       if (typeof setSearchingWeb === 'function') setSearchingWeb(false);
       await loadMessagesForChat(chatId);
     }
@@ -334,6 +345,7 @@ export async function checkAndAttachActiveTask(chatId, {
       activeTaskChatId = null;
       if (typeof setLoading === 'function') setLoading(false);
       if (typeof setBuildingQuiz === 'function') setBuildingQuiz(false);
+      if (typeof setBuildingMaterial === 'function') setBuildingMaterial(false);
       if (typeof setSearchingWeb === 'function') setSearchingWeb(false);
     }
   }

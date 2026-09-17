@@ -202,6 +202,8 @@
   .searching-web-indicator .icon { width: 14px; height: 14px; color: var(--terracotta); }
   .building-quiz-indicator { background: rgba(43, 90, 158, 0.08); border-color: rgba(43, 90, 158, 0.2); }
   .building-quiz-indicator .icon { color: #2b5a9e; }
+  .building-material-indicator { background: rgba(183, 127, 99, 0.1); border-color: rgba(183, 127, 99, 0.25); }
+  .building-material-indicator .icon { color: var(--terracotta); }
   .spin-slow { animation: spin 3s linear infinite; }
   .typing-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--terracotta); opacity: 0.3; animation: typing-pulse 1.3s infinite ease-in-out; }
   .typing-dot:nth-child(1) { animation-delay: 0s; }
@@ -258,6 +260,8 @@
   [data-theme="dark"] .searching-web-indicator .icon { color: var(--accent); }
   [data-theme="dark"] .building-quiz-indicator { background: rgba(79, 142, 224, 0.15); border-color: rgba(79, 142, 224, 0.3); }
   [data-theme="dark"] .building-quiz-indicator .icon { color: #82B4F5; }
+  [data-theme="dark"] .building-material-indicator { background: rgba(212, 161, 45, 0.15); border-color: rgba(212, 161, 45, 0.3); }
+  [data-theme="dark"] .building-material-indicator .icon { color: #F5C860; }
 }
 
 @layer responsive {

@@ -4,7 +4,7 @@ import { MAX_INPUT } from '../storage.js';
 import {
   currentChat, hasMessages, draft, setDraft, sendMessage, focusComposer,
   modal, toast, online, offlineReady, storageError, loading, messagesLoading,
-  searchingWeb, buildingQuiz,
+  searchingWeb, buildingQuiz, buildingMaterial,
 } from '../state.js';
 import { getModel } from '../router.js';
 import { renderMarkdown } from '../markdown.js';
@@ -79,10 +79,15 @@ function Messages() {
               }, icon('copy')),
             )
           : div({ class: 'message-text' },
-              message.text
-                ? renderMarkdown(message.text)
-                : (isGenerating
-                    ? (buildingQuiz.val
+              message.text ? renderMarkdown(message.text) : '',
+              isGenerating && (buildingMaterial.val || buildingQuiz.val || (!message.text && searchingWeb.val) || !message.text)
+                ? (buildingMaterial.val
+                    ? span({ class: 'searching-web-indicator building-material-indicator' },
+                        icon('globe', 'spin-slow'),
+                        icon('book', 'spin-slow'),
+                        () => t('chat_material_building_status'),
+                      )
+                    : (buildingQuiz.val
                         ? span({ class: 'searching-web-indicator building-quiz-indicator' },
                             icon('globe', 'spin-slow'),
                             icon('bulb', 'spin-slow'),
@@ -97,8 +102,8 @@ function Messages() {
                                 span({ class: 'typing-dot' }),
                                 span({ class: 'typing-dot' }),
                                 span({ class: 'typing-dot' }),
-                              )))
-                    : '')
+                              ))))
+                : ''
             ),
         message.role === 'assistant' && message.text && !loading.val
           ? button({
