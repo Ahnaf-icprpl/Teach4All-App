@@ -361,7 +361,6 @@ export function sendMessage() {
         return c;
       });
       chats.val = updatedChats;
-      toast(errorMessage);
       persist();
       if (typeof document !== 'undefined') {
         const inputEl = document.getElementById('message-input');
