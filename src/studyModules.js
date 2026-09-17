@@ -6,6 +6,7 @@ import {
 } from './storage.js';
 import { getEffectiveUserId, getAuthHeaders } from './auth.js';
 import { t } from './uiTexts.js';
+import { formatMaterialMarkdown } from './markdown.js';
 
 export const INITIAL_QUIZZES = [];
 export const INITIAL_MATERIALS = [];
@@ -314,7 +315,7 @@ export function normalizeMaterialSection(s, idx = 0) {
     readTimeMinutes,
     read_time_minutes: readTimeMinutes,
     title: s.title || `${t('dialogs_material_section_label')} ${sectionNumber}`,
-    content: s.content || '',
+    content: formatMaterialMarkdown(s.content || ''),
   };
 }
 

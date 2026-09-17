@@ -18,10 +18,32 @@ function isSafeUrl(url) {
   return true;
 }
 
+export function formatMaterialMarkdown(content) {
+  if (!content || typeof content !== 'string') return '';
+  let text = content;
+
+  if (text.includes('\\n')) {
+    text = text.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n').replace(/\\t/g, '\t');
+  }
+  text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+  text = text.replace(/^(#{1,6})([^\s#])/gm, '$1 $2');
+  text = text.replace(/^([-*+])([^\s\-*+])/gm, '$1 $2');
+  text = text.replace(/^(\d+\.)([^\s\d])/gm, '$1 $2');
+  text = text.replace(/^(>+)([^\s>])/gm, '$1 $2');
+
+  text = text.replace(/([^\n])\n(#{1,6}\s+)/g, '$1\n\n$2');
+  text = text.replace(/([^\n])\n(>\s+)/g, '$1\n\n$2');
+  text = text.replace(/([^\n\-*+\d>#])\n([-*+]\s+|\d+\.\s+)/g, '$1\n\n$2');
+
+  text = text.split('\n').map(line => line.trimEnd()).join('\n');
+  return text.replace(/\n{3,}/g, '\n\n').trim();
+}
+
 export function parseInline(text) {
   if (!text) return [];
   const results = [];
-  const pattern = /(`[^`]+`|\*\*\*[^*]+\*\*\*|\*\*[^*]+\*\*|\*[^*]+\*|~~[^~]+~~|\[[^\]]+\]\([^)]+\))/g;
+  const pattern = /(`[^`]+`|\*\*\*[^*]+\*\*\*|\*\*[^*]+\*\*|\*[^*]+\*|___[^_]+___|__[^_]+__|_[^_]+_|~~[^~]+~~|\[[^\]]+\]\([^)]+\))/g;
   let lastIndex = 0;
   let match;
 
@@ -37,6 +59,12 @@ export function parseInline(text) {
     } else if (token.startsWith('**')) {
       results.push(strong(token.slice(2, -2)));
     } else if (token.startsWith('*')) {
+      results.push(em(token.slice(1, -1)));
+    } else if (token.startsWith('___')) {
+      results.push(strong(em(token.slice(3, -3))));
+    } else if (token.startsWith('__')) {
+      results.push(strong(token.slice(2, -2)));
+    } else if (token.startsWith('_')) {
       results.push(em(token.slice(1, -1)));
     } else if (token.startsWith('~~')) {
       results.push(span({ class: 'strikethrough' }, token.slice(2, -2)));
@@ -68,7 +96,8 @@ export function parseInline(text) {
 
 export function renderMarkdown(content) {
   if (!content || typeof content !== 'string') return div();
-  const lines = content.replace(/\r\n/g, '\n').split('\n');
+  const normalized = formatMaterialMarkdown(content);
+  const lines = normalized.split('\n');
   const elements = [];
   let i = 0;
 
